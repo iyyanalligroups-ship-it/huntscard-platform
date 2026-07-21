@@ -1,0 +1,116 @@
+import { useState } from 'react';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { clearSession } from '../api.js';
+
+/* Inline SVG icons -- no icon library dependency, keeps the bundle lean. */
+const ICONS = {
+  dashboard: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+  ),
+  profile: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>
+  ),
+  profileSettings: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+  ),
+  arLayout: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg>
+  ),
+  shop: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 7h12l1 13H5L6 7Z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/></svg>
+  ),
+  track: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M1 8h13v9H1z"/><path d="M14 11h4l3 3v3h-7"/><circle cx="6" cy="19" r="1.8"/><circle cx="17.5" cy="19" r="1.8"/></svg>
+  ),
+  settings: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01A1.7 1.7 0 0 0 10.05 3V3a2 2 0 1 1 4 0v.09c0 .68.4 1.29 1.02 1.56a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01c.27.61.88 1.02 1.56 1.02H21a2 2 0 1 1 0 4h-.09c-.68 0-1.29.4-1.56 1.02Z"/></svg>
+  ),
+  home: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
+  ),
+  logout: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+  ),
+  menu: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  ),
+};
+
+const NAV_ITEMS = [
+  { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', end: true },
+  { to: '/dashboard/profile', label: 'Profile', icon: 'profile' },
+  { to: '/dashboard/settings', label: 'Profile Settings', icon: 'profileSettings' },
+  { to: '/dashboard/ar-layout', label: 'AR Layout', icon: 'arLayout' },
+  { to: '/dashboard/upgrade', label: 'Shop', icon: 'shop' },
+  { to: '/dashboard/track', label: 'Track', icon: 'track' },
+  { to: '/dashboard/account-settings', label: 'Settings', icon: 'settings' },
+];
+
+export default function Layout() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  function handleLogout() {
+    clearSession();
+    navigate('/');
+  }
+
+  // The overview page uses a wide grid; every other page keeps the
+  // original narrow centered column so existing forms don't stretch.
+  const isOverview = location.pathname === '/dashboard';
+
+  return (
+    <div className="dash-shell">
+      <button
+        className="dash-menu-btn"
+        onClick={() => setMenuOpen((v) => !v)}
+        aria-label="Toggle menu"
+        aria-expanded={menuOpen}
+      >
+        {ICONS.menu}
+      </button>
+
+      {menuOpen && <div className="side-overlay" onClick={() => setMenuOpen(false)} />}
+
+      <aside className={`side-nav${menuOpen ? ' open' : ''}`}>
+        <Link to="/" className="side-brand" onClick={() => setMenuOpen(false)}>
+          <div className="brand-mark" />
+          <span className="brand-name">HUNTSTAG</span>
+        </Link>
+
+        <nav className="side-links">
+          {NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              onClick={() => setMenuOpen(false)}
+              className={({ isActive }) => `side-link${isActive ? ' active' : ''}`}
+            >
+              <span className="side-icon">{ICONS[item.icon]}</span>
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="side-footer">
+          <Link to="/" className="side-link" onClick={() => setMenuOpen(false)}>
+            <span className="side-icon">{ICONS.home}</span>
+            Home
+          </Link>
+          <button className="side-link side-logout" onClick={handleLogout}>
+            <span className="side-icon">{ICONS.logout}</span>
+            Log out
+          </button>
+        </div>
+      </aside>
+
+      <main className={isOverview ? 'dash-main' : 'dash-main page-shell-wrap'}>
+        <div className={isOverview ? 'dash-content' : 'page-shell'}>
+          <Outlet />
+        </div>
+      </main>
+    </div>
+  );
+}

@@ -1,0 +1,10 @@
+﻿node_modules/
+.env
+uploads/photos/*
+!uploads/photos/.gitkeep
+uploads/banners/*
+!uploads/banners/.gitkeep
+uploads/ar-videos/*
+!uploads/ar-videos/.gitkeep
+dist/
+*.log

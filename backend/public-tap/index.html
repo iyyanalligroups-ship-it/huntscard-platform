@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+<title>HuntsTAG</title>
+<style>
+  :root {
+    --bg: #faf9f7;
+    --surface: #ffffff;
+    --border: #ece9e4;
+    --text: #171717;
+    --text-dim: #78716c;
+    --holo-cyan: #14b8a6;
+    --holo-violet: #8b5cf6;
+    --holo-magenta: #ec4899;
+    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    display: flex;
+    justify-content: center;
+  }
+  .shell { width: 100%; max-width: 420px; }
+
+  /* --- static header: photo, name, title, actions -- never changes
+     regardless of which tab is selected, stays pinned while scrolling --- */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--bg);
+    text-align: center;
+    padding: 36px 22px 16px;
+  }
+  /* Cover banner -- spans the FULL viewport width, with the profile
+     photo floating centered ON the banner. Name and everything else
+     come below the banner. */
+  .cover { position: relative; }
+  .banner {
+    width: 100%;
+    overflow: hidden;
+    background: var(--border);
+  }
+  /* Height follows the image's own aspect ratio -- the full image is
+     always visible, whatever its dimensions. Only extremely tall images
+     get capped (and center-cropped) so the banner can't swallow the
+     whole screen. */
+  .banner img {
+    width: 100%;
+    height: auto;
+    max-height: 240px;
+    object-fit: cover;
+    display: block;
+  }
+  .cover-avatar {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    z-index: 2;
+    width: 96px;
+    height: 96px;
+  }
+  @media (min-width: 700px) {
+    .cover-avatar { width: 108px; height: 108px; }
+  }
+  .header.has-banner { padding-top: 20px; }
+  .avatar-wrap {
+    width: 108px; height: 108px;
+    margin: 0 auto 18px;
+    border-radius: 50%;
+    padding: 3px;
+    background: linear-gradient(135deg, var(--holo-cyan), var(--holo-violet), var(--holo-magenta));
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  }
+  .avatar {
+    width: 100%; height: 100%;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 36px; font-weight: 700; color: var(--text-dim);
+  }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+  .name { font-size: 24px; font-weight: 700; margin: 0 0 2px; letter-spacing: -0.01em; }
+  .title { font-size: 14px; color: var(--text-dim); margin: 0 0 20px; }
+
+  .actions-row { display: flex; gap: 10px; }
+  .btn {
+    flex: 1;
+    padding: 13px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-ui);
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .btn-primary { background: var(--text); color: #fff; }
+  .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+
+  /* --- tab bar: horizontally scrollable, tap or swipe the panel below --- */
+  .tab-bar {
+    display: flex;
+    flex-wrap: nowrap; /* scroll instead of wrap -- wrapping left a single tab orphaned alone on its own centered line, which looked worse than a scrollable row */
+    justify-content: flex-start;
+    gap: 4px;
+    padding: 4px 16px 14px;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-btn {
+    background: none;
+    border: none;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+    padding: 6px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    border-radius: 999px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .tab-btn.active { color: var(--text); background: var(--surface); }
+
+  /* --- swipeable panel area --- */
+  .panel-viewport { overflow: hidden; }
+  .panel-track {
+    display: flex;
+    transition: transform 0.25s ease;
+  }
+  .panel {
+    flex: 0 0 100%;
+    width: 100%;
+    padding: 22px;
+    text-align: left;
+    box-sizing: border-box;
+  }
+
+  .section-label {
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 12px; font-weight: 700;
+  }
+  .bio-text { font-size: 14px; line-height: 1.7; color: #3f3f3f; margin: 0; }
+
+  .contact-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--text);
+    margin-bottom: 8px;
+    font-size: 14px;
+    min-width: 0; /* without this, a long email/phone can force the row wider than its container instead of truncating */
+  }
+  .contact-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .contact-icon {
+    width: 30px; height: 30px; flex-shrink: 0;
+    border-radius: 50%;
+    background: #f4f2ee;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: var(--text);
+  }
+  .contact-chevron { margin-left: auto; color: var(--text-dim); font-size: 16px; flex-shrink: 0; }
+
+  .social-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .social-btn {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%;
+    padding: 13px 14px;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    text-decoration: none;
+    margin-bottom: 8px;
+  }
+  .social-icon {
+    width: 30px; height: 30px; flex-shrink: 0;
+    border-radius: 50%;
+    background: #f4f2ee;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+  }
+
+  .empty-panel { color: var(--text-dim); font-size: 14px; text-align: center; padding: 30px 0; }
+
+  /* --- Huntsworld business-listing tab --- */
+  .hw-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .hw-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .hw-badge {
+    width: 40px; height: 40px; flex-shrink: 0;
+    border-radius: 10px;
+    background: linear-gradient(120deg, #5eead4, #a78bfa);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 800; color: #10131a;
+  }
+  .hw-title { font-size: 15px; font-weight: 700; color: var(--text); }
+  .hw-sub { font-size: 12px; color: var(--text-dim); word-break: break-all; margin-top: 2px; }
+  .hw-btn {
+    display: block;
+    text-align: center;
+    padding: 12px;
+    border-radius: 10px;
+    background: var(--text);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  /* --- QR: real feature, sits below the tabs, independent of tab state --- */
+  .qr-block { padding: 4px 22px 40px; text-align: center; }
+  .qr-toggle {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: none; border: none;
+    color: var(--text-dim); font-size: 12px; font-weight: 600;
+    cursor: pointer; padding: 8px 0;
+    font-family: var(--font-ui);
+  }
+  .qr-panel {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-top: 8px;
+  }
+  .qr-panel.open { display: block; }
+  .qr-panel img { width: 160px; height: 160px; display: block; margin: 0 auto; }
+  .qr-panel p { font-size: 11px; color: var(--text-dim); margin: 10px 0 0; }
+
+  .footer-brand {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding-bottom: 32px; color: var(--text-dim); font-size: 12px;
+  }
+  .footer-mark {
+    width: 14px; height: 14px; border-radius: 4px;
+    background: linear-gradient(135deg, var(--holo-cyan), var(--holo-violet), var(--holo-magenta));
+  }
+
+  .state-msg { text-align: center; color: var(--text-dim); font-size: 14px; padding: 60px 20px; }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--text); color: #fff;
+    padding: 10px 18px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    opacity: 0; transition: opacity 0.2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <div class="shell" id="shell">
+    <div class="state-msg">Loading card…</div>
+  </div>
+  <div class="toast" id="toast">Link copied</div>
+
+<script>
+  const API_BASE = window.location.origin;
+  let activeTabIndex = 0;
+  let tabCount = 0;
+  let touchStartX = null;
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str || '';
+    return d.innerHTML;
+  }
+
+  function initials(name) {
+    if (!name) return '?';
+    return name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('');
+  }
+
+  function contactRow(icon, label, href) {
+    return `<a class="contact-row" href="${href}" target="_blank" rel="noopener">
+      <span class="contact-icon">${icon}</span>
+      <span class="contact-label">${escapeHtml(label)}</span>
+      <span class="contact-chevron">›</span>
+    </a>`;
+  }
+
+  function socialRow(icon, label, href) {
+    return `<a class="social-btn" href="${href}" target="_blank" rel="noopener">
+      <span class="social-icon">${icon}</span>
+      <span>${escapeHtml(label)}</span>
+    </a>`;
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  async function handleShare(name) {
+    const url = window.location.href;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `${name} — HuntsTAG`, url });
+      } catch (e) { /* cancelled */ }
+    } else {
+      await navigator.clipboard.writeText(url);
+      showToast('Link copied');
+    }
+  }
+
+  function toggleQr() {
+    document.getElementById('qrPanel').classList.toggle('open');
+  }
+
+  function toggleArQr() {
+    document.getElementById('arQrPanel').classList.toggle('open');
+  }
+
+  function goToTab(index) {
+    activeTabIndex = Math.max(0, Math.min(tabCount - 1, index));
+    document.getElementById('panelTrack').style.transform = `translateX(-${activeTabIndex * 100}%)`;
+    document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+      btn.classList.toggle('active', i === activeTabIndex);
+    });
+  }
+
+  function attachSwipe() {
+    const viewport = document.getElementById('panelViewport');
+    viewport.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
+    viewport.addEventListener('touchend', (e) => {
+      if (touchStartX === null) return;
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      if (Math.abs(dx) > 50) goToTab(activeTabIndex + (dx < 0 ? 1 : -1));
+      touchStartX = null;
+    }, { passive: true });
+  }
+
+  async function loadProfile() {
+    const clientId = window.location.pathname.split('/').filter(Boolean).pop();
+    const shell = document.getElementById('shell');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/public/profile/${clientId}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error('not found');
+      const p = await res.json();
+
+      const contactRows = [];
+      if (p.phone) contactRows.push(contactRow('☎', p.phone, `tel:${p.phone}`));
+      if (p.publicEmail) contactRows.push(contactRow('✉', p.publicEmail, `mailto:${p.publicEmail}`));
+
+      const socialRows = [];
+      if (p.instagramUrl) socialRows.push(socialRow('IG', 'Instagram', p.instagramUrl));
+      if (p.twitterUrl) socialRows.push(socialRow('X', 'Twitter / X', p.twitterUrl));
+      if (p.whatsapp) socialRows.push(socialRow('WA', 'WhatsApp', `https://wa.me/${p.whatsapp.replace(/\D/g, '')}`));
+
+      // Only build tabs for sections that actually have content.
+      const tabs = [];
+      if (p.bio) tabs.push({ label: 'My Bio', html: `<p class="bio-text">${escapeHtml(p.bio)}</p>` });
+      if (contactRows.length) tabs.push({ label: 'Contact', html: contactRows.join('') });
+      if (p.portfolioUrl) {
+        tabs.push({
+          label: 'Portfolio',
+          html: socialRow('◆', p.portfolioUrl.replace(/^https?:\/\//, ''), p.portfolioUrl),
+        });
+      }
+      if (socialRows.length) tabs.push({ label: 'Social', html: socialRows.join('') });
+      // Huntsworld is a business listing platform (part of the same
+      // network as HuntsTAG), so it gets its own featured tab rather
+      // than sitting inside Social.
+      if (p.huntsworldUrl) {
+        tabs.push({
+          label: 'Huntsworld',
+          html: `
+            <div class="section-label">Business listing</div>
+            <div class="hw-block">
+              <div class="hw-head">
+                <span class="hw-badge">H</span>
+                <div>
+                  <div class="hw-title">Huntsworld</div>
+                  <div class="hw-sub">${escapeHtml(p.huntsworldUrl.replace(/^https?:\/\//, ''))}</div>
+                </div>
+              </div>
+              <a class="hw-btn" href="${escapeHtml(p.huntsworldUrl)}" target="_blank" rel="noopener noreferrer">View listing on Huntsworld</a>
+            </div>`,
+        });
+      }
+      if (tabs.length === 0) {
+        tabs.push({ label: 'Info', html: `<div class="empty-panel">No additional details added yet.</div>` });
+      }
+      tabCount = tabs.length;
+
+      const pageUrl = encodeURIComponent(window.location.href);
+
+      shell.innerHTML = `
+        ${p.bannerUrl ? `
+        <div class="cover">
+          <div class="banner"><img src="${escapeHtml(p.bannerUrl)}" alt="" onerror="this.parentElement.remove()" /></div>
+          <div class="avatar-wrap cover-avatar">
+            <div class="avatar">
+              ${p.photoUrl
+                ? `<img src="${escapeHtml(p.photoUrl)}" alt="" onerror="this.parentElement.textContent='${escapeHtml(initials(p.fullName))}'" />`
+                : escapeHtml(initials(p.fullName))}
+            </div>
+          </div>
+        </div>` : ''}
+        <div class="header${p.bannerUrl ? ' has-banner' : ''}">
+          ${!p.bannerUrl ? `
+          <div class="avatar-wrap">
+            <div class="avatar">
+              ${p.photoUrl
+                ? `<img src="${escapeHtml(p.photoUrl)}" alt="" onerror="this.parentElement.textContent='${escapeHtml(initials(p.fullName))}'" />`
+                : escapeHtml(initials(p.fullName))}
+            </div>
+          </div>` : ''}
+          <h1 class="name">${escapeHtml(p.fullName)}</h1>
+          ${p.jobTitle ? `<p class="title">${escapeHtml(p.jobTitle)}</p>` : '<p class="title">&nbsp;</p>'}
+          <div class="actions-row">
+            <a class="btn btn-primary" href="${API_BASE}/api/public/vcard/${clientId}">Save Contact</a>
+            <button class="btn btn-secondary" id="shareBtn">Share</button>
+          </div>
+        </div>
+
+        <div class="tab-bar" id="tabBar">
+          ${tabs.map((t, i) => `<button class="tab-btn${i === 0 ? ' active' : ''}" data-tab="${i}">${t.label}</button>`).join('')}
+        </div>
+
+        <div class="panel-viewport" id="panelViewport">
+          <div class="panel-track" id="panelTrack">
+            ${tabs.map((t) => `<div class="panel">${t.html}</div>`).join('')}
+          </div>
+        </div>
+
+        <div class="qr-block">
+          <button class="qr-toggle" onclick="toggleQr()"><span>▦</span> Show QR code</button>
+          <div class="qr-panel" id="qrPanel">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${pageUrl}" alt="QR code for this card" />
+            <p>Scan to open this card on another phone</p>
+          </div>
+        </div>
+
+        ${p.arEnabled ? `
+        <div class="qr-block">
+          <button class="qr-toggle" onclick="toggleArQr()"><span>🥽</span> Show AR QR code</button>
+          <div class="qr-panel" id="arQrPanel">
+            <img src="${API_BASE}/api/public/qr/${clientId}?type=ar" alt="QR code to view this card in AR" />
+            <p>Scan in the HuntsAR World app to view this card in AR</p>
+          </div>
+        </div>
+        ` : ''}
+
+        <div class="footer-brand">
+          <div class="footer-mark"></div>
+          HUNTSTAG
+        </div>
+      `;
+
+      document.getElementById('shareBtn').addEventListener('click', () => handleShare(p.fullName));
+      document.querySelectorAll('.tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => goToTab(parseInt(btn.dataset.tab, 10)));
+      });
+      attachSwipe();
+    } catch (err) {
+      shell.innerHTML = `<div class="state-msg">Card not found. Check the link and try again.</div>`;
+    }
+  }
+
+  loadProfile();
+</script>
+</body>
+</html>

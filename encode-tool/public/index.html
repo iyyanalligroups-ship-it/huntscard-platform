@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HuntsTAG Encode Tool</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark"></span> HUNTSTAG <span class="brand-sub">Encode Tool</span></div>
+    <div id="sessionInfo" class="session-info hidden">
+      <span id="readerPill" class="reader-pill">checking reader...</span>
+      <span id="sessionEmail"></span>
+      <button id="logoutBtn" class="link-btn">Log out</button>
+    </div>
+    <button id="settingsBtn" class="link-btn" style="margin-left:12px;">⚙ Settings</button>
+  </header>
+
+  <!-- Settings -- reachable before login too, since the backend URL has
+       to be right before you can even log in against it. -->
+  <section id="settingsView" class="card hidden">
+    <h1>Settings</h1>
+    <p class="muted">These are saved on this computer and stay set across restarts.</p>
+    <label>Backend URL</label>
+    <input id="settingsBackendUrl" placeholder="https://api.huntstag.com" />
+    <label style="margin-top:12px;">Public base URL (written onto cards)</label>
+    <input id="settingsPublicBaseUrl" placeholder="https://huntstag.com" />
+    <p id="settingsError" class="error hidden"></p>
+    <p id="settingsSuccess" class="read-result read-ok hidden" style="margin-top:12px;"></p>
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button id="settingsSaveBtn" class="btn-primary" style="width:auto;">Save settings</button>
+      <button id="settingsCloseBtn" class="btn-secondary" style="width:auto;">Close</button>
+    </div>
+  </section>
+
+  <nav id="tabBar" class="tab-bar hidden">
+    <button class="tab-btn active" data-tab="writeCard">Write</button>
+    <button class="tab-btn" data-tab="readCard">Test a card</button>
+    <button class="tab-btn" data-tab="protectTestCard">Password tester</button>
+    <button class="tab-btn" data-tab="recoverCard">Recover a card</button>
+    <button class="tab-btn" data-tab="pickerView">Create a card</button>
+  </nav>
+
+  <main class="wrap">
+
+    <!-- Login -->
+    <section id="loginView" class="card">
+      <h1>Admin login required</h1>
+      <p class="muted">Writing to any card requires a real admin account -- same check as the terminal version.</p>
+      <form id="loginForm">
+        <label>Admin email</label>
+        <input type="email" id="loginEmail" required autocomplete="username" />
+        <label>Admin password</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password" />
+        <button type="submit" class="btn-primary">Log in</button>
+        <p id="loginError" class="error hidden"></p>
+      </form>
+    </section>
+
+    <!-- 1. Write client data -->
+    <section id="writeCard" class="card hidden">
+      <h1>Write client data</h1>
+      <p class="muted">Look up any client by Client ID and update their contact details right here -- the same update the admin webpage's Edit button makes.</p>
+      <div class="id-search-row">
+        <input id="writeIdInput" placeholder="Client ID (e.g. _BoyRwNfYr)" />
+        <button id="writeLookupBtn" class="btn-secondary" style="margin-top:0; width:auto;">Look up</button>
+      </div>
+      <p id="writeLookupError" class="error hidden"></p>
+      <div id="writeForm" class="edit-panel hidden" style="margin-top:16px; border-top:none; padding-top:0;">
+        <div class="pending-item-meta" id="writeFormMeta"></div>
+        <label>Full name</label>
+        <input id="writeFullName" />
+        <label>Job title</label>
+        <input id="writeJobTitle" placeholder="e.g. Founder" />
+        <label>Bio</label>
+        <input id="writeBio" placeholder="Short about text" />
+        <label>Phone</label>
+        <input id="writePhone" placeholder="+91..." />
+        <label>WhatsApp</label>
+        <input id="writeWhatsapp" placeholder="+91..." />
+        <label>Login email <span class="muted" style="font-weight:400;">(read-only here -- change this from the admin webpage's Edit Client screen, with the client's knowledge, not while writing a card)</span></label>
+        <input id="writeLoginEmail" type="email" disabled />
+        <label>Public email (shown on card)</label>
+        <input id="writePublicEmail" type="email" />
+        <label>Instagram link</label>
+        <input id="writeInstagram" placeholder="https://instagram.com/..." />
+        <label>Twitter / X link</label>
+        <input id="writeTwitter" placeholder="https://x.com/..." />
+        <label>Portfolio link</label>
+        <input id="writePortfolio" placeholder="https://..." />
+        <label>Huntsworld profile link</label>
+        <input id="writeHuntsworld" placeholder="https://huntsworld.com/company/..." />
+        <div class="edit-panel-actions">
+          <button id="writeSaveBtn" class="save-btn">Save details</button>
+          <span id="writeSaveStatus" class="save-status"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Read / test a card -->
+    <section id="readCard" class="card hidden">
+      <h1>Test a card</h1>
+      <p class="muted">Place any card on the reader to see the URL stored on it, whether it's password-protected, and a mobile preview of the page -- all from one tap, right here on localhost. This never touches the database.</p>
+      <button id="startReadBtn" class="btn-primary">Read a card</button>
+      <div id="readStatus" class="reader-banner hidden">
+        <span id="readStatusText"></span>
+        <button id="cancelReadBtn" class="link-btn hidden">Cancel</button>
+      </div>
+      <div id="readResult" class="read-result hidden"></div>
+      <div id="phonePreviewWrap" class="phone-preview-wrap hidden">
+        <div class="phone-frame">
+          <iframe id="phonePreviewFrame" title="Mobile preview"></iframe>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2b. Password tester -->
+    <section id="protectTestCard" class="card hidden">
+      <h1>Password tester</h1>
+      <p class="muted">Enter the exact chip password (shown once, when a card was encoded) and tap the card. This attempts a real authentication -- not a guess -- so it will tell you clearly whether THIS password genuinely unlocks THIS card.</p>
+      <div class="id-search-row">
+        <input id="protectTestPwd" placeholder="8-character password, e.g. 9C9707C8" maxlength="8" style="text-transform:uppercase;" />
+        <button id="protectTestBtn" class="btn-secondary" style="margin-top:0; width:auto;">Test with this password</button>
+      </div>
+      <div id="protectTestStatus" class="reader-banner hidden">
+        <span id="protectTestStatusText"></span>
+        <button id="protectTestCancelBtn" class="link-btn hidden">Cancel</button>
+      </div>
+      <div id="protectTestResult" class="read-result hidden"></div>
+
+      <div class="subsection">
+        <h2>Rewrite test</h2>
+        <p class="muted" style="margin-top:8px;">The real-world test: actually attempt to write new data to the card. If it's genuinely protected, this must fail without the correct password. This never touches the card's real profile URL -- it writes to a separate, unused test area.</p>
+        <div class="id-search-row">
+          <input id="rewriteTestData" placeholder="Test text (e.g. HACK)" maxlength="4" />
+          <input id="rewriteTestPwd" placeholder="Password (optional)" maxlength="8" style="text-transform:uppercase;" />
+          <button id="rewriteTestBtn" class="btn-secondary" style="margin-top:0; width:auto;">Attempt write</button>
+        </div>
+        <div id="rewriteTestStatus" class="reader-banner hidden">
+          <span id="rewriteTestStatusText"></span>
+          <button id="rewriteTestCancelBtn" class="link-btn hidden">Cancel</button>
+        </div>
+        <div id="rewriteTestResult" class="read-result hidden"></div>
+      </div>
+    </section>
+
+    <!-- 2c. Recover a card: wrong data was written and it's already
+         password-locked. Enter the known password to unlock and wipe it
+         back to blank -- then it works with the normal Write/Create-a-
+         card flow again, same as a brand-new card. -->
+    <section id="recoverCard" class="card hidden">
+      <h1>Recover a card</h1>
+      <p class="muted">
+        For a card that was written with the wrong data and is already password-locked. Enter its exact
+        chip password below, then tap the card. This authenticates with that password, wipes the card's
+        data back to blank, and removes the password lock entirely -- afterward the card behaves like a
+        brand-new one and can go through Write or Create a card again from scratch.
+      </p>
+      <p class="error" style="margin-top:8px;">
+        This is destructive and can't be undone: the old data and old password are both gone the moment
+        this succeeds. Only use this on the specific card the password below belongs to.
+      </p>
+      <div class="id-search-row">
+        <input id="recoverPwd" placeholder="8-character password, e.g. 9C9707C8" maxlength="8" style="text-transform:uppercase;" />
+        <button id="recoverBtn" class="btn-secondary" style="margin-top:0; width:auto;">Unlock &amp; wipe this card</button>
+      </div>
+      <div id="recoverStatus" class="reader-banner hidden">
+        <span id="recoverStatusText"></span>
+        <button id="recoverCancelBtn" class="link-btn hidden">Cancel</button>
+      </div>
+      <div id="recoverResult" class="read-result hidden"></div>
+    </section>
+
+
+    <section id="pickerView" class="card hidden">
+      <h1>Create a card</h1>
+
+      <div class="picker-columns">
+        <div class="subsection picker-col-left">
+          <p class="muted">Gift a card without payment -- enter any Client ID (paid or not) directly:</p>
+          <div class="id-search-row">
+            <input id="giftIdInput" placeholder="Client ID" />
+            <button id="giftLookupBtn" class="btn-secondary" style="margin-top:0; width:auto;">Encode this ID</button>
+          </div>
+          <p id="giftError" class="error hidden"></p>
+          <div id="giftReplaceConfirm" class="hidden" style="margin-top:12px;">
+            <p class="muted">This client already has a card encoded. Writing a new one won't disable the old physical card -- it'll keep working. Only do this if you mean to make a second/replacement card.</p>
+            <button id="giftReplaceBtn" class="btn-secondary" style="margin-top:8px;">Yes, write a replacement card</button>
+          </div>
+        </div>
+
+        <div class="subsection picker-col-right">
+          <div class="card-head">
+            <h2>Paid clients awaiting a card</h2>
+            <button id="refreshBtn" class="link-btn">Refresh</button>
+          </div>
+          <div id="pendingList" class="pending-list"></div>
+          <p id="pendingEmpty" class="muted hidden">No paid, unencoded clients found. Complete a purchase in the Shop, then refresh.</p>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- Live encode status -->
+    <section id="statusView" class="card hidden">
+      <h1>Encoding <span id="statusName"></span></h1>
+      <div id="readerBanner" class="reader-banner"></div>
+
+      <ol class="steps">
+        <li id="step-arm" data-step="arm">Ready -- place the blank NTAG216 card on the reader</li>
+        <li id="step-writing" data-step="writing">Writing NDEF URL to the card</li>
+        <li id="step-verifying" data-step="verifying">Verifying the write</li>
+        <li id="step-locking" data-step="locking">Setting the password lock</li>
+        <li id="step-success" data-step="success">Done</li>
+      </ol>
+
+      <div id="successPanel" class="success-panel hidden">
+        <p>✅ Card encoded and database updated.</p>
+        <p class="chip-password-label">Chip password (save this now -- shown once):</p>
+        <div class="chip-password-row">
+          <div class="chip-password" id="chipPassword"></div>
+          <button id="copyPasswordBtn" class="link-btn">Copy</button>
+        </div>
+        <p class="muted">Next: tap this card on a real Android phone AND an iPhone 7+ to confirm the profile page opens before shipping it.</p>
+        <label class="password-confirm-row">
+          <input type="checkbox" id="passwordSavedCheck" />
+          I've saved this password somewhere safe -- it will never be shown again
+        </label>
+        <button id="readAfterWriteBtn" class="btn-secondary" disabled>Read it back now (software check)</button>
+        <button id="doneBtn" class="btn-primary" disabled>Encode another card</button>
+      </div>
+
+      <div id="errorPanel" class="error-panel hidden">
+        <p id="errorMessage"></p>
+        <button id="retryBtn" class="btn-primary">Back to client list</button>
+      </div>
+
+      <button id="cancelBtn" class="link-btn cancel-btn">Cancel</button>
+    </section>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
