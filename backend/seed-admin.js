@@ -23,7 +23,6 @@ async function main() {
     console.error('Use at least 10 characters for an admin password.');
     process.exit(1);
   }
-
   await connectDB();
 
   const existing = await Admin.findOne({ email: email.toLowerCase() });

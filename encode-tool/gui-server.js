@@ -419,7 +419,18 @@ app.patch('/api/pending/:clientId', requireSession, async (req, res) => {
 // NFC reader -- watches continuously in the background, only acts when
 // a job is armed. This mirrors the terminal tool's behavior exactly,
 // just reused across many cards instead of exiting after one.
+//
+// TEMPORARY: SKIP_NFC=true bypasses the `new NFC()` call entirely. On a
+// machine with no reader ever attached, nfc-pcsc's constructor can hang
+// the process indefinitely trying to establish a PC/SC context -- this
+// lets the rest of the GUI (login, arm/disarm, client lookup) run for
+// testing without the hardware. Remove this guard (or just don't set
+// the env var) on the real machine with the ACR1252U plugged in.
 // ---------------------------------------------------------------------
+
+if (process.env.SKIP_NFC === 'true') {
+  console.log('⚠️  SKIP_NFC=true -- NFC reader watcher disabled. Card read/write features are inactive.');
+} else {
 
 const nfc = new NFC();
 
@@ -545,6 +556,8 @@ nfc.on('reader', (reader) => {
 });
 
 nfc.on('error', (err) => broadcast('nfc-error', { message: err.message }));
+
+} // end SKIP_NFC guard
 
 const server = app.listen(PORT, () => {
   console.log(`\nHuntsTAG encode tool (GUI) running.`);
