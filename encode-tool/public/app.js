@@ -28,12 +28,25 @@ function returnStatusViewHome() {
   statusViewHomeMarker = null;
 }
 
-// Fetched once at startup so "Preview page" links can be built without a
-// round trip per client.
+// Fetched once at startup so "Preview page" links and backend API URLs can be built
 fetch('/api/settings')
   .then((r) => r.json())
-  .then((cfg) => { window.PUBLIC_BASE_URL = cfg.publicBaseUrl; })
-  .catch(() => { window.PUBLIC_BASE_URL = ''; });
+  .then((cfg) => {
+    window.PUBLIC_BASE_URL = cfg.publicBaseUrl;
+    window.BACKEND_URL = cfg.backendUrl || 'https://api.huntstag.com';
+  })
+  .catch(() => {
+    window.PUBLIC_BASE_URL = '';
+    window.BACKEND_URL = 'https://api.huntstag.com';
+  });
+
+function getBackendUrl() {
+  return (window.BACKEND_URL || 'https://api.huntstag.com').replace(/\/+$/, '');
+}
+
+function getAuthHeader() {
+  return window.SESSION_TOKEN ? { Authorization: `Bearer ${window.SESSION_TOKEN}` } : {};
+}
 
 // ---------------------------------------------------------------------
 // Settings -- backend URL + public base URL, editable before or after
@@ -76,6 +89,18 @@ settingsSaveBtn.addEventListener('click', async () => {
   const publicBaseUrl = document.getElementById('settingsPublicBaseUrl').value.trim();
   settingsError.classList.add('hidden');
   settingsSuccess.classList.add('hidden');
+
+  // Client-side validation before hitting the server
+  if (!backendUrl || !/^https?:\/\//.test(backendUrl)) {
+    settingsError.textContent = 'Backend URL must start with http:// or https://';
+    settingsError.classList.remove('hidden');
+    return;
+  }
+  if (publicBaseUrl && !/^https?:\/\//.test(publicBaseUrl)) {
+    settingsError.textContent = 'Public base URL must start with http:// or https://';
+    settingsError.classList.remove('hidden');
+    return;
+  }
 
   const res = await fetch('/api/settings', {
     method: 'POST',
@@ -134,6 +159,9 @@ async function checkSession() {
   const res = await fetch('/api/session');
   const body = await res.json();
   if (body.loggedIn) {
+    window.SESSION_TOKEN = body.token;
+    if (body.backendUrl) window.BACKEND_URL = body.backendUrl;
+    if (body.publicBaseUrl) window.PUBLIC_BASE_URL = body.publicBaseUrl;
     sessionEmail.textContent = body.adminEmail;
     sessionInfo.classList.remove('hidden');
     showView(pickerView);
@@ -166,6 +194,10 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     return;
   }
 
+  if (body.token) window.SESSION_TOKEN = body.token;
+  if (body.backendUrl) window.BACKEND_URL = body.backendUrl;
+  if (body.publicBaseUrl) window.PUBLIC_BASE_URL = body.publicBaseUrl;
+
   document.getElementById('loginPassword').value = '';
   checkSession();
 });
@@ -183,7 +215,9 @@ async function loadPending() {
   const emptyEl = document.getElementById('pendingEmpty');
   listEl.innerHTML = '';
 
-  const res = await fetch('/api/pending');
+  const res = await fetch(`${getBackendUrl()}/api/admin/encode/pending`, {
+    headers: getAuthHeader(),
+  });
   if (res.status === 401) return checkSession();
   const clients = await res.json();
 
@@ -234,9 +268,9 @@ async function loadPending() {
       statusEl.textContent = 'Saving...';
       statusEl.className = 'save-status';
 
-      const res = await fetch(`/api/pending/${encodeURIComponent(c.clientId)}`, {
+      const res = await fetch(`${getBackendUrl()}/api/admin/clients/${encodeURIComponent(c.clientId)}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
         body: JSON.stringify({ fullName, phone, loginEmail }),
       });
       const body = await res.json().catch(() => ({}));
@@ -574,7 +608,9 @@ document.getElementById('writeLookupBtn').addEventListener('click', async () => 
   formEl.classList.add('hidden');
   if (!clientId) return;
 
-  const res = await fetch(`/api/client/${encodeURIComponent(clientId)}`);
+  const res = await fetch(`${getBackendUrl()}/api/admin/encode/client/${encodeURIComponent(clientId)}`, {
+    headers: getAuthHeader(),
+  });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     errorEl.textContent = body.error || 'Client not found';
@@ -606,9 +642,9 @@ document.getElementById('writeSaveBtn').addEventListener('click', async () => {
   statusEl.textContent = 'Saving...';
   statusEl.className = 'save-status';
 
-  const res = await fetch(`/api/pending/${encodeURIComponent(clientId)}`, {
+  const res = await fetch(`${getBackendUrl()}/api/admin/clients/${encodeURIComponent(clientId)}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
     body: JSON.stringify({
       fullName: document.getElementById('writeFullName').value.trim(),
       jobTitle: document.getElementById('writeJobTitle').value.trim(),
@@ -683,7 +719,9 @@ async function attemptGiftArm() {
     errorEl.classList.remove('hidden');
     // Distinguish "already encoded" from "doesn't exist at all" -- only
     // offer the replacement path when we know the client is real.
-    const lookupRes = await fetch(`/api/client/${encodeURIComponent(clientId)}`);
+    const lookupRes = await fetch(`${getBackendUrl()}/api/admin/encode/client/${encodeURIComponent(clientId)}`, {
+      headers: getAuthHeader(),
+    });
     if (lookupRes.ok) {
       const client = await lookupRes.json();
       if (client.chipEncoded) confirmEl.classList.remove('hidden');

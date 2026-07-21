@@ -107,14 +107,19 @@ app.get('/api/settings', (req, res) => {
 
 app.post('/api/settings', (req, res) => {
   const { backendUrl, publicBaseUrl } = req.body || {};
-  if (!backendUrl || !/^https?:\/\//.test(backendUrl)) {
+  const trimmedBackend = (backendUrl || '').trim();
+  const trimmedPublic = (publicBaseUrl || '').trim();
+
+  if (!trimmedBackend || !/^https?:\/\//.test(trimmedBackend)) {
     return res.status(400).json({ error: 'Backend URL must start with http:// or https://' });
   }
-  if (!publicBaseUrl || !/^https?:\/\//.test(publicBaseUrl)) {
+  // publicBaseUrl is optional -- only validate format if a value was given
+  if (trimmedPublic && !/^https?:\/\//.test(trimmedPublic)) {
     return res.status(400).json({ error: 'Public base URL must start with http:// or https://' });
   }
-  BACKEND_URL = backendUrl.replace(/\/+$/, '');
-  PUBLIC_BASE_URL = publicBaseUrl.replace(/\/+$/, '');
+
+  BACKEND_URL = trimmedBackend.replace(/\/+$/, '');
+  PUBLIC_BASE_URL = trimmedPublic ? trimmedPublic.replace(/\/+$/, '') : PUBLIC_BASE_URL;
   writeConfig({ backendUrl: BACKEND_URL, publicBaseUrl: PUBLIC_BASE_URL });
   res.json({ ok: true, backendUrl: BACKEND_URL, publicBaseUrl: PUBLIC_BASE_URL });
 });
@@ -144,7 +149,7 @@ app.post('/api/login', async (req, res) => {
 
     session = { adminEmail: email.toLowerCase(), token: body.token };
     writeConfig({ session }); // remembered across restarts -- no re-login every launch
-    res.json({ ok: true, adminEmail: session.adminEmail });
+    res.json({ ok: true, adminEmail: session.adminEmail, token: session.token, backendUrl: BACKEND_URL, publicBaseUrl: PUBLIC_BASE_URL });
   } catch (err) {
     // Same underlying cause as the terminal tool's "fetch failed" --
     // backend not running, or BACKEND_URL pointing at the wrong place.
@@ -153,7 +158,13 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.get('/api/session', (req, res) => {
-  res.json({ loggedIn: !!session, adminEmail: session?.adminEmail || null });
+  res.json({
+    loggedIn: !!session,
+    adminEmail: session?.adminEmail || null,
+    token: session?.token || null,
+    backendUrl: BACKEND_URL,
+    publicBaseUrl: PUBLIC_BASE_URL,
+  });
 });
 
 app.post('/api/logout', (req, res) => {

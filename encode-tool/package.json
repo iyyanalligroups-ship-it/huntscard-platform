@@ -1,6 +1,6 @@
 {
   "name": "huntstag-encode-tool",
-"version": "0.1.1",
+  "version": "0.1.1",
   "description": "Local admin tool -- writes clientId URL to NTAG216 cards via ACR1252U and password-locks them",
   "main": "electron/main.js",
   "type": "commonjs",
@@ -51,5 +51,9 @@
       "owner": "iyyanalligroups-ship-it",
       "repo": "huntscard-platform"
     }
+  },
+  "allowScripts": {
+    "@pokusew/pcsclite@0.6.0": true,
+    "electron@32.3.3": true
   }
 }

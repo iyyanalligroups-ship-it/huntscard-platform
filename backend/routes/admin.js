@@ -839,9 +839,20 @@ router.delete('/catalog/:cardType', requireAdmin, async (req, res) => {
 // person's details, not listing who's ready for a card).
 router.get('/encode/client/:clientId', requireAdmin, async (req, res) => {
   try {
-    const client = await Client.findOne({ clientId: req.params.clientId }).select(
+    const rawId = (req.params.clientId || '').trim();
+    if (!rawId) return res.status(400).json({ error: 'Client ID required' });
+
+    let client = await Client.findOne({ clientId: rawId }).select(
       'clientId fullName phone loginEmail cardType paid chipEncoded jobTitle bio whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl'
     );
+
+    if (!client) {
+      const escaped = rawId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      client = await Client.findOne({ clientId: { $regex: new RegExp(`^${escaped}$`, 'i') } }).select(
+        'clientId fullName phone loginEmail cardType paid chipEncoded jobTitle bio whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl'
+      );
+    }
+
     if (!client) return res.status(404).json({ error: `No client found with ID "${req.params.clientId}"` });
     res.json(client);
   } catch (err) {
