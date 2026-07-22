@@ -1,0 +1,59 @@
+{
+  "name": "huntstag-encode-tool",
+  "version": "0.1.1",
+  "description": "Local admin tool -- writes clientId URL to NTAG216 cards via ACR1252U and password-locks them",
+  "main": "electron/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node encode.js",
+    "gui": "node gui-server.js",
+    "electron": "electron .",
+    "dist": "electron-builder",
+    "rebuild:node": "npm rebuild @pokusew/pcsclite",
+    "rebuild:electron": "electron-rebuild -f -w nfc-pcsc"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mongodb": "^6.8.0",
+    "nfc-pcsc": "^0.8.1",
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^32.2.0",
+    "electron-builder": "^25.1.8",
+    "@electron/rebuild": "^3.7.1"
+  },
+  "build": {
+    "appId": "com.huntstag.encodetool",
+    "productName": "HuntsTAG Encode Tool",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      "public/**/*",
+      "gui-server.js",
+      "lib.js",
+      "config-store.js",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "iyyanalligroups-ship-it",
+      "repo": "huntscard-platform"
+    }
+  },
+  "allowScripts": {
+    "@pokusew/pcsclite@0.6.0": true,
+    "electron@32.3.3": true
+  }
+}

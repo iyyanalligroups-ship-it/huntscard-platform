@@ -1,0 +1,10 @@
+﻿node_modules/
+.env
+uploads/photos/*
+!uploads/photos/.gitkeep
+dist/
+*.log
+uploads/banners/*
+!uploads/banners/.gitkeep
+encode-tool/local-config.json
+encode-tool/dist-electron/
