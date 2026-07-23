@@ -317,11 +317,11 @@
     </a>`;
   }
 
-  function showToast(msg) {
+  function showToast(msg, duration = 1800) {
     const t = document.getElementById('toast');
     t.textContent = msg;
     t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 1800);
+    setTimeout(() => t.classList.remove('show'), duration);
   }
 
   // A plain <a href="…vcard…"> works, but on some browsers the click
@@ -349,7 +349,14 @@
       a.remove();
       URL.revokeObjectURL(url);
 
-      showToast('Contact saved ✓');
+      // Downloading the file is as far as any website can go -- actually
+      // adding it to the phone's contacts happens when the OS opens this
+      // download and its own Contacts app shows an import/save screen.
+      // No browser exposes an API for a webpage to write into the OS
+      // address book directly (any site silently adding to your contacts
+      // would be a serious privacy hole), so that next tap is unavoidable
+      // on every site that offers "save contact", not just this one.
+      showToast('Downloaded — open it to add to your contacts', 3200);
     } catch (err) {
       showToast('Could not save contact');
     }
