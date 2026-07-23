@@ -48,6 +48,21 @@ function getAuthHeader() {
   return window.SESSION_TOKEN ? { Authorization: `Bearer ${window.SESSION_TOKEN}` } : {};
 }
 
+// The card actually stores the API host (e.g. api.huntstag.com/c/...) since
+// that's what serves the tap page -- but showing "api." on screen exposes
+// backend infrastructure to whoever's looking at this admin tool. Strip it
+// for DISPLAY ONLY; the real link (href, iframe preview) still uses the
+// unmodified URL underneath, so nothing about the actual behavior changes.
+function friendlyUrl(url) {
+  try {
+    const u = new URL(url);
+    u.hostname = u.hostname.replace(/^api\./, '');
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 // ---------------------------------------------------------------------
 // Settings -- backend URL + public base URL, editable before or after
 // login (you need the backend URL right before you can log in at all).
@@ -571,7 +586,7 @@ evtSource.addEventListener('read-result', (e) => {
       : `<span class="lock-badge lock-no">🔓 Not password-protected -- still writable/unlocked</span>`;
 
   const urlLine = data.url
-    ? `This card opens: <a href="${escapeHtml(data.url)}" target="_blank" rel="noopener">${escapeHtml(data.url)}</a>`
+    ? `This card opens: <a href="${escapeHtml(data.url)}" target="_blank" rel="noopener">${escapeHtml(friendlyUrl(data.url))}</a>`
     : `⚠️ No readable link found${data.urlError ? `: ${escapeHtml(data.urlError)}` : ''}`;
 
   readResult.className = 'read-result read-ok';
