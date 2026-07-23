@@ -63,6 +63,7 @@ export default function Shop() {
   const [plans, setPlans] = useState([]);
   const [myProfile, setMyProfile] = useState(null);
   const [selectedKey, setSelectedKey] = useState('');
+  const [quantity, setQuantity] = useState(1);
   const [forSomeoneElse, setForSomeoneElse] = useState(false);
   const [fullName, setFullName] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
@@ -106,11 +107,15 @@ export default function Shop() {
       return;
     }
     setSelectedKey(key);
+    setQuantity(1);
     setError('');
     setHandoff(null);
     setUpgraded(false);
     setTimeout(() => document.getElementById('checkout-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }
+
+  const MAX_QUANTITY = 20; // matches the backend's cap
+  const totalAmount = selectedPlan?.priceAmount ? selectedPlan.priceAmount * quantity : null;
 
   async function runCheckout({ createOrder, confirmPayment, description }) {
     const order = await createOrder();
@@ -155,10 +160,14 @@ export default function Shop() {
     setError('');
     setSubmitting(true);
     try {
+      const qtySuffix = quantity > 1 ? ` × ${quantity}` : '';
       if (forSomeoneElse) {
-        // Buy for someone else -- new account, audit-tracked as purchased by you.
+        // Buy for someone else -- new account, audit-tracked as purchased by
+        // you. Quantity here means N physical copies of THEIR one profile,
+        // not N separate people.
         const result = await runCheckout({
-          createOrder: () => api.createNewCardOrder({ requestedPlan: selectedKey, recipientName: fullName, recipientEmail: loginEmail }),
+          createOrder: () =>
+            api.createNewCardOrder({ requestedPlan: selectedKey, recipientName: fullName, recipientEmail: loginEmail, quantity }),
           confirmPayment: (response) =>
             api.confirmNewCardPayment({
               requestedPlan: selectedKey,
@@ -168,15 +177,16 @@ export default function Shop() {
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
             }),
-          description: `${selectedPlan.name} card — for ${fullName}`,
+          description: `${selectedPlan.name} card${qtySuffix} — for ${fullName}`,
         });
         setHandoff(result);
         setFullName('');
         setLoginEmail('');
       } else {
-        // Buy/upgrade your own account.
-        await runCheckout({
-          createOrder: () => api.createUpgradeOrder(selectedKey),
+        // Buy/upgrade your own account. Quantity = spare physical copies of
+        // your own profile, still just the one account.
+        const result = await runCheckout({
+          createOrder: () => api.createUpgradeOrder(selectedKey, quantity),
           confirmPayment: (response) =>
             api.confirmUpgradePayment({
               requestedPlan: selectedKey,
@@ -184,14 +194,15 @@ export default function Shop() {
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
             }),
-          description: `${selectedPlan.name} card`,
+          description: `${selectedPlan.name} card${qtySuffix}`,
         });
-        setUpgraded(true);
+        setUpgraded(result.quantity || 1);
         const [fresh, reqs] = await Promise.all([api.getProfile(), api.listMyRequests()]);
         setMyProfile(fresh);
         setRequests(reqs.filter((r) => r.type === 'upgrade'));
       }
       setSelectedKey('');
+      setQuantity(1);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -229,6 +240,12 @@ export default function Shop() {
             <span>Their card page</span>
             <span>{handoff.publicUrl}</span>
           </div>
+          {handoff.quantity > 1 && (
+            <div className="handoff-row">
+              <span>Physical cards to encode</span>
+              <span>{handoff.quantity} (same profile)</span>
+            </div>
+          )}
         </div>
         <button
           style={{ marginTop: 20 }}
@@ -289,6 +306,7 @@ export default function Shop() {
       {upgraded && !error && (
         <p className="section-subheading" style={{ color: 'var(--holo-cyan)', fontWeight: 600 }}>
           Payment successful — your card is {hasCard ? 'updated' : 'ready'}!
+          {upgraded > 1 ? ` You're getting ${upgraded} physical cards, all with your profile.` : ''}
         </p>
       )}
 
@@ -340,6 +358,52 @@ export default function Shop() {
             {error && <div className="error-banner">{error}</div>}
 
             <form onSubmit={handleCheckout}>
+              {selectedPlan.priceAmount && (
+                <div className="field">
+                  <label htmlFor="cardQuantity">
+                    How many cards? <span className="hint" style={{ fontWeight: 400 }}>(extra physical copies of the same profile)</span>
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button
+                      type="button"
+                      className="secondary"
+                      style={{ width: 40, padding: 0 }}
+                      onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                      disabled={quantity <= 1}
+                      aria-label="Decrease quantity"
+                    >
+                      −
+                    </button>
+                    <input
+                      id="cardQuantity"
+                      type="number"
+                      min={1}
+                      max={MAX_QUANTITY}
+                      value={quantity}
+                      onChange={(e) => {
+                        const n = parseInt(e.target.value, 10);
+                        setQuantity(Number.isFinite(n) ? Math.min(MAX_QUANTITY, Math.max(1, n)) : 1);
+                      }}
+                      style={{ width: 64, textAlign: 'center' }}
+                    />
+                    <button
+                      type="button"
+                      className="secondary"
+                      style={{ width: 40, padding: 0 }}
+                      onClick={() => setQuantity((q) => Math.min(MAX_QUANTITY, q + 1))}
+                      disabled={quantity >= MAX_QUANTITY}
+                      aria-label="Increase quantity"
+                    >
+                      +
+                    </button>
+                    {quantity > 1 && (
+                      <span className="hint" style={{ marginBottom: 0 }}>
+                        ₹{selectedPlan.priceAmount} × {quantity} = <strong style={{ color: 'var(--text)' }}>₹{totalAmount}</strong>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
               {forSomeoneElse && (
                 <>
                   <div className="field">
@@ -362,8 +426,8 @@ export default function Shop() {
               <button type="submit" disabled={submitting || !selectedPlan.priceAmount}>
                 {submitting
                   ? 'Waiting for payment…'
-                  : selectedPlan.priceAmount
-                  ? `Pay ₹${selectedPlan.priceAmount}`
+                  : totalAmount
+                  ? `Pay ₹${totalAmount}`
                   : 'Not available for instant checkout'}
               </button>
             </form>

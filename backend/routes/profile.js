@@ -26,6 +26,19 @@ function getRazorpay() {
   });
 }
 
+// Multiple cards per purchase = multiple PHYSICAL copies of the same
+// profile (spare cards), not separate accounts -- so this only ever
+// multiplies the amount charged and the count admin needs to encode, it
+// never changes how many Client documents get created. Capped well below
+// anything a real bulk order would need, just to keep a typo (or an
+// abusive request) from creating a runaway Razorpay order.
+const MAX_CARD_QUANTITY = 20;
+function parseQuantity(raw) {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, MAX_CARD_QUANTITY);
+}
+
 // ---------------------------------------------------------------------
 // Photo upload -- stored on local disk under backend/uploads/photos,
 // served statically (see server.js). This is the actual "upload a file"
@@ -304,6 +317,7 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
 
     const { requestedPlan } = req.body;
     if (!requestedPlan) return res.status(400).json({ error: 'requestedPlan is required' });
+    const quantity = parseQuantity(req.body.quantity);
 
     const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase(), active: true });
     if (!plan) return res.status(400).json({ error: 'requestedPlan must match an active card plan' });
@@ -312,10 +326,10 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
     }
 
     const order = await razorpay.orders.create({
-      amount: Math.round(plan.priceAmount * 100), // Razorpay wants paise, the smallest unit
+      amount: Math.round(plan.priceAmount * quantity * 100), // Razorpay wants paise, the smallest unit
       currency: 'INR',
       receipt: `upg_${req.user.clientId}_${Date.now()}`,
-      notes: { clientId: req.user.clientId, requestedPlan: plan.key },
+      notes: { clientId: req.user.clientId, requestedPlan: plan.key, quantity },
     });
 
     res.json({
@@ -324,6 +338,7 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
       currency: order.currency,
       keyId: process.env.RAZORPAY_KEY_ID,
       planName: plan.name,
+      quantity,
     });
   } catch (err) {
     console.error('[profile/upgrade-order POST]', err);
@@ -358,6 +373,14 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
 
     const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase() });
 
+    // Quantity comes from the ORDER we created (server-controlled at
+    // create-order time), never from this request's body -- otherwise
+    // someone could pay for 1 card and just claim quantity: 100 here to
+    // get free spare cards. The order's notes are the source of truth for
+    // what was actually paid for.
+    const order = await getRazorpay().orders.fetch(razorpay_order_id);
+    const quantity = parseQuantity(order?.notes?.quantity);
+
     // Payment is verified above -- that IS the trust step now, so this
     // applies immediately rather than sitting in the admin queue waiting
     // for a manual Approve. The old manual flow (no price set) still goes
@@ -378,7 +401,8 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
       paymentStatus: 'paid',
       razorpayOrderId: razorpay_order_id,
       razorpayPaymentId: razorpay_payment_id,
-      amountPaid: plan?.priceAmount || null,
+      amountPaid: plan?.priceAmount ? plan.priceAmount * quantity : null,
+      quantity,
     });
 
     res.status(201).json(request);
@@ -417,6 +441,7 @@ router.post('/new-card-order', requireAuth, async (req, res) => {
     if (!requestedPlan || !recipientName || !recipientEmail) {
       return res.status(400).json({ error: 'requestedPlan, recipientName, and recipientEmail are required' });
     }
+    const quantity = parseQuantity(req.body.quantity);
 
     const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase(), active: true });
     if (!plan) return res.status(400).json({ error: 'requestedPlan must match an active card plan' });
@@ -430,10 +455,10 @@ router.post('/new-card-order', requireAuth, async (req, res) => {
     }
 
     const order = await razorpay.orders.create({
-      amount: Math.round(plan.priceAmount * 100),
+      amount: Math.round(plan.priceAmount * quantity * 100),
       currency: 'INR',
       receipt: `new_${req.user.clientId}_${Date.now()}`,
-      notes: { purchasedBy: req.user.clientId, requestedPlan: plan.key, recipientEmail: recipientEmail.toLowerCase() },
+      notes: { purchasedBy: req.user.clientId, requestedPlan: plan.key, recipientEmail: recipientEmail.toLowerCase(), quantity },
     });
 
     res.json({
@@ -442,6 +467,7 @@ router.post('/new-card-order', requireAuth, async (req, res) => {
       currency: order.currency,
       keyId: process.env.RAZORPAY_KEY_ID,
       planName: plan.name,
+      quantity,
     });
   } catch (err) {
     console.error('[profile/new-card-order POST]', err);
@@ -477,6 +503,11 @@ router.post('/new-card-confirm', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Payment verification failed -- signature mismatch.' });
     }
 
+    // Same as upgrade-confirm above: quantity comes from the order WE
+    // created, never trusted from this request body directly.
+    const order = await getRazorpay().orders.fetch(razorpay_order_id);
+    const quantity = parseQuantity(order?.notes?.quantity);
+
     const existing = await Client.findOne({ loginEmail: recipientEmail.toLowerCase() });
     if (existing) {
       // Payment already succeeded at this point -- can't silently drop it.
@@ -504,11 +535,12 @@ router.post('/new-card-confirm', requireAuth, async (req, res) => {
     await CardRequest.create({
       clientId: req.user.clientId, // who paid, for audit -- not the new account
       type: 'new_card',
-      note: `Purchased for ${recipientName} <${recipientEmail}> -- new clientId ${clientId}`,
-      status: 'fulfilled', // account already exists, nothing left for admin to do but encode the physical card
+      note: `Purchased for ${recipientName} <${recipientEmail}> -- new clientId ${clientId}${quantity > 1 ? ` -- ${quantity} physical cards for this one profile` : ''}`,
+      status: 'fulfilled', // account already exists, nothing left for admin to do but encode the physical card(s)
       paymentStatus: 'paid',
       razorpayOrderId: razorpay_order_id,
       razorpayPaymentId: razorpay_payment_id,
+      quantity,
     });
 
     res.status(201).json({
@@ -517,6 +549,7 @@ router.post('/new-card-confirm', requireAuth, async (req, res) => {
       tempPassword, // shown once -- pass this along to whoever the card is for
       cardType: newClient.cardType,
       publicUrl: `${process.env.PUBLIC_BASE_URL}/c/${newClient.clientId}`,
+      quantity,
     });
   } catch (err) {
     console.error('[profile/new-card-confirm POST]', err);

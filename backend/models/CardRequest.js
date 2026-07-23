@@ -30,6 +30,10 @@ const CardRequestSchema = new mongoose.Schema(
     razorpayOrderId: { type: String, default: null },
     razorpayPaymentId: { type: String, default: null },
     amountPaid: { type: Number, default: null }, // whole rupees, for the admin's own record
+    // How many physical cards this covers -- all encoded with the SAME
+    // clientId/profile URL (spare copies), not separate accounts. Shown to
+    // admin so they know to encode more than one card for this request.
+    quantity: { type: Number, default: 1, min: 1 },
   },
   { timestamps: true }
 );

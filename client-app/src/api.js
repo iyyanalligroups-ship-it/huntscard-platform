@@ -57,7 +57,7 @@ export const api = {
   submitRequest: (payload) => request('/api/profile/requests', { method: 'POST', body: payload }),
   listMyRequests: () => request('/api/profile/requests'),
 
-  createUpgradeOrder: (requestedPlan) => request('/api/profile/upgrade-order', { method: 'POST', body: { requestedPlan } }),
+  createUpgradeOrder: (requestedPlan, quantity) => request('/api/profile/upgrade-order', { method: 'POST', body: { requestedPlan, quantity } }),
   confirmUpgradePayment: (payload) => request('/api/profile/upgrade-confirm', { method: 'POST', body: payload }),
 
   createNewCardOrder: (payload) => request('/api/profile/new-card-order', { method: 'POST', body: payload }),
