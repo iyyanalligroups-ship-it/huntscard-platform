@@ -9,6 +9,7 @@ const CardRequest = require('../models/CardRequest');
 const ContactMessage = require('../models/ContactMessage');
 const ArLayout = require('../models/ArLayout');
 const CatalogVideo = require('../models/CatalogVideo');
+const { getChargeAmount } = require('../utils/pricing');
 
 const router = express.Router();
 
@@ -30,7 +31,10 @@ function generateTempPassword() {
 // show -- so this is deliberately unauthenticated.
 router.get('/plans', async (req, res) => {
   const plans = await CardPlan.find({ active: true }).select('name key price priceAmount description images').sort({ createdAt: 1 });
-  res.json(plans);
+  // chargeAmount is what checkout actually uses -- priceAmount if admin set
+  // it, else a plain-number `price` (e.g. "499") parsed as a fallback. Sent
+  // as its own field so the frontend doesn't have to duplicate that parsing.
+  res.json(plans.map((p) => ({ ...p.toObject(), chargeAmount: getChargeAmount(p) })));
 });
 
 // GET /api/public/catalog -- active card types that have a showcase
@@ -75,7 +79,8 @@ router.post('/shop-order', async (req, res) => {
 
     const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase(), active: true });
     if (!plan) return res.status(400).json({ error: 'requestedPlan must match an active card plan' });
-    if (!plan.priceAmount) {
+    const chargeAmount = getChargeAmount(plan);
+    if (!chargeAmount) {
       return res.status(400).json({ error: 'This plan has no price set yet -- contact us to order it manually.' });
     }
 
@@ -85,7 +90,7 @@ router.post('/shop-order', async (req, res) => {
     }
 
     const order = await razorpay.orders.create({
-      amount: Math.round(plan.priceAmount * 100),
+      amount: Math.round(chargeAmount * 100),
       currency: 'INR',
       receipt: `shop_${Date.now()}`,
       notes: { fullName, loginEmail: loginEmail.toLowerCase(), requestedPlan: plan.key },

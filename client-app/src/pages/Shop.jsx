@@ -115,7 +115,7 @@ export default function Shop() {
   }
 
   const MAX_QUANTITY = 20; // matches the backend's cap
-  const totalAmount = selectedPlan?.priceAmount ? selectedPlan.priceAmount * quantity : null;
+  const totalAmount = selectedPlan?.chargeAmount ? selectedPlan.chargeAmount * quantity : null;
 
   async function runCheckout({ createOrder, confirmPayment, description }) {
     const order = await createOrder();
@@ -152,7 +152,7 @@ export default function Shop() {
     if (!loggedIn || !selectedPlan) return;
     if (forSomeoneElse && (!fullName || !loginEmail)) return;
 
-    if (!selectedPlan.priceAmount) {
+    if (!selectedPlan.chargeAmount) {
       setError('This plan isn\'t available for instant checkout yet — please contact us to order it.');
       return;
     }
@@ -336,10 +336,16 @@ export default function Shop() {
                 )}
                 <PlanImageGallery images={p.images} />
                 <div className="shop-plan-name">{p.name}</div>
-                <div className="shop-plan-price">{p.priceAmount ? `₹${p.priceAmount}` : p.price || 'Contact us'}</div>
+                <div className="shop-plan-price">{p.chargeAmount ? `₹${p.chargeAmount}` : p.price || 'Contact us'}</div>
                 <p className="shop-plan-desc">{p.description || 'A HuntsTAG smart card, tap-to-share ready.'}</p>
-                <button onClick={() => pickPlan(p.key)} disabled={current}>
-                  {current ? 'Your current plan' : !loggedIn ? 'Log in to buy' : selectedKey === p.key ? 'Selected' : 'Choose this plan'}
+                <button onClick={() => pickPlan(p.key)}>
+                  {!loggedIn
+                    ? 'Log in to buy'
+                    : selectedKey === p.key
+                    ? 'Selected'
+                    : current
+                    ? 'Buy again'
+                    : 'Choose this plan'}
                 </button>
               </div>
             );
@@ -352,13 +358,13 @@ export default function Shop() {
           <div className="card">
             <h2 style={{ fontSize: 16, marginTop: 0 }}>
               Checkout — {selectedPlan.name}{' '}
-              {selectedPlan.priceAmount ? <span style={{ color: 'var(--holo-cyan)' }}>₹{selectedPlan.priceAmount}</span> : null}
+              {selectedPlan.chargeAmount ? <span style={{ color: 'var(--holo-cyan)' }}>₹{selectedPlan.chargeAmount}</span> : null}
             </h2>
 
             {error && <div className="error-banner">{error}</div>}
 
             <form onSubmit={handleCheckout}>
-              {selectedPlan.priceAmount && (
+              {selectedPlan.chargeAmount && (
                 <div className="field">
                   <label htmlFor="cardQuantity">
                     How many cards? <span className="hint" style={{ fontWeight: 400 }}>(extra physical copies of the same profile)</span>
@@ -398,7 +404,7 @@ export default function Shop() {
                     </button>
                     {quantity > 1 && (
                       <span className="hint" style={{ marginBottom: 0 }}>
-                        ₹{selectedPlan.priceAmount} × {quantity} = <strong style={{ color: 'var(--text)' }}>₹{totalAmount}</strong>
+                        ₹{selectedPlan.chargeAmount} × {quantity} = <strong style={{ color: 'var(--text)' }}>₹{totalAmount}</strong>
                       </span>
                     )}
                   </div>
@@ -423,7 +429,7 @@ export default function Shop() {
                   </div>
                 </>
               )}
-              <button type="submit" disabled={submitting || !selectedPlan.priceAmount}>
+              <button type="submit" disabled={submitting || !selectedPlan.chargeAmount}>
                 {submitting
                   ? 'Waiting for payment…'
                   : totalAmount
@@ -431,7 +437,7 @@ export default function Shop() {
                   : 'Not available for instant checkout'}
               </button>
             </form>
-            {!selectedPlan.priceAmount && (
+            {!selectedPlan.chargeAmount && (
               <p className="hint" style={{ marginTop: 10 }}>
                 This plan needs manual setup — <Link to="/contact" className="link-out">contact us</Link> to order it.
               </p>

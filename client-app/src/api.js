@@ -53,6 +53,10 @@ export const api = {
   updateProfile: (updates) => request('/api/profile/me', { method: 'PUT', body: updates }),
 
   listPlans: () => request('/api/public/plans', { auth: false }),
+  // The public tap-page profile -- unauthenticated on purpose, this is
+  // what a stranger tapping/scanning the physical card sees. See
+  // pages/PublicProfile.jsx.
+  getPublicProfile: (clientId) => request(`/api/public/profile/${clientId}`, { auth: false }),
   getCatalog: () => request('/api/public/catalog', { auth: false }),
   submitRequest: (payload) => request('/api/profile/requests', { method: 'POST', body: payload }),
   listMyRequests: () => request('/api/profile/requests'),

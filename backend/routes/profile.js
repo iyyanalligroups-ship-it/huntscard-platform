@@ -10,6 +10,7 @@ const { requireAuth } = require('../middleware/auth');
 const Client = require('../models/Client');
 const CardRequest = require('../models/CardRequest');
 const CardPlan = require('../models/CardPlan');
+const { getChargeAmount } = require('../utils/pricing');
 
 const router = express.Router();
 
@@ -321,12 +322,13 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
 
     const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase(), active: true });
     if (!plan) return res.status(400).json({ error: 'requestedPlan must match an active card plan' });
-    if (!plan.priceAmount) {
+    const chargeAmount = getChargeAmount(plan);
+    if (!chargeAmount) {
       return res.status(400).json({ error: 'This plan has no price set yet -- ask admin to set one, or use the request-only flow.' });
     }
 
     const order = await razorpay.orders.create({
-      amount: Math.round(plan.priceAmount * quantity * 100), // Razorpay wants paise, the smallest unit
+      amount: Math.round(chargeAmount * quantity * 100), // Razorpay wants paise, the smallest unit
       currency: 'INR',
       receipt: `upg_${req.user.clientId}_${Date.now()}`,
       notes: { clientId: req.user.clientId, requestedPlan: plan.key, quantity },
@@ -371,8 +373,6 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Payment verification failed -- signature mismatch.' });
     }
 
-    const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase() });
-
     // Quantity comes from the ORDER we created (server-controlled at
     // create-order time), never from this request's body -- otherwise
     // someone could pay for 1 card and just claim quantity: 100 here to
@@ -401,7 +401,7 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
       paymentStatus: 'paid',
       razorpayOrderId: razorpay_order_id,
       razorpayPaymentId: razorpay_payment_id,
-      amountPaid: plan?.priceAmount ? plan.priceAmount * quantity : null,
+      amountPaid: order.amount / 100, // the actual charged total, straight from Razorpay's own order record
       quantity,
     });
 
@@ -445,7 +445,8 @@ router.post('/new-card-order', requireAuth, async (req, res) => {
 
     const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase(), active: true });
     if (!plan) return res.status(400).json({ error: 'requestedPlan must match an active card plan' });
-    if (!plan.priceAmount) {
+    const chargeAmount = getChargeAmount(plan);
+    if (!chargeAmount) {
       return res.status(400).json({ error: 'This plan has no price set yet -- ask admin to set one.' });
     }
 
@@ -455,7 +456,7 @@ router.post('/new-card-order', requireAuth, async (req, res) => {
     }
 
     const order = await razorpay.orders.create({
-      amount: Math.round(plan.priceAmount * quantity * 100),
+      amount: Math.round(chargeAmount * quantity * 100),
       currency: 'INR',
       receipt: `new_${req.user.clientId}_${Date.now()}`,
       notes: { purchasedBy: req.user.clientId, requestedPlan: plan.key, recipientEmail: recipientEmail.toLowerCase(), quantity },

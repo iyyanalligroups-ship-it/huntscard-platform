@@ -116,11 +116,16 @@ export default function Dashboard() {
           <div className="pv-name">{profile?.fullName}</div>
           <div className="pv-client-id">{profile?.clientId}</div>
           <div className="pv-title">{profile?.jobTitle || '\u00A0'}</div>
+          {profile?.clientId && (
+            <div className="pv-qr-inline">
+              <img src={`${API_URL}/api/public/qr/${profile.clientId}`} alt="QR code for this card" />
+            </div>
+          )}
 
           <div className="pv-actions">
-            <a className="pv-btn pv-btn-primary" href={`${API_URL}/c/${profile?.clientId}`} target="_blank" rel="noopener noreferrer">
+            <Link className="pv-btn pv-btn-primary" to={`/c/${profile?.clientId}`} target="_blank" rel="noopener noreferrer">
               View Live Page
-            </a>
+            </Link>
             <Link className="pv-btn pv-btn-secondary" to="/dashboard/settings">
               Edit
             </Link>
