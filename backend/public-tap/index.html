@@ -324,6 +324,37 @@
     setTimeout(() => t.classList.remove('show'), 1800);
   }
 
+  // A plain <a href="…vcard…"> works, but on some browsers the click
+  // triggers a full navigation attempt before the download kicks in --
+  // that's the "first click just downloads silently, only the second
+  // click visibly does something" complaint. Fetching the vCard
+  // ourselves and triggering the download from the resulting blob is a
+  // single, reliable action every time, and lets us show our own
+  // confirmation instead of relying on the browser's download UI.
+  async function saveContact(clientId) {
+    try {
+      const res = await fetch(`${API_BASE}/api/public/vcard/${clientId}`);
+      if (!res.ok) throw new Error('vcard fetch failed');
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const filenameMatch = /filename="?([^"]+)"?/.exec(disposition);
+      const filename = filenameMatch ? filenameMatch[1] : 'contact.vcf';
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      showToast('Contact saved ✓');
+    } catch (err) {
+      showToast('Could not save contact');
+    }
+  }
+
   async function handleShare(name) {
     const url = window.location.href;
     if (navigator.share) {
@@ -443,7 +474,7 @@
           <h1 class="name">${escapeHtml(p.fullName)}</h1>
           ${p.jobTitle ? `<p class="title">${escapeHtml(p.jobTitle)}</p>` : '<p class="title">&nbsp;</p>'}
           <div class="actions-row">
-            <a class="btn btn-primary" href="${API_BASE}/api/public/vcard/${clientId}">Save Contact</a>
+            <button class="btn btn-primary" id="saveContactBtn">Save Contact</button>
             <button class="btn btn-secondary" id="shareBtn">Share</button>
           </div>
         </div>
@@ -482,6 +513,7 @@
         </div>
       `;
 
+      document.getElementById('saveContactBtn').addEventListener('click', () => saveContact(clientId));
       document.getElementById('shareBtn').addEventListener('click', () => handleShare(p.fullName));
       document.querySelectorAll('.tab-btn').forEach((btn) => {
         btn.addEventListener('click', () => goToTab(parseInt(btn.dataset.tab, 10)));
