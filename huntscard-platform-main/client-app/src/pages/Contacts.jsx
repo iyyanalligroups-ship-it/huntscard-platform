@@ -2,10 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { api } from '../api.js';
 
-// Contact Picker API only exists on Chromium browsers on Android, over
-// HTTPS -- no iPhone Safari, no desktop browser. Feature-detect rather
-// than assume, so unsupported visitors get a clear message instead of a
-// button that throws when clicked.
+
 const CONTACT_PICKER_SUPPORTED =
   typeof navigator !== 'undefined' && 'contacts' in navigator && 'ContactsManager' in window;
 
