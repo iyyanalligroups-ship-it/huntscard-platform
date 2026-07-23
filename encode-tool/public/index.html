@@ -242,6 +242,20 @@
 
   </main>
 
+  <!-- In-page substitute for window.confirm()/alert() -- Electron's native
+       synchronous dialogs can leave the BrowserWindow unable to deliver
+       clicks/focus to its own inputs afterward, which otherwise looks like
+       the whole app freezing. -->
+  <div id="confirmModalOverlay" class="modal-overlay hidden">
+    <div class="card modal-box">
+      <p id="confirmModalMessage"></p>
+      <div style="display:flex; gap:10px; margin-top:16px; justify-content:flex-end;">
+        <button id="confirmModalCancelBtn" class="btn-secondary" style="width:auto;">Cancel</button>
+        <button id="confirmModalOkBtn" class="btn-primary" style="width:auto;">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

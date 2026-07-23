@@ -48,6 +48,39 @@ function getAuthHeader() {
   return window.SESSION_TOKEN ? { Authorization: `Bearer ${window.SESSION_TOKEN}` } : {};
 }
 
+// In-page substitute for window.confirm()/alert() -- Electron's native
+// synchronous dialogs can leave this BrowserWindow unable to deliver
+// clicks/focus to its own inputs afterward (a known Chromium/Electron
+// quirk), which looks exactly like the whole app freezing. This never
+// leaves the page, so no such focus loss can happen.
+const confirmModalOverlay = document.getElementById('confirmModalOverlay');
+const confirmModalMessage = document.getElementById('confirmModalMessage');
+const confirmModalCancelBtn = document.getElementById('confirmModalCancelBtn');
+const confirmModalOkBtn = document.getElementById('confirmModalOkBtn');
+
+function showConfirm(message, { okOnly = false } = {}) {
+  return new Promise((resolve) => {
+    confirmModalMessage.textContent = message;
+    confirmModalCancelBtn.classList.toggle('hidden', okOnly);
+    confirmModalOverlay.classList.remove('hidden');
+
+    function cleanup(result) {
+      confirmModalOverlay.classList.add('hidden');
+      confirmModalOkBtn.removeEventListener('click', onOk);
+      confirmModalCancelBtn.removeEventListener('click', onCancel);
+      resolve(result);
+    }
+    function onOk() { cleanup(true); }
+    function onCancel() { cleanup(false); }
+    confirmModalOkBtn.addEventListener('click', onOk);
+    confirmModalCancelBtn.addEventListener('click', onCancel);
+  });
+}
+
+function showAlert(message) {
+  return showConfirm(message, { okOnly: true });
+}
+
 // The card actually stores the API host (e.g. api.huntstag.com/c/...) since
 // that's what serves the tap page -- but showing "api." on screen exposes
 // backend infrastructure to whoever's looking at this admin tool. Strip it
@@ -331,7 +364,7 @@ async function armClient(client, item) {
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    alert(body.error || 'Could not start encoding');
+    await showAlert(body.error || 'Could not start encoding');
     return;
   }
 
@@ -871,7 +904,7 @@ recoverBtn.addEventListener('click', async () => {
     return;
   }
 
-  const confirmed = window.confirm(
+  const confirmed = await showConfirm(
     'This permanently wipes the card\'s current data and removes its password lock. This cannot be undone. Continue?'
   );
   if (!confirmed) return;

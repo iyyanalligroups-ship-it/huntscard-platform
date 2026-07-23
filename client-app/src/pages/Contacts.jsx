@@ -88,6 +88,13 @@ export default function Contacts() {
   const [deletingId, setDeletingId] = useState(null);
   const [excelImporting, setExcelImporting] = useState(false);
   const excelInputRef = useRef(null);
+  // Properties the Contact Picker API can actually return on this device --
+  // requesting one it doesn't support (e.g. 'address' is spottily supported
+  // across Android OEM contact providers) is what makes the native picker's
+  // own "Done" button get stuck disabled on some phones. Checked once up
+  // front (not inside the click handler) because select() must run
+  // synchronously off the click's user gesture -- no await can come before it.
+  const [pickerProperties, setPickerProperties] = useState(['name', 'tel', 'email', 'address']);
 
   // Add/Edit form -- one form, two modes. `editingContact` is null for Add,
   // or the contact being edited.
@@ -111,6 +118,14 @@ export default function Contacts() {
     loadContacts().finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!CONTACT_PICKER_SUPPORTED) return;
+    navigator.contacts
+      .getProperties()
+      .then((supported) => setPickerProperties(['name', 'tel', 'email', 'address'].filter((p) => supported.includes(p))))
+      .catch(() => {});
+  }, []);
+
   // Must be called directly from the click handler, with no `await`
   // before it -- the Contact Picker API requires a real user gesture and
   // will reject if anything asynchronous runs first.
@@ -119,7 +134,7 @@ export default function Contacts() {
     setImportResult(null);
     setImporting(true);
     try {
-      const picked = await navigator.contacts.select(['name', 'tel', 'email', 'address'], { multiple: true });
+      const picked = await navigator.contacts.select(pickerProperties, { multiple: true });
       const mapped = picked.map((c) => {
         const { firstName, lastName } = splitName(c.name?.[0] || '');
         return {
