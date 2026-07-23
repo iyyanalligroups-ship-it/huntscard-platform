@@ -558,6 +558,62 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   .nav-link:hover { text-shadow: none; transform: none; }
 }
 
+/* Wraps nav-links + the status/auth block. At desktop it's transparent
+   (display:contents) so it doesn't disturb the existing flex layout of
+   .top-nav-row -- it only becomes a real box (the dropdown panel) once
+   the mobile breakpoint below turns it into the toggled menu. */
+.nav-menu { display: contents; }
+.nav-actions { display: flex; align-items: center; gap: 16px; }
+
+.nav-menu-btn {
+  display: none;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  padding: 9px;
+  margin-left: auto;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  color: var(--text);
+}
+.nav-menu-btn:hover { filter: none; background: rgba(255, 255, 255, 0.06); }
+.nav-menu-btn svg { width: 100%; height: 100%; }
+
+@media (max-width: 860px) {
+  .nav-menu-btn { display: flex; }
+  .nav-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 18px 24px 26px;
+    background: #0d0e14;
+    border-bottom: 1px solid var(--panel-border);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+    z-index: 30;
+  }
+  .nav-menu.open { display: flex; }
+  .nav-links {
+    flex-direction: column;
+    max-width: none;
+    border-radius: 14px;
+  }
+  .nav-link { text-align: center; }
+  .nav-actions { justify-content: center; }
+  /* .top-nav's overflow:hidden (contains the decorative glow/circuit
+     effects) was clipping the dropdown, which intentionally renders below
+     the header's own box. Those decorative layers are already display:none
+     at this width, so relaxing overflow here is safe. */
+  .top-nav { overflow: visible; }
+}
+
 .pill-outline {
   width: auto;
   background: transparent;

@@ -1,15 +1,31 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { clearSession, isLoggedIn } from '../api.js';
 import AuthModal from './AuthModal.jsx';
 
 export default function PublicLayout() {
   const loggedIn = isLoggedIn();
   const navigate = useNavigate();
+  const location = useLocation();
   const [authMode, setAuthMode] = useState(null); // 'login' | 'register' | null
+  const [menuOpen, setMenuOpen] = useState(false);
   const navRef = useRef(null);
   const spotlightRef = useRef(null);
   const circuitSvgRef = useRef(null);
+
+  // Close the mobile dropdown on navigation (link clicks already do this
+  // directly, but this also covers back/forward browser navigation) and on
+  // any click outside the header itself.
+  useEffect(() => setMenuOpen(false), [location.pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClickOutside(e) {
+      if (navRef.current && !navRef.current.contains(e.target)) setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpen]);
 
   const navItems = [
     { to: '/', label: 'Home', end: true },
@@ -108,44 +124,62 @@ export default function PublicLayout() {
             <div className="brand-mark" />
             <span className="brand-name">HUNTSTAG</span>
           </div>
-          <nav className="nav-links">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <span className="status-indicator">
-              <span className="status-dot" />
-              ONLINE
-            </span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {loggedIn ? (
-                <button className="pill-outline" onClick={handleLogout}>
-                  Log out
-                </button>
-              ) : (
-                <>
-                  <button className="pill-outline" onClick={() => setAuthMode('login')}>
-                    Log in
+
+          <div className={`nav-menu${menuOpen ? ' open' : ''}`}>
+            <nav className="nav-links">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  onClick={() => setMenuOpen(false)}
+                  className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+            <div className="nav-actions">
+              <span className="status-indicator">
+                <span className="status-dot" />
+                ONLINE
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {loggedIn ? (
+                  <button className="pill-outline" onClick={handleLogout}>
+                    Log out
                   </button>
-                  <button
-                    className="pill-outline"
-                    style={{ background: 'var(--holo-gradient)', color: '#06120f', border: 'none' }}
-                    onClick={() => setAuthMode('register')}
-                  >
-                    Register
-                  </button>
-                </>
-              )}
+                ) : (
+                  <>
+                    <button className="pill-outline" onClick={() => setAuthMode('login')}>
+                      Log in
+                    </button>
+                    <button
+                      className="pill-outline"
+                      style={{ background: 'var(--holo-gradient)', color: '#06120f', border: 'none' }}
+                      onClick={() => setAuthMode('register')}
+                    >
+                      Register
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
+
+          <button
+            type="button"
+            className="nav-menu-btn"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="Toggle menu"
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+            )}
+          </button>
         </div>
       </header>
 
