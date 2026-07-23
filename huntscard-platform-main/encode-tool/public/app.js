@@ -218,7 +218,15 @@ async function loadPending() {
   const res = await fetch(`${getBackendUrl()}/api/admin/encode/pending`, {
     headers: getAuthHeader(),
   });
-  if (res.status === 401) return checkSession();
+  if (res.status === 401) {
+    // The backend rejected our token (expired/revoked), but the local
+    // gui-server still has it saved -- checkSession() alone would just see
+    // that saved session, report loggedIn again, and call loadPending()
+    // again, looping forever. Clear it server-side first so checkSession()
+    // correctly reports loggedIn: false and shows the login screen.
+    await fetch('/api/logout', { method: 'POST' });
+    return checkSession();
+  }
   const clients = await res.json();
 
   if (clients.length === 0) {

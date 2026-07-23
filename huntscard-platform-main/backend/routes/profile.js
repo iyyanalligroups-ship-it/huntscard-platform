@@ -93,11 +93,21 @@ const arVideoUpload = multer({
   fileFilter: videoFileFilter,
 });
 
+// Multer's own message for an oversize file is just "File too large" --
+// no mention of what the actual limit was, which isn't actionable for the
+// person hitting it. Swap in the real limit for that one case; every other
+// multer/fileFilter error (bad mimetype, etc.) already carries a clear
+// message of its own, so those pass through unchanged.
+function uploadErrorMessage(err, maxSizeLabel) {
+  if (err.code === 'LIMIT_FILE_SIZE') return `File is too large -- max ${maxSizeLabel}.`;
+  return err.message;
+}
+
 // POST /api/profile/photo -- multipart/form-data, field name "photo"
 router.post('/photo', requireAuth, (req, res) => {
   upload.single('photo')(req, res, async (err) => {
     if (err) {
-      return res.status(400).json({ error: err.message });
+      return res.status(400).json({ error: uploadErrorMessage(err, '5MB') });
     }
     if (!req.file) {
       return res.status(400).json({ error: 'No photo file received' });
@@ -129,7 +139,7 @@ router.post('/photo', requireAuth, (req, res) => {
 router.post('/banner', requireAuth, (req, res) => {
   bannerUpload.single('banner')(req, res, async (err) => {
     if (err) {
-      return res.status(400).json({ error: err.message });
+      return res.status(400).json({ error: uploadErrorMessage(err, '5MB') });
     }
     if (!req.file) {
       return res.status(400).json({ error: 'No banner file received' });
@@ -172,7 +182,7 @@ router.delete('/banner', requireAuth, async (req, res) => {
 router.post('/ar-video', requireAuth, (req, res) => {
   arVideoUpload.single('video')(req, res, async (err) => {
     if (err) {
-      return res.status(400).json({ error: err.message });
+      return res.status(400).json({ error: uploadErrorMessage(err, '80MB') });
     }
     if (!req.file) {
       return res.status(400).json({ error: 'No video file received' });

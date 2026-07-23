@@ -117,4 +117,53 @@ export const api = {
 
   getMyArLayout: () => request('/api/profile/ar-layout'),
   saveMyArLayout: (updates) => request('/api/profile/ar-layout', { method: 'PUT', body: updates }),
+
+  // Phone-contacts backup (import from this phone, export to restore on a
+  // new one). See pages/Contacts.jsx.
+  listContacts: () => request('/api/profile/contacts'),
+  importContacts: (contacts) => request('/api/profile/contacts/import', { method: 'POST', body: { contacts } }),
+  createContact: (payload) => request('/api/profile/contacts', { method: 'POST', body: payload }),
+  updateContact: (id, payload) => request(`/api/profile/contacts/${id}`, { method: 'PUT', body: payload }),
+  deleteContact: (id) => request(`/api/profile/contacts/${id}`, { method: 'DELETE' }),
+  removeContactPhoto: (id) => request(`/api/profile/contacts/${id}/photo`, { method: 'DELETE' }),
+
+  // Multipart -- can't go through the generic request() helper, same
+  // reason uploadPhoto/uploadBanner/uploadArVideo above don't.
+  uploadContactPhoto: async (id, file) => {
+    const formData = new FormData();
+    formData.append('photo', file);
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/profile/contacts/${id}/photo`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+    return data;
+  },
+
+  // Export returns a file, not JSON -- can't go through the generic
+  // request() helper (same reason the upload* functions above don't).
+  // Fetches the .vcf as a blob and hands it to the browser as a download,
+  // which on a phone is what triggers the OS's "Add to Contacts" screen.
+  exportContacts: async () => {
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/profile/contacts/export`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Export failed (${res.status})`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'huntstag-contacts.vcf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
 };

@@ -15,6 +15,7 @@ import Profile from './pages/Profile.jsx';
 import Track from './pages/Track.jsx';
 import Settings from './pages/Settings.jsx';
 import ArLayout from './pages/ArLayout.jsx';
+import Contacts from './pages/Contacts.jsx';
 
 function RequireAuth({ children }) {
   if (!isLoggedIn()) return <Navigate to="/login" replace />;
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="upgrade" element={<Shop />} />
         <Route path="track" element={<Track />} />
         <Route path="account-settings" element={<Settings />} />
+        <Route path="contacts" element={<Contacts />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
