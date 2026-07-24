@@ -21,6 +21,7 @@ export default function PublicProfile() {
   const [toast, setToast] = useState('');
   const toastTimeoutRef = useRef(null);
   const touchStartX = useRef(null);
+  const circuitRef = useRef(null);
   const isArMode = searchParams.get('ar') === '1';
 
   useEffect(() => {
@@ -33,6 +34,78 @@ export default function PublicProfile() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [clientId, isArMode]);
+
+  // Animated circuit-trace background -- same visual language as the
+  // Home hero's (see Home.jsx), sized to the viewport via position:fixed
+  // instead of a measured element, since this page's content height
+  // varies with how many tabs/rows a profile has.
+  useEffect(() => {
+    if (isArMode) return;
+    const svg = circuitRef.current;
+    if (!svg) return;
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function build() {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      svg.innerHTML = '';
+
+      const colors = ['var(--holo-cyan)', 'var(--holo-violet)', 'var(--holo-magenta)'];
+      const traceCount = 7;
+
+      for (let i = 0; i < traceCount; i++) {
+        const startX = Math.random() * w;
+        const startY = Math.random() * h;
+        const midX = startX + (Math.random() * 220 - 110);
+        const midY = startY + (Math.random() * 160 - 80);
+        const endX = midX + (Math.random() * 220 - 110);
+        const endY = midY + (Math.random() * 160 - 80);
+        const color = colors[i % colors.length];
+        const d = `M ${startX} ${startY} L ${midX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
+
+        const path = document.createElementNS(svgNS, 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', color);
+        path.setAttribute('stroke-width', '1');
+        path.setAttribute('stroke-opacity', '0.16');
+        svg.appendChild(path);
+
+        [[startX, startY], [endX, midY], [endX, endY]].forEach(([nx, ny], idx) => {
+          const node = document.createElementNS(svgNS, 'circle');
+          node.setAttribute('cx', nx);
+          node.setAttribute('cy', ny);
+          node.setAttribute('r', idx === 1 ? 2.6 : 1.7);
+          node.setAttribute('fill', color);
+          node.setAttribute('class', 'circuit-trace-node');
+          node.style.animationDelay = Math.random() * 3 + 's';
+          svg.appendChild(node);
+        });
+
+        if (!reduceMotion) {
+          const pulse = document.createElementNS(svgNS, 'circle');
+          pulse.setAttribute('r', '2.2');
+          pulse.setAttribute('fill', color);
+          pulse.style.filter = 'drop-shadow(0 0 4px currentColor)';
+          pulse.style.color = color;
+          svg.appendChild(pulse);
+
+          const animMotion = document.createElementNS(svgNS, 'animateMotion');
+          animMotion.setAttribute('dur', `${4 + Math.random() * 3}s`);
+          animMotion.setAttribute('repeatCount', 'indefinite');
+          animMotion.setAttribute('path', d);
+          animMotion.setAttribute('begin', Math.random() * 4 + 's');
+          pulse.appendChild(animMotion);
+        }
+      }
+    }
+
+    build();
+    window.addEventListener('resize', build);
+    return () => window.removeEventListener('resize', build);
+  }, [isArMode]);
 
   if (isArMode) {
     return <ArView clientId={clientId} />;
@@ -147,6 +220,8 @@ export default function PublicProfile() {
 
   return (
     <div className="pv-page">
+      <div className="pv-circuit-grid" aria-hidden="true" />
+      <svg className="pv-circuit-lines" ref={circuitRef} aria-hidden="true" preserveAspectRatio="none" />
       <div className="pv-shell">
         {profile.bannerUrl && (
           <div className="pv-cover">
