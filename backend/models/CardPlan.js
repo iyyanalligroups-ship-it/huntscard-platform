@@ -26,6 +26,10 @@ const CardPlanSchema = new mongoose.Schema(
     // page (in addition to the regular profile QR every plan gets).
     // AR is a premium-tier feature, not something every card includes.
     arEnabled: { type: Boolean, default: false },
+    // Whether clients on this plan can use Zing (share-sheet contact
+    // sharing from the dashboard). Premium-tier feature, same gating
+    // pattern as arEnabled above.
+    zingEnabled: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

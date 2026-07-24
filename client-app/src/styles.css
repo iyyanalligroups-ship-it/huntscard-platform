@@ -1422,11 +1422,16 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   inset: 0;
   background: rgba(6, 7, 12, 0.72);
   backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
   z-index: 100;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+  overscroll-behavior: contain;
 }
 .auth-modal-card {
   background: var(--space);
@@ -1439,6 +1444,10 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   overflow-y: auto;
   position: relative;
   box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+  overscroll-behavior: contain;
 }
 .auth-modal-close {
   position: absolute;
@@ -1724,6 +1733,68 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   transition: filter 0.15s;
 }
 .dash-hero-btn:hover { filter: brightness(1.12); }
+
+.zing-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 28px;
+  border-radius: var(--radius);
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  flex-wrap: wrap;
+}
+.zing-title { font-size: 17px; margin: 0 0 4px; }
+.zing-sub { color: var(--text-dim); font-size: 13px; margin: 0; }
+
+.zing-action {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Explicit width/height -- the global `button { width: 100% }` rule
+   would otherwise stretch this to fill the row instead of staying round. */
+.zing-btn {
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--holo-gradient);
+  color: #06120f;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(124, 92, 240, 0.25);
+  transition: filter 0.15s, transform 0.15s, background 0.25s, box-shadow 0.25s;
+}
+.zing-btn:hover { filter: brightness(1.08); }
+.zing-btn:active { transform: scale(0.93); }
+
+.zing-btn.zing-busy { opacity: 0.7; cursor: wait; }
+.zing-btn.zing-success {
+  background: #22c58b;
+  box-shadow: 0 6px 20px rgba(34, 197, 139, 0.4);
+}
+.zing-btn.zing-fail {
+  background: #e5484d;
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(229, 72, 77, 0.35);
+}
+
+.zing-caption { font-size: 12px; font-weight: 600; color: var(--text-dim); white-space: nowrap; }
+
+@media (max-width: 560px) {
+  .zing-section { justify-content: center; text-align: center; }
+}
 
 .tap-card.mini {
   width: 200px;

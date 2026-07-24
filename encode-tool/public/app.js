@@ -33,15 +33,15 @@ fetch('/api/settings')
   .then((r) => r.json())
   .then((cfg) => {
     window.PUBLIC_BASE_URL = cfg.publicBaseUrl;
-    window.BACKEND_URL = cfg.backendUrl || 'https://api.huntstag.com';
+    window.BACKEND_URL = cfg.backendUrl || 'http://localhost:4000';
   })
   .catch(() => {
     window.PUBLIC_BASE_URL = '';
-    window.BACKEND_URL = 'https://api.huntstag.com';
+    window.BACKEND_URL = 'http://localhost:4000';
   });
 
 function getBackendUrl() {
-  return (window.BACKEND_URL || 'https://api.huntstag.com').replace(/\/+$/, '');
+  return (window.BACKEND_URL || 'http://localhost:4000').replace(/\/+$/, '');
 }
 
 function getAuthHeader() {

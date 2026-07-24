@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api.js';
+import { api, API_URL } from '../api.js';
 
 /* Profile fields that count toward completeness -- grouped the same way
    Profile Settings groups them, so the donut legend maps 1:1 to real
@@ -25,6 +25,10 @@ export default function DashboardHome() {
   const [profile, setProfile] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState('');
+  const toastTimeoutRef = useRef(null);
+  const [zingState, setZingState] = useState('idle'); // idle | busy | success | fail
+  const zingTimeoutRef = useRef(null);
 
   useEffect(() => {
     api
@@ -33,6 +37,67 @@ export default function DashboardHome() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
+
+  function showToast(msg, duration = 2600) {
+    setToast(msg);
+    clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => setToast(''), duration);
+  }
+
+  // Zing: share this client's own contact card without needing their
+  // physical NFC card present. A website can't make the phone act as an
+  // NFC tag for another phone to tap (that needs native Host Card
+  // Emulation, Android-only), so this uses the OS share sheet instead --
+  // the nearest no-card, one-tap equivalent that works on any phone.
+  // Prefers sharing the actual vCard file so the recipient's share sheet
+  // can offer "Add to Contacts" directly; falls back to sharing the
+  // profile link, then to a copied link on desktop browsers.
+  // Flashes the round Zing button green (success) or red (fail) for a
+  // couple seconds so tapping it gives visible confirmation the contact
+  // actually went out, then resets back to its normal state.
+  function markZing(state) {
+    setZingState(state);
+    clearTimeout(zingTimeoutRef.current);
+    zingTimeoutRef.current = setTimeout(() => setZingState('idle'), 2500);
+  }
+
+  async function handleZing() {
+    if (!profile?.clientId || zingState === 'busy') return;
+    setZingState('busy');
+    const shareUrl = `${window.location.origin}/c/${profile.clientId}`;
+    const shareTitle = `${profile.fullName} — HuntsTAG`;
+
+    let file = null;
+    try {
+      const res = await fetch(`${API_URL}/api/public/vcard/${profile.clientId}`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const candidate = new File([blob], `${profile.fullName || 'contact'}.vcf`, { type: 'text/vcard' });
+        if (navigator.canShare?.({ files: [candidate] })) file = candidate;
+      }
+    } catch {
+      /* vCard fetch/packaging failed -- fall back to link share below */
+    }
+
+    try {
+      if (file) {
+        await navigator.share({ files: [file], title: shareTitle });
+      } else if (navigator.share) {
+        await navigator.share({ title: shareTitle, url: shareUrl });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        showToast('Link copied — send it to share your contact');
+      }
+      markZing('success');
+    } catch (err) {
+      if (err?.name === 'AbortError') {
+        setZingState('idle'); // user backed out of the share sheet -- not a failure
+        return;
+      }
+      showToast('Could not share');
+      markZing('fail');
+    }
+  }
 
   if (loading) return <p className="subtitle">Loading…</p>;
   if (error) return <div className="error-banner">{error}</div>;
@@ -118,6 +183,39 @@ export default function DashboardHome() {
         </div>
       </section>
 
+      {/* Zing -- share your contact without your physical card. Opens the
+          phone's native share sheet (AirDrop / Nearby Share / WhatsApp /
+          Bluetooth / etc.) with your vCard, so the other person can save
+          you straight to their contacts without any NFC card or app. */}
+      <section className="zing-section">
+        <div>
+          <h2 className="zing-title">⚡ Zing</h2>
+          <p className="zing-sub">
+            {profile?.zingEnabled
+              ? 'No card on you? Zing your contact straight to their phone.'
+              : `Zing isn't included in your current plan${profile?.cardType ? ` (${profile.cardType})` : ''}.`}
+          </p>
+        </div>
+        {profile?.zingEnabled ? (
+          <div className="zing-action">
+            <button
+              className={`zing-btn zing-${zingState}`}
+              onClick={handleZing}
+              disabled={zingState === 'busy'}
+              aria-label="Zing my contact"
+              title="Zing my contact"
+            >
+              {zingState === 'success' ? '✓' : zingState === 'fail' ? '!' : zingState === 'busy' ? '…' : '⚡'}
+            </button>
+            <span className="zing-caption">
+              {zingState === 'success' ? 'Shared!' : zingState === 'fail' ? 'Try again' : zingState === 'busy' ? 'Sharing…' : 'Zing my contact'}
+            </span>
+          </div>
+        ) : (
+          <Link to="/dashboard/upgrade" className="dash-hero-btn">See plans with Zing</Link>
+        )}
+      </section>
+
       {/* KPI row -- every number here is real (taps, plan, order, completeness) */}
       <section className="kpi-grid">
         {kpis.map((k) => (
@@ -191,6 +289,8 @@ export default function DashboardHome() {
           )}
         </div>
       </section>
+
+      <div className={`pv-toast${toast ? ' show' : ''}`}>{toast}</div>
     </div>
   );
 }

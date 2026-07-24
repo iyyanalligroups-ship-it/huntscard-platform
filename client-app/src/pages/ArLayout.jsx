@@ -49,14 +49,19 @@ export default function ArLayout() {
 
   function positionFromEvent(e) {
     const rect = canvasRef.current.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const x = clampPercent(((clientX - rect.left) / rect.width) * 100);
-    const y = clampPercent(((clientY - rect.top) / rect.height) * 100);
+    const x = clampPercent(((e.clientX - rect.left) / rect.width) * 100);
+    const y = clampPercent(((e.clientY - rect.top) / rect.height) * 100);
     return { x: Math.round(x), y: Math.round(y) };
   }
 
-  function handlePointerDown(key) {
+  // Pointer Events (not separate mouse/touch handlers) -- unifies
+  // mouse/touch/pen, and setPointerCapture keeps move/up events targeted
+  // at this element even once the pointer strays outside its small hit
+  // area mid-drag, which plain onMouseMove/onTouchMove on the container
+  // was prone to losing on fast drags.
+  function handlePointerDown(key, e) {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     setDragging(key);
   }
 
@@ -136,11 +141,6 @@ export default function ArLayout() {
 
       <div
         ref={canvasRef}
-        onMouseMove={handlePointerMove}
-        onMouseUp={handlePointerUp}
-        onMouseLeave={handlePointerUp}
-        onTouchMove={handlePointerMove}
-        onTouchEnd={handlePointerUp}
         style={{
           position: 'relative',
           width: '100%',
@@ -195,29 +195,69 @@ export default function ArLayout() {
 
         {ELEMENTS.map((el) => {
           const pos = layout[el.key] || { x: 50, y: 50 };
+          // The video/photo block is the one element that has a real
+          // asset to show -- swap its text pill for an actual thumbnail
+          // of the client's uploaded photo once one exists, so this looks
+          // like what will actually float in AR instead of a text label.
+          // The other blocks (contact/portfolio/social/huntsworld) have
+          // no image asset of their own, so they stay as labeled pills.
+          const isThumbnail = el.key === 'video' && profile?.photoUrl;
           return (
             <div
               key={el.key}
-              onMouseDown={() => handlePointerDown(el.key)}
-              onTouchStart={() => handlePointerDown(el.key)}
-              style={{
-                position: 'absolute',
-                left: `${pos.x}%`,
-                top: `${pos.y}%`,
-                transform: 'translate(-50%, -50%)',
-                background: el.color,
-                color: '#fff',
-                padding: '8px 12px',
-                borderRadius: 999,
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: dragging === el.key ? 'grabbing' : 'grab',
-                boxShadow: 'var(--shadow-md)',
-                whiteSpace: 'nowrap',
-                zIndex: dragging === el.key ? 10 : 1,
-              }}
+              onPointerDown={(e) => handlePointerDown(el.key, e)}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              title={el.label}
+              style={
+                isThumbnail
+                  ? {
+                      position: 'absolute',
+                      left: `${pos.x}%`,
+                      top: `${pos.y}%`,
+                      transform: 'translate(-50%, -50%)',
+                      width: 56,
+                      height: 56,
+                      borderRadius: '50%',
+                      overflow: 'hidden',
+                      border: `2px solid ${el.color}`,
+                      cursor: dragging === el.key ? 'grabbing' : 'grab',
+                      boxShadow: 'var(--shadow-md)',
+                      touchAction: 'none',
+                      userSelect: 'none',
+                      zIndex: dragging === el.key ? 10 : 1,
+                    }
+                  : {
+                      position: 'absolute',
+                      left: `${pos.x}%`,
+                      top: `${pos.y}%`,
+                      transform: 'translate(-50%, -50%)',
+                      background: el.color,
+                      color: '#fff',
+                      padding: '8px 12px',
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: dragging === el.key ? 'grabbing' : 'grab',
+                      boxShadow: 'var(--shadow-md)',
+                      whiteSpace: 'nowrap',
+                      touchAction: 'none',
+                      userSelect: 'none',
+                      zIndex: dragging === el.key ? 10 : 1,
+                    }
+              }
             >
-              {el.label}
+              {isThumbnail ? (
+                <img
+                  src={profile.photoUrl}
+                  alt={el.label}
+                  draggable={false}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
+                />
+              ) : (
+                el.label
+              )}
             </div>
           );
         })}

@@ -176,7 +176,7 @@ router.post('/plans', requireAdmin, (req, res) => {
     if (err) return res.status(400).json({ error: err.message });
 
     try {
-      const { name, price, priceAmount, description, arEnabled } = req.body;
+      const { name, price, priceAmount, description, arEnabled, zingEnabled } = req.body;
       if (!name) return res.status(400).json({ error: 'name is required' });
 
       let key = slugify(name);
@@ -185,7 +185,7 @@ router.post('/plans', requireAdmin, (req, res) => {
       const existing = await CardPlan.findOne({ key });
       if (existing) key = `${key}-${crypto.randomBytes(2).toString('hex')}`;
 
-      const images = (req.files || []).map((f) => `${process.env.PUBLIC_BASE_URL}/uploads/plans/${f.filename}`);
+      const images = (req.files || []).map((f) => `${process.env.BACKEND_URL}/uploads/plans/${f.filename}`);
 
       const plan = await CardPlan.create({
         name,
@@ -195,6 +195,7 @@ router.post('/plans', requireAdmin, (req, res) => {
         description,
         images,
         arEnabled: arEnabled === 'true' || arEnabled === true,
+        zingEnabled: zingEnabled === 'true' || zingEnabled === true,
       });
       res.status(201).json(plan);
     } catch (err2) {
@@ -210,7 +211,7 @@ router.post('/plans', requireAdmin, (req, res) => {
 // client" dropdown going forward.
 router.patch('/plans/:id', requireAdmin, async (req, res) => {
   try {
-    const { name, price, priceAmount, description, active, arEnabled } = req.body;
+    const { name, price, priceAmount, description, active, arEnabled, zingEnabled } = req.body;
     const updates = {};
     if (name !== undefined) updates.name = name;
     if (price !== undefined) updates.price = price;
@@ -218,6 +219,7 @@ router.patch('/plans/:id', requireAdmin, async (req, res) => {
     if (description !== undefined) updates.description = description;
     if (active !== undefined) updates.active = active;
     if (arEnabled !== undefined) updates.arEnabled = arEnabled === 'true' || arEnabled === true;
+    if (zingEnabled !== undefined) updates.zingEnabled = zingEnabled === 'true' || zingEnabled === true;
 
     const plan = await CardPlan.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
     if (!plan) return res.status(404).json({ error: 'Plan not found' });
@@ -267,7 +269,7 @@ router.post('/plans/:id/images', requireAdmin, (req, res) => {
       const plan = await CardPlan.findById(req.params.id);
       if (!plan) return res.status(404).json({ error: 'Plan not found' });
 
-      const newUrls = req.files.map((f) => `${process.env.PUBLIC_BASE_URL}/uploads/plans/${f.filename}`);
+      const newUrls = req.files.map((f) => `${process.env.BACKEND_URL}/uploads/plans/${f.filename}`);
       const combined = [...plan.images, ...newUrls];
       if (combined.length > 6) {
         return res.status(400).json({ error: `This plan already has ${plan.images.length} image(s) -- max 6 total. Remove some first.` });
@@ -796,7 +798,7 @@ router.post('/catalog/:cardType', requireAdmin, (req, res) => {
       const plan = await CardPlan.findOne({ key: cardType });
       if (!plan) return res.status(404).json({ error: 'No card type matches that key' });
 
-      const videoUrl = `${process.env.PUBLIC_BASE_URL}/uploads/catalog/${req.file.filename}`;
+      const videoUrl = `${process.env.BACKEND_URL}/uploads/catalog/${req.file.filename}`;
       const video = await CatalogVideo.findOneAndUpdate(
         { cardType },
         { $set: { videoUrl, uploadedBy: req.admin?.email || 'unknown' } },

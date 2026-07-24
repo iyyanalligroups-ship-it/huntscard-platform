@@ -128,7 +128,7 @@ router.post('/photo', requireAuth, (req, res) => {
     }
 
     try {
-      const photoUrl = `${process.env.PUBLIC_BASE_URL}/uploads/photos/${req.file.filename}`;
+      const photoUrl = `${process.env.BACKEND_URL}/uploads/photos/${req.file.filename}`;
       const client = await Client.findOneAndUpdate(
         { clientId: req.user.clientId },
         { $set: { photoUrl } },
@@ -160,7 +160,7 @@ router.post('/banner', requireAuth, (req, res) => {
     }
 
     try {
-      const bannerUrl = `${process.env.PUBLIC_BASE_URL}/uploads/banners/${req.file.filename}`;
+      const bannerUrl = `${process.env.BACKEND_URL}/uploads/banners/${req.file.filename}`;
       const client = await Client.findOneAndUpdate(
         { clientId: req.user.clientId },
         { $set: { bannerUrl } },
@@ -203,7 +203,7 @@ router.post('/ar-video', requireAuth, (req, res) => {
     }
 
     try {
-      const arVideoUrl = `${process.env.PUBLIC_BASE_URL}/uploads/ar-videos/${req.file.filename}`;
+      const arVideoUrl = `${process.env.BACKEND_URL}/uploads/ar-videos/${req.file.filename}`;
       const client = await Client.findOneAndUpdate(
         { clientId: req.user.clientId },
         { $set: { arVideoUrl } },
@@ -259,10 +259,11 @@ router.get('/me', requireAuth, async (req, res) => {
 
   // Whether this client's plan includes the AR feature -- the dashboard
   // uses this to gate the AR Layout page to clients who've actually
-  // purchased a plan that includes it.
-  const plan = await CardPlan.findOne({ key: client.cardType }).select('arEnabled');
+  // purchased a plan that includes it. Zing is gated the same way.
+  const plan = await CardPlan.findOne({ key: client.cardType }).select('arEnabled zingEnabled');
   const clientObj = client.toObject();
   clientObj.arEnabled = !!plan?.arEnabled;
+  clientObj.zingEnabled = !!plan?.zingEnabled;
 
   res.json(clientObj);
 });

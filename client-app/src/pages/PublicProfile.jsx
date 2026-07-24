@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { api, API_URL } from '../api.js';
+import ArView from './ArView.jsx';
 
 // The public tap page -- what a stranger sees when they tap the physical
 // card or scan its QR code. No login, no session: anyone who has the
@@ -10,6 +11,7 @@ import { api, API_URL } from '../api.js';
 // was explicitly built to be an accurate live preview of this exact page.
 export default function PublicProfile() {
   const { clientId } = useParams();
+  const [searchParams] = useSearchParams();
   const [profile, setProfile] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -19,14 +21,22 @@ export default function PublicProfile() {
   const [toast, setToast] = useState('');
   const toastTimeoutRef = useRef(null);
   const touchStartX = useRef(null);
+  const isArMode = searchParams.get('ar') === '1';
 
   useEffect(() => {
+    // ArView fetches its own profile/layout data -- skip the plain-profile
+    // fetch entirely in AR mode instead of doing it and throwing it away.
+    if (isArMode) return;
     api
       .getPublicProfile(clientId)
       .then(setProfile)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [clientId]);
+  }, [clientId, isArMode]);
+
+  if (isArMode) {
+    return <ArView clientId={clientId} />;
+  }
 
   function showToast(msg, duration = 1800) {
     setToast(msg);

@@ -57,6 +57,10 @@ export const api = {
   // what a stranger tapping/scanning the physical card sees. See
   // pages/PublicProfile.jsx.
   getPublicProfile: (clientId) => request(`/api/public/profile/${clientId}`, { auth: false }),
+  // The client's saved AR element positions -- unauthenticated, feeds
+  // the live camera AR view (pages/ArView.jsx) the same way
+  // getMyArLayout feeds the dashboard editor.
+  getPublicArLayout: (clientId) => request(`/api/public/ar-layout/${clientId}`, { auth: false }),
   getCatalog: () => request('/api/public/catalog', { auth: false }),
   submitRequest: (payload) => request('/api/profile/requests', { method: 'POST', body: payload }),
   listMyRequests: () => request('/api/profile/requests'),
