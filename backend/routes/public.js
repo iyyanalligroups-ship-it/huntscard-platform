@@ -8,6 +8,8 @@ const CardPlan = require('../models/CardPlan');
 const CardRequest = require('../models/CardRequest');
 const ContactMessage = require('../models/ContactMessage');
 const ArLayout = require('../models/ArLayout');
+const ArIcon = require('../models/ArIcon');
+const AttributeDefinition = require('../models/AttributeDefinition');
 const CatalogVideo = require('../models/CatalogVideo');
 const { getChargeAmount } = require('../utils/pricing');
 
@@ -207,7 +209,9 @@ router.get('/profile/:clientId', async (req, res) => {
     { clientId: req.params.clientId },
     { $inc: { tapCount: 1 } }, // simple tap analytics, per the report's spec
     { new: true }
-  ).select('fullName jobTitle bio photoUrl bannerUrl arVideoUrl phone whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl cardType clientId');
+  ).select(
+    'fullName jobTitle bio photoUrl bannerUrl arVideoUrl arModelUrl phone whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType clientId'
+  );
 
   if (!client) {
     return res.status(404).json({ error: 'Profile not found' });
@@ -219,6 +223,11 @@ router.get('/profile/:clientId', async (req, res) => {
   const plan = await CardPlan.findOne({ key: client.cardType }).select('arEnabled');
   const clientObj = client.toObject();
   clientObj.arEnabled = !!plan?.arEnabled;
+  // client.toObject() does NOT flatten Map-type fields the way a Mongoose
+  // document's own toJSON() would -- left as-is, customAttributes would
+  // silently serialize as {} below, since a plain Map instance nested in a
+  // plain object has no JSON.stringify-visible keys.
+  clientObj.customAttributes = Object.fromEntries(client.customAttributes || []);
 
   res.json(clientObj);
 });
@@ -285,7 +294,53 @@ router.get('/ar-layout/:clientId', async (req, res) => {
     if (!layout) {
       layout = (await ArLayout.findOne({ key: 'global' })) || new ArLayout({ key: 'global' }); // defaults only if truly nothing saved anywhere
     }
+    // HuntsAR World re-fetches this on every scan -- a stale cached copy
+    // after the client just edited their layout would look exactly like a
+    // "my save didn't apply" bug, so make sure it never gets one.
+    res.set('Cache-Control', 'no-store');
     res.json(layout);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Every upload writes into sectionIcons now (works for any key, including
+// custom sections added via the Attributes page); the five named fields
+// are read only as a fallback for icons uploaded before sectionIcons
+// existed, so nothing already live gets lost. Mirrors admin.js's own copy.
+function mergeArIcons(doc) {
+  if (!doc) return {};
+  return {
+    video: doc.video,
+    contact: doc.contact,
+    portfolio: doc.portfolio,
+    social: doc.social,
+    huntsworld: doc.huntsworld,
+    ...Object.fromEntries(doc.sectionIcons || []),
+  };
+}
+
+// GET /api/public/ar-icons -- the admin-managed logo set, shared across
+// every client's card (see backend/models/ArIcon.js). Read-only, no auth.
+router.get('/ar-icons', async (req, res) => {
+  try {
+    const icons = await ArIcon.findOne({ key: 'global' });
+    res.set('Cache-Control', 'no-store');
+    res.json(mergeArIcons(icons));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/public/attributes -- admin-defined extra profile fields (see
+// AttributeDefinition), active ones only. Used by both Profile Settings
+// (to know which extra inputs to render) and the public tap page (to know
+// which extra rows to render, for whichever ones the client filled in).
+router.get('/attributes', async (req, res) => {
+  try {
+    const attributes = await AttributeDefinition.find({ active: true }).sort({ section: 1, order: 1 });
+    res.set('Cache-Control', 'no-store');
+    res.json(attributes);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

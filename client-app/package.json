@@ -9,10 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google/model-viewer": "^4.3.1",
+    "js-aruco2": "^2.0.0",
     "jsqr": "^1.4.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.0",
+    "three": "^0.185.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

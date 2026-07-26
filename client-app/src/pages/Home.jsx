@@ -61,7 +61,6 @@ export default function Home() {
   const glitchRef = useRef(null);
   const spotlightRef = useRef(null);
   const orbitContainerRef = useRef(null);
-  const heroCircuitRef = useRef(null);
 
   useEffect(() => {
     if (!isLoggedIn()) return;
@@ -204,82 +203,6 @@ export default function Home() {
     };
   }, []);
 
-  // Circuit-trace network scattered across the hero background -- thin
-  // right-angle traces with a light pulse traveling each one and a
-  // softly pulsing node at every bend, same visual language as the
-  // top-nav's circuit traces (PublicLayout.jsx) filling the wider space
-  // instead of radiating from one logo. Rebuilt on resize since it's
-  // sized to the hero's own box.
-  useEffect(() => {
-    const svg = heroCircuitRef.current;
-    const hero = heroRef.current;
-    if (!svg || !hero) return;
-    const svgNS = 'http://www.w3.org/2000/svg';
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    function build() {
-      const rect = hero.getBoundingClientRect();
-      const w = rect.width;
-      const h = rect.height;
-      if (w < 1 || h < 1) return;
-      svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-      svg.innerHTML = '';
-
-      const colors = ['var(--holo-cyan)', 'var(--holo-violet)', 'var(--holo-magenta)'];
-      const traceCount = 9;
-
-      for (let i = 0; i < traceCount; i++) {
-        const startX = Math.random() * w;
-        const startY = Math.random() * h;
-        const midX = startX + (Math.random() * 260 - 130);
-        const midY = startY + (Math.random() * 180 - 90);
-        const endX = midX + (Math.random() * 260 - 130);
-        const endY = midY + (Math.random() * 180 - 90);
-        const color = colors[i % colors.length];
-        const d = `M ${startX} ${startY} L ${midX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
-
-        const path = document.createElementNS(svgNS, 'path');
-        path.setAttribute('d', d);
-        path.setAttribute('fill', 'none');
-        path.setAttribute('stroke', color);
-        path.setAttribute('stroke-width', '1');
-        path.setAttribute('stroke-opacity', '0.18');
-        svg.appendChild(path);
-
-        [[startX, startY], [endX, midY], [endX, endY]].forEach(([nx, ny], idx) => {
-          const node = document.createElementNS(svgNS, 'circle');
-          node.setAttribute('cx', nx);
-          node.setAttribute('cy', ny);
-          node.setAttribute('r', idx === 1 ? 2.6 : 1.7);
-          node.setAttribute('fill', color);
-          node.setAttribute('class', 'circuit-trace-node');
-          node.style.animationDelay = Math.random() * 3 + 's';
-          svg.appendChild(node);
-        });
-
-        if (!reduceMotion) {
-          const pulse = document.createElementNS(svgNS, 'circle');
-          pulse.setAttribute('r', '2.2');
-          pulse.setAttribute('fill', color);
-          pulse.style.filter = 'drop-shadow(0 0 4px currentColor)';
-          pulse.style.color = color;
-          svg.appendChild(pulse);
-
-          const animMotion = document.createElementNS(svgNS, 'animateMotion');
-          animMotion.setAttribute('dur', `${4 + Math.random() * 3}s`);
-          animMotion.setAttribute('repeatCount', 'indefinite');
-          animMotion.setAttribute('path', d);
-          animMotion.setAttribute('begin', Math.random() * 4 + 's');
-          pulse.appendChild(animMotion);
-        }
-      }
-    }
-
-    build();
-    window.addEventListener('resize', build);
-    return () => window.removeEventListener('resize', build);
-  }, []);
-
   useEffect(() => {
     let timeoutId;
     function pulse() {
@@ -295,7 +218,6 @@ export default function Home() {
     <div>
       <div className="hero-section hero-section-split" ref={heroRef}>
         <div className="circuit-grid" aria-hidden="true" />
-        <svg className="hero-circuit-lines" ref={heroCircuitRef} aria-hidden="true" preserveAspectRatio="none" />
         <div className="hero-spotlight" ref={spotlightRef} aria-hidden="true" />
         <div className="hero-scanline" aria-hidden="true" />
 

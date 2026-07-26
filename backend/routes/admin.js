@@ -10,6 +10,8 @@ const Client = require('../models/Client');
 const Admin = require('../models/Admin');
 const CardPlan = require('../models/CardPlan');
 const ArLayout = require('../models/ArLayout');
+const ArIcon = require('../models/ArIcon');
+const AttributeDefinition = require('../models/AttributeDefinition');
 const CardRequest = require('../models/CardRequest');
 const ContactMessage = require('../models/ContactMessage');
 const CatalogVideo = require('../models/CatalogVideo');
@@ -61,6 +63,57 @@ const uploadCatalogVideo = multer({
   fileFilter: (req, file, cb) => {
     if (!ALLOWED_CATALOG_VIDEO_MIME_TYPES.includes(file.mimetype)) {
       return cb(new Error('Only MP4 or MOV videos are allowed'));
+    }
+    cb(null, true);
+  },
+});
+
+// ---------------------------------------------------------------------
+// AR Logo -- a small icon per attribute (Contact Info, Portfolio, Social
+// Icons, Huntsworld Link, AR Video/Photo), shown instead of the plain
+// colored text pill in HuntsAR World once uploaded. Same singleton-doc
+// pattern as the AR Layout default template above.
+// ---------------------------------------------------------------------
+// Not a fixed list anymore -- the four built-ins are always valid, and any
+// section an admin has created via the Attributes page becomes valid too
+// the moment an attribute exists in it (same discovery the Attributes page
+// itself uses).
+async function getValidArIconKeys() {
+  const customSections = await AttributeDefinition.distinct('section');
+  return new Set(['video', 'contact', 'portfolio', 'social', 'huntsworld', ...customSections]);
+}
+
+// Every upload writes into sectionIcons now (works for any key); the five
+// named fields below are read only as a fallback for icons uploaded before
+// sectionIcons existed, so nothing already live gets lost.
+function mergeArIcons(doc) {
+  if (!doc) return {};
+  return {
+    video: doc.video,
+    contact: doc.contact,
+    portfolio: doc.portfolio,
+    social: doc.social,
+    huntsworld: doc.huntsworld,
+    ...Object.fromEntries(doc.sectionIcons || []),
+    updatedBy: doc.updatedBy,
+  };
+}
+
+const AR_ICONS_DIR = path.join(__dirname, '..', 'uploads', 'ar-icons');
+fs.mkdirSync(AR_ICONS_DIR, { recursive: true });
+const arIconStorage = multer.diskStorage({
+  destination: AR_ICONS_DIR,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.png';
+    cb(null, `${req.params.key}-${crypto.randomBytes(8).toString('hex')}${ext}`);
+  },
+});
+const uploadArIcon = multer({
+  storage: arIconStorage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB -- these are small badge/icon images, not photos
+  fileFilter: (req, file, cb) => {
+    if (!THEME_MIME_TYPES.includes(file.mimetype)) {
+      return cb(new Error('Only JPEG, PNG, or WEBP images are allowed'));
     }
     cb(null, true);
   },
@@ -185,7 +238,7 @@ router.post('/plans', requireAdmin, (req, res) => {
       const existing = await CardPlan.findOne({ key });
       if (existing) key = `${key}-${crypto.randomBytes(2).toString('hex')}`;
 
-      const images = (req.files || []).map((f) => `${process.env.BACKEND_URL}/uploads/plans/${f.filename}`);
+      const images = (req.files || []).map((f) => `${process.env.PUBLIC_BASE_URL}/uploads/plans/${f.filename}`);
 
       const plan = await CardPlan.create({
         name,
@@ -269,7 +322,7 @@ router.post('/plans/:id/images', requireAdmin, (req, res) => {
       const plan = await CardPlan.findById(req.params.id);
       if (!plan) return res.status(404).json({ error: 'Plan not found' });
 
-      const newUrls = req.files.map((f) => `${process.env.BACKEND_URL}/uploads/plans/${f.filename}`);
+      const newUrls = req.files.map((f) => `${process.env.PUBLIC_BASE_URL}/uploads/plans/${f.filename}`);
       const combined = [...plan.images, ...newUrls];
       if (combined.length > 6) {
         return res.status(400).json({ error: `This plan already has ${plan.images.length} image(s) -- max 6 total. Remove some first.` });
@@ -742,13 +795,39 @@ router.get('/ar-layout', requireAdmin, async (req, res) => {
 // actually moved.
 router.put('/ar-layout', requireAdmin, async (req, res) => {
   try {
-    const { video, contact, portfolio, social, huntsworld } = req.body || {};
+    const {
+      qr,
+      video,
+      contact,
+      portfolio,
+      social,
+      huntsworld,
+      model,
+      modelRotationX,
+      modelRotationY,
+      modelRotationZ,
+      modelScale,
+      videoRotationX,
+      videoRotationY,
+      videoRotationZ,
+      videoScale,
+    } = req.body || {};
     const updates = { updatedBy: req.admin?.email || 'unknown' };
+    if (qr) updates.qr = qr;
     if (video) updates.video = video;
     if (contact) updates.contact = contact;
     if (portfolio) updates.portfolio = portfolio;
     if (social) updates.social = social;
     if (huntsworld) updates.huntsworld = huntsworld;
+    if (model) updates.model = model;
+    if (modelRotationX !== undefined) updates.modelRotationX = modelRotationX;
+    if (modelRotationY !== undefined) updates.modelRotationY = modelRotationY;
+    if (modelRotationZ !== undefined) updates.modelRotationZ = modelRotationZ;
+    if (modelScale !== undefined) updates.modelScale = modelScale;
+    if (videoRotationX !== undefined) updates.videoRotationX = videoRotationX;
+    if (videoRotationY !== undefined) updates.videoRotationY = videoRotationY;
+    if (videoRotationZ !== undefined) updates.videoRotationZ = videoRotationZ;
+    if (videoScale !== undefined) updates.videoScale = videoScale;
 
     const layout = await ArLayout.findOneAndUpdate(
       { key: 'global' },
@@ -756,6 +835,191 @@ router.put('/ar-layout', requireAdmin, async (req, res) => {
       { new: true, upsert: true }
     );
     res.json(layout);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/ar-icons -- current logo per attribute, if any.
+router.get('/ar-icons', requireAdmin, async (req, res) => {
+  try {
+    let icons = await ArIcon.findOne({ key: 'global' });
+    if (!icons) icons = await ArIcon.create({ key: 'global' });
+    res.json(mergeArIcons(icons));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/ar-icons/:key -- upload/replace the logo for one
+// attribute. Removes the previous file for that key first, if any, so
+// re-uploads don't pile up orphaned images on disk.
+router.post('/ar-icons/:key', requireAdmin, uploadArIcon.single('icon'), async (req, res) => {
+  try {
+    const { key } = req.params;
+    const validKeys = await getValidArIconKeys();
+    if (!validKeys.has(key)) {
+      return res.status(400).json({ error: `Unknown attribute "${key}"` });
+    }
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const icons = (await ArIcon.findOne({ key: 'global' })) || new ArIcon({ key: 'global' });
+    const previousUrl = icons.sectionIcons.get(key) || icons[key];
+    icons.sectionIcons.set(key, `${process.env.PUBLIC_BASE_URL}/uploads/ar-icons/${req.file.filename}`);
+    icons.updatedBy = req.admin?.email || 'unknown';
+    await icons.save();
+
+    if (previousUrl) {
+      const previousPath = path.join(AR_ICONS_DIR, path.basename(previousUrl));
+      fs.unlink(previousPath, () => {}); // best-effort -- a leftover orphaned file isn't worth failing the request over
+    }
+
+    res.json(mergeArIcons(icons));
+  } catch (err) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 2MB.' : err.message;
+    res.status(400).json({ error: message });
+  }
+});
+
+// DELETE /api/admin/ar-icons/:key -- revert that attribute back to its
+// plain colored text pill.
+router.delete('/ar-icons/:key', requireAdmin, async (req, res) => {
+  try {
+    const { key } = req.params;
+    const validKeys = await getValidArIconKeys();
+    if (!validKeys.has(key)) {
+      return res.status(400).json({ error: `Unknown attribute "${key}"` });
+    }
+    const icons = await ArIcon.findOne({ key: 'global' });
+    const previousUrl = icons?.sectionIcons?.get(key) || icons?.[key];
+    if (previousUrl) {
+      const previousPath = path.join(AR_ICONS_DIR, path.basename(previousUrl));
+      fs.unlink(previousPath, () => {});
+      icons.sectionIcons.delete(key);
+      // Also clear the legacy named field, if this key is one of the
+      // original five and still had a value stored there.
+      if (['video', 'contact', 'portfolio', 'social', 'huntsworld'].includes(key)) icons[key] = undefined;
+      icons.updatedBy = req.admin?.email || 'unknown';
+      await icons.save();
+    }
+    res.json(mergeArIcons(icons));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------
+// Attributes -- admin-defined extra profile fields (e.g. "Telegram" under
+// Contact). Definitions only; each client's actual value lives in their
+// own Client.customAttributes map (see profile.js's PUT /me route).
+// ---------------------------------------------------------------------
+function slugifyAttributeKey(label) {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+const RESERVED_SECTIONS = ['contact', 'portfolio', 'social', 'huntsworld'];
+
+// Resolves whatever the client sent for `section` into a real section slug
+// plus (only when this is the first attribute to use a brand new custom
+// section) a human label to remember for it. The admin UI sends either one
+// of the four built-in keys as-is, an EXISTING custom section's slug
+// (picked from a dropdown, already known), or free-typed text for a new
+// one -- this one function handles all three without the caller needing
+// to know which case it is.
+async function resolveSection(rawSection) {
+  const trimmed = String(rawSection || '').trim();
+  if (RESERVED_SECTIONS.includes(trimmed)) return { section: trimmed, sectionLabel: undefined };
+
+  const slug = slugifyAttributeKey(trimmed);
+  if (!slug) return null;
+  const existing = await AttributeDefinition.exists({ section: slug });
+  // First time this slug's been used -- remember the label the admin
+  // actually typed so the frontend has something nicer than the slug to
+  // show as the tab name. Already-existing sections keep whatever label
+  // their first attribute set; no need to touch it again here.
+  return { section: slug, sectionLabel: existing ? undefined : trimmed };
+}
+
+router.get('/attributes', requireAdmin, async (req, res) => {
+  try {
+    const attributes = await AttributeDefinition.find().sort({ section: 1, order: 1 });
+    res.json(attributes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/attributes', requireAdmin, async (req, res) => {
+  try {
+    const { label, section, fieldType, order } = req.body || {};
+    if (!label || !String(label).trim()) return res.status(400).json({ error: 'Label is required' });
+    const resolved = await resolveSection(section);
+    if (!resolved) return res.status(400).json({ error: 'Section is required' });
+
+    const baseKey = slugifyAttributeKey(label);
+    if (!baseKey) return res.status(400).json({ error: 'Label must contain at least one letter or number' });
+    // Slug collisions (e.g. two labels that both reduce to "phone_2") get a
+    // numeric suffix rather than rejecting the create outright.
+    let key = baseKey;
+    let suffix = 2;
+    while (await AttributeDefinition.exists({ key })) {
+      key = `${baseKey}_${suffix++}`;
+    }
+
+    const attribute = await AttributeDefinition.create({
+      key,
+      label: String(label).trim(),
+      section: resolved.section,
+      sectionLabel: resolved.sectionLabel,
+      fieldType: ['text', 'phone', 'url', 'email'].includes(fieldType) ? fieldType : 'text',
+      order: Number.isFinite(order) ? order : 0,
+    });
+    res.status(201).json(attribute);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/attributes/:id', requireAdmin, async (req, res) => {
+  try {
+    const { label, section, fieldType, order, active } = req.body || {};
+    const updates = {};
+    if (label !== undefined) updates.label = String(label).trim();
+    if (section !== undefined) {
+      const resolved = await resolveSection(section);
+      if (!resolved) return res.status(400).json({ error: 'Section is required' });
+      updates.section = resolved.section;
+      if (resolved.sectionLabel !== undefined) updates.sectionLabel = resolved.sectionLabel;
+    }
+    if (fieldType !== undefined) {
+      if (!['text', 'phone', 'url', 'email'].includes(fieldType)) {
+        return res.status(400).json({ error: 'Invalid field type' });
+      }
+      updates.fieldType = fieldType;
+    }
+    if (order !== undefined) updates.order = order;
+    if (active !== undefined) updates.active = Boolean(active);
+
+    const attribute = await AttributeDefinition.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
+    if (!attribute) return res.status(404).json({ error: 'Attribute not found' });
+    res.json(attribute);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/attributes/:id', requireAdmin, async (req, res) => {
+  try {
+    const attribute = await AttributeDefinition.findByIdAndDelete(req.params.id);
+    if (!attribute) return res.status(404).json({ error: 'Attribute not found' });
+    // Clients' saved values for this key are left in place (harmless,
+    // unused Map entries) -- not worth a bulk update across every client
+    // just to scrub a key nothing reads anymore.
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -798,7 +1062,7 @@ router.post('/catalog/:cardType', requireAdmin, (req, res) => {
       const plan = await CardPlan.findOne({ key: cardType });
       if (!plan) return res.status(404).json({ error: 'No card type matches that key' });
 
-      const videoUrl = `${process.env.BACKEND_URL}/uploads/catalog/${req.file.filename}`;
+      const videoUrl = `${process.env.PUBLIC_BASE_URL}/uploads/catalog/${req.file.filename}`;
       const video = await CatalogVideo.findOneAndUpdate(
         { cardType },
         { $set: { videoUrl, uploadedBy: req.admin?.email || 'unknown' } },

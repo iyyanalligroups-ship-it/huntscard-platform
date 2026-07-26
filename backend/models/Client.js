@@ -47,6 +47,10 @@ const ClientSchema = new mongoose.Schema(
     // chroma-keyed in the app, not pre-processed on upload. Separate
     // from photoUrl/bannerUrl since it's optional and much larger.
     arVideoUrl: { type: String, trim: true },
+    // Real 3D model (.glb) rendered in HuntsAR World instead of the flat
+    // photo/video panel, when set. Same "just a URL" pattern as the
+    // other upload fields.
+    arModelUrl: { type: String, trim: true },
     phone: { type: String, trim: true },
     whatsapp: { type: String, trim: true },
     publicEmail: { type: String, trim: true, lowercase: true },
@@ -54,6 +58,11 @@ const ClientSchema = new mongoose.Schema(
     twitterUrl: { type: String, trim: true },
     portfolioUrl: { type: String, trim: true },
     huntsworldUrl: { type: String, trim: true },
+    // Values for admin-defined custom fields (see AttributeDefinition) --
+    // keyed by AttributeDefinition.key. The fixed fields above stay exactly
+    // as they are; this is purely for whatever fields an admin adds later
+    // without needing a schema change here.
+    customAttributes: { type: Map, of: String, default: {} },
 
     // Set by admin at account-creation time, read-only for the client.
     // References a CardPlan.key (e.g. "basic", "pro", "elite", or any

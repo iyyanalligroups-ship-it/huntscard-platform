@@ -1,35 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, setSession } from '../api.js';
 
 export default function AuthModal({ mode: initialMode, onClose }) {
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
   const navigate = useNavigate();
-
-  // Lock background scroll while the modal is open. `overflow: hidden` on
-  // body alone doesn't stop iOS Safari from panning the visual viewport
-  // behind a `position: fixed` backdrop -- pinning body to the current
-  // scroll offset is what actually stops it there, and that background
-  // pan/rubber-band is what was making the fixed, blurred modal jump/shake.
-  useEffect(() => {
-    const scrollY = window.scrollY;
-    const { position, top, left, right, width, overflow } = document.body.style;
-    document.body.style.position = 'fixed';
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.left = '0';
-    document.body.style.right = '0';
-    document.body.style.width = '100%';
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.position = position;
-      document.body.style.top = top;
-      document.body.style.left = left;
-      document.body.style.right = right;
-      document.body.style.width = width;
-      document.body.style.overflow = overflow;
-      window.scrollTo(0, scrollY);
-    };
-  }, []);
 
   // login fields
   const [loginEmail, setLoginEmail] = useState('');

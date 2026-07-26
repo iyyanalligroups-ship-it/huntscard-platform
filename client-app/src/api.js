@@ -61,6 +61,11 @@ export const api = {
   // the live camera AR view (pages/ArView.jsx) the same way
   // getMyArLayout feeds the dashboard editor.
   getPublicArLayout: (clientId) => request(`/api/public/ar-layout/${clientId}`, { auth: false }),
+  getPublicArIcons: () => request('/api/public/ar-icons', { auth: false }),
+  // Admin-defined extra profile fields (see AttributeDefinition) -- used
+  // by both Profile Settings (to know which extra inputs to render) and
+  // the public profile page (to know which extra rows to render).
+  getAttributeDefinitions: () => request('/api/public/attributes', { auth: false }),
   getCatalog: () => request('/api/public/catalog', { auth: false }),
   submitRequest: (payload) => request('/api/profile/requests', { method: 'POST', body: payload }),
   listMyRequests: () => request('/api/profile/requests'),
@@ -122,6 +127,21 @@ export const api = {
     return data;
   },
   removeArVideo: () => request('/api/profile/ar-video', { method: 'DELETE' }),
+
+  uploadArModel: async (file) => {
+    const formData = new FormData();
+    formData.append('model', file);
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/profile/ar-model`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+    return data;
+  },
+  removeArModel: () => request('/api/profile/ar-model', { method: 'DELETE' }),
 
   getMyArLayout: () => request('/api/profile/ar-layout'),
   saveMyArLayout: (updates) => request('/api/profile/ar-layout', { method: 'PUT', body: updates }),

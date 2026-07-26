@@ -10,6 +10,7 @@ const { requireAuth } = require('../middleware/auth');
 const Client = require('../models/Client');
 const CardRequest = require('../models/CardRequest');
 const CardPlan = require('../models/CardPlan');
+const AttributeDefinition = require('../models/AttributeDefinition');
 const { getChargeAmount } = require('../utils/pricing');
 
 const router = express.Router();
@@ -52,11 +53,13 @@ const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const PHOTOS_DIR = path.join(__dirname, '..', 'uploads', 'photos');
 const BANNERS_DIR = path.join(__dirname, '..', 'uploads', 'banners');
 const AR_VIDEOS_DIR = path.join(__dirname, '..', 'uploads', 'ar-videos');
+const AR_MODELS_DIR = path.join(__dirname, '..', 'uploads', 'ar-models');
 // multer does NOT create destination directories -- make sure both exist
 // so a fresh clone doesn't 500 on first upload.
 fs.mkdirSync(PHOTOS_DIR, { recursive: true });
 fs.mkdirSync(BANNERS_DIR, { recursive: true });
 fs.mkdirSync(AR_VIDEOS_DIR, { recursive: true });
+fs.mkdirSync(AR_MODELS_DIR, { recursive: true });
 
 function makeStorage(dir) {
   return multer.diskStorage({
@@ -107,6 +110,23 @@ const arVideoUpload = multer({
   fileFilter: videoFileFilter,
 });
 
+// Real 3D model for HuntsAR World. Gated on the .glb file EXTENSION, not
+// mimetype -- unlike images/video, browsers and OSes are inconsistent
+// about what (if any) MIME type they report for .glb, so mimetype
+// sniffing here would reject legitimate files as often as it'd catch bad
+// ones.
+const glbFileFilter = (req, file, cb) => {
+  if (path.extname(file.originalname).toLowerCase() !== '.glb') {
+    return cb(new Error('Only .glb 3D model files are allowed'));
+  }
+  cb(null, true);
+};
+const arModelUpload = multer({
+  storage: makeStorage(AR_MODELS_DIR),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB -- GLBs vary a lot with texture complexity
+  fileFilter: glbFileFilter,
+});
+
 // Multer's own message for an oversize file is just "File too large" --
 // no mention of what the actual limit was, which isn't actionable for the
 // person hitting it. Swap in the real limit for that one case; every other
@@ -128,7 +148,7 @@ router.post('/photo', requireAuth, (req, res) => {
     }
 
     try {
-      const photoUrl = `${process.env.BACKEND_URL}/uploads/photos/${req.file.filename}`;
+      const photoUrl = `${process.env.PUBLIC_BASE_URL}/uploads/photos/${req.file.filename}`;
       const client = await Client.findOneAndUpdate(
         { clientId: req.user.clientId },
         { $set: { photoUrl } },
@@ -160,7 +180,7 @@ router.post('/banner', requireAuth, (req, res) => {
     }
 
     try {
-      const bannerUrl = `${process.env.BACKEND_URL}/uploads/banners/${req.file.filename}`;
+      const bannerUrl = `${process.env.PUBLIC_BASE_URL}/uploads/banners/${req.file.filename}`;
       const client = await Client.findOneAndUpdate(
         { clientId: req.user.clientId },
         { $set: { bannerUrl } },
@@ -203,7 +223,7 @@ router.post('/ar-video', requireAuth, (req, res) => {
     }
 
     try {
-      const arVideoUrl = `${process.env.BACKEND_URL}/uploads/ar-videos/${req.file.filename}`;
+      const arVideoUrl = `${process.env.PUBLIC_BASE_URL}/uploads/ar-videos/${req.file.filename}`;
       const client = await Client.findOneAndUpdate(
         { clientId: req.user.clientId },
         { $set: { arVideoUrl } },
@@ -233,6 +253,58 @@ router.delete('/ar-video', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to remove video' });
   }
 });
+
+// POST /api/profile/ar-model -- real .glb 3D model for HuntsAR World.
+// Same upload/store/update pattern as photo/banner/ar-video above.
+// AR-plan-gated like /ar-layout -- no point uploading a model that never
+// gets used by a client whose plan doesn't include AR at all.
+router.post('/ar-model', requireAuth, (req, res) => {
+  arModelUpload.single('model')(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ error: uploadErrorMessage(err, '50MB') });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'No model file received' });
+    }
+
+    try {
+      const client0 = await Client.findOne({ clientId: req.user.clientId }).select('cardType');
+      const plan = await CardPlan.findOne({ key: client0?.cardType }).select('arEnabled');
+      if (!plan?.arEnabled) {
+        return res.status(403).json({ error: 'The 3D model is not included in your current plan.' });
+      }
+
+      const arModelUrl = `${process.env.PUBLIC_BASE_URL}/uploads/ar-models/${req.file.filename}`;
+      const client = await Client.findOneAndUpdate(
+        { clientId: req.user.clientId },
+        { $set: { arModelUrl } },
+        { new: true }
+      ).select('-passwordHash -chipPasswordHash');
+
+      res.json(client);
+    } catch (err2) {
+      console.error('[profile/ar-model POST]', err2);
+      res.status(500).json({ error: 'Failed to save model' });
+    }
+  });
+});
+
+// DELETE /api/profile/ar-model
+router.delete('/ar-model', requireAuth, async (req, res) => {
+  try {
+    const client = await Client.findOneAndUpdate(
+      { clientId: req.user.clientId },
+      { $set: { arModelUrl: null } },
+      { new: true }
+    ).select('-passwordHash -chipPasswordHash');
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    res.json(client);
+  } catch (err) {
+    console.error('[profile/ar-model DELETE]', err);
+    res.status(500).json({ error: 'Failed to remove model' });
+  }
+});
+
 
 // Fields a client is allowed to edit themselves. Deliberately does NOT
 // include clientId, loginEmail, passwordHash, cardType, paid,
@@ -264,6 +336,11 @@ router.get('/me', requireAuth, async (req, res) => {
   const clientObj = client.toObject();
   clientObj.arEnabled = !!plan?.arEnabled;
   clientObj.zingEnabled = !!plan?.zingEnabled;
+  // client.toObject() does NOT flatten Map-type fields the way a Mongoose
+  // document's own toJSON() would -- left as-is, customAttributes would
+  // silently serialize as {} below, since a plain Map instance nested in a
+  // plain object has no JSON.stringify-visible keys.
+  clientObj.customAttributes = Object.fromEntries(client.customAttributes || []);
 
   res.json(clientObj);
 });
@@ -277,6 +354,24 @@ router.put('/me', requireAuth, async (req, res) => {
     const updates = {};
     for (const field of EDITABLE_FIELDS) {
       if (field in req.body) updates[field] = req.body[field];
+    }
+
+    // Admin-defined extra fields (see AttributeDefinition) -- only keys
+    // that are currently a real, active definition get saved; anything
+    // else in the submitted object is silently dropped rather than
+    // trusted, same spirit as EDITABLE_FIELDS above. Merged onto the
+    // EXISTING map (not replaced outright) so a value saved for an
+    // attribute the admin later deactivates isn't wiped out just because
+    // Profile Settings -- which only ever shows active attributes -- can't
+    // round-trip a key it was never shown in the first place.
+    if (req.body.customAttributes && typeof req.body.customAttributes === 'object') {
+      const activeKeys = new Set((await AttributeDefinition.find({ active: true }).select('key')).map((a) => a.key));
+      const current = await Client.findOne({ clientId: req.user.clientId }).select('customAttributes');
+      const merged = Object.fromEntries(current?.customAttributes || []);
+      for (const [key, value] of Object.entries(req.body.customAttributes)) {
+        if (activeKeys.has(key)) merged[key] = value;
+      }
+      updates.customAttributes = merged;
     }
 
     const client = await Client.findOneAndUpdate(
@@ -612,11 +707,21 @@ router.get('/ar-layout', requireAuth, async (req, res) => {
       const fallback = (await ArLayout.findOne({ key: 'global' })) || new ArLayout({ key: 'global' });
       layout = new ArLayout({
         clientId,
+        qr: fallback.qr,
         video: fallback.video,
         contact: fallback.contact,
         portfolio: fallback.portfolio,
         social: fallback.social,
         huntsworld: fallback.huntsworld,
+        model: fallback.model,
+        modelRotationX: fallback.modelRotationX,
+        modelRotationY: fallback.modelRotationY,
+        modelRotationZ: fallback.modelRotationZ,
+        modelScale: fallback.modelScale,
+        videoRotationX: fallback.videoRotationX,
+        videoRotationY: fallback.videoRotationY,
+        videoRotationZ: fallback.videoRotationZ,
+        videoScale: fallback.videoScale,
       });
     }
     res.json(layout);
@@ -635,13 +740,41 @@ router.put('/ar-layout', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'AR Layout is not included in your current plan.' });
     }
 
-    const { video, contact, portfolio, social, huntsworld } = req.body || {};
+    const {
+      qr,
+      video,
+      contact,
+      portfolio,
+      social,
+      huntsworld,
+      model,
+      modelRotationX,
+      modelRotationY,
+      modelRotationZ,
+      modelScale,
+      videoRotationX,
+      videoRotationY,
+      videoRotationZ,
+      videoScale,
+    } = req.body || {};
     const updates = { clientId, updatedBy: req.user.loginEmail || clientId };
+    if (qr) updates.qr = qr;
     if (video) updates.video = video;
     if (contact) updates.contact = contact;
     if (portfolio) updates.portfolio = portfolio;
     if (social) updates.social = social;
     if (huntsworld) updates.huntsworld = huntsworld;
+    if (model) updates.model = model;
+    // Rotation can legitimately BE 0 (reset to default) -- unlike the
+    // truthy checks above, that has to still count as "provided".
+    if (modelRotationX !== undefined) updates.modelRotationX = modelRotationX;
+    if (modelRotationY !== undefined) updates.modelRotationY = modelRotationY;
+    if (modelRotationZ !== undefined) updates.modelRotationZ = modelRotationZ;
+    if (modelScale !== undefined) updates.modelScale = modelScale;
+    if (videoRotationX !== undefined) updates.videoRotationX = videoRotationX;
+    if (videoRotationY !== undefined) updates.videoRotationY = videoRotationY;
+    if (videoRotationZ !== undefined) updates.videoRotationZ = videoRotationZ;
+    if (videoScale !== undefined) updates.videoScale = videoScale;
 
     const layout = await ArLayout.findOneAndUpdate(
       { clientId },

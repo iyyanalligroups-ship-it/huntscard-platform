@@ -1,8 +1,0 @@
-{
-  "backendUrl": "http://localhost:4000",
-  "publicBaseUrl": "http://localhost:5173",
-  "session": {
-    "adminEmail": "admin@gmail.com",
-    "token": ""
-  }
-}

@@ -3,6 +3,26 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { api, API_URL } from '../api.js';
 import ArView from './ArView.jsx';
 
+// One row for an admin-defined extra field (see AttributeDefinition) --
+// same visual as the fixed contact/social rows, but 'text'-type fields
+// have no href (nothing to link to), so this renders a plain div instead
+// of an <a> in that case.
+function CustomRow({ row }) {
+  const content = (
+    <>
+      <span className="pv-icon">{row.icon}</span>
+      <span className="pv-contact-label">{row.label}</span>
+    </>
+  );
+  return row.href ? (
+    <a className="pv-contact-row" href={row.href} target="_blank" rel="noopener noreferrer">
+      {content}
+    </a>
+  ) : (
+    <div className="pv-contact-row">{content}</div>
+  );
+}
+
 // The public tap page -- what a stranger sees when they tap the physical
 // card or scan its QR code. No login, no session: anyone who has the
 // clientId can view this, same as backend/public-tap/index.html did
@@ -13,6 +33,7 @@ export default function PublicProfile() {
   const { clientId } = useParams();
   const [searchParams] = useSearchParams();
   const [profile, setProfile] = useState(null);
+  const [attributes, setAttributes] = useState([]); // admin-defined extra fields, see AttributeDefinition
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
@@ -21,7 +42,6 @@ export default function PublicProfile() {
   const [toast, setToast] = useState('');
   const toastTimeoutRef = useRef(null);
   const touchStartX = useRef(null);
-  const circuitRef = useRef(null);
   const isArMode = searchParams.get('ar') === '1';
 
   useEffect(() => {
@@ -33,79 +53,13 @@ export default function PublicProfile() {
       .then(setProfile)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+    // Separate from the critical profile fetch above -- these are cosmetic
+    // extra fields, a failure here shouldn't block the rest of the page.
+    api
+      .getAttributeDefinitions()
+      .then(setAttributes)
+      .catch(() => {});
   }, [clientId, isArMode]);
-
-  // Animated circuit-trace background -- same visual language as the
-  // Home hero's (see Home.jsx), sized to the viewport via position:fixed
-  // instead of a measured element, since this page's content height
-  // varies with how many tabs/rows a profile has.
-  useEffect(() => {
-    if (isArMode) return;
-    const svg = circuitRef.current;
-    if (!svg) return;
-    const svgNS = 'http://www.w3.org/2000/svg';
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    function build() {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-      svg.innerHTML = '';
-
-      const colors = ['var(--holo-cyan)', 'var(--holo-violet)', 'var(--holo-magenta)'];
-      const traceCount = 7;
-
-      for (let i = 0; i < traceCount; i++) {
-        const startX = Math.random() * w;
-        const startY = Math.random() * h;
-        const midX = startX + (Math.random() * 220 - 110);
-        const midY = startY + (Math.random() * 160 - 80);
-        const endX = midX + (Math.random() * 220 - 110);
-        const endY = midY + (Math.random() * 160 - 80);
-        const color = colors[i % colors.length];
-        const d = `M ${startX} ${startY} L ${midX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
-
-        const path = document.createElementNS(svgNS, 'path');
-        path.setAttribute('d', d);
-        path.setAttribute('fill', 'none');
-        path.setAttribute('stroke', color);
-        path.setAttribute('stroke-width', '1');
-        path.setAttribute('stroke-opacity', '0.16');
-        svg.appendChild(path);
-
-        [[startX, startY], [endX, midY], [endX, endY]].forEach(([nx, ny], idx) => {
-          const node = document.createElementNS(svgNS, 'circle');
-          node.setAttribute('cx', nx);
-          node.setAttribute('cy', ny);
-          node.setAttribute('r', idx === 1 ? 2.6 : 1.7);
-          node.setAttribute('fill', color);
-          node.setAttribute('class', 'circuit-trace-node');
-          node.style.animationDelay = Math.random() * 3 + 's';
-          svg.appendChild(node);
-        });
-
-        if (!reduceMotion) {
-          const pulse = document.createElementNS(svgNS, 'circle');
-          pulse.setAttribute('r', '2.2');
-          pulse.setAttribute('fill', color);
-          pulse.style.filter = 'drop-shadow(0 0 4px currentColor)';
-          pulse.style.color = color;
-          svg.appendChild(pulse);
-
-          const animMotion = document.createElementNS(svgNS, 'animateMotion');
-          animMotion.setAttribute('dur', `${4 + Math.random() * 3}s`);
-          animMotion.setAttribute('repeatCount', 'indefinite');
-          animMotion.setAttribute('path', d);
-          animMotion.setAttribute('begin', Math.random() * 4 + 's');
-          pulse.appendChild(animMotion);
-        }
-      }
-    }
-
-    build();
-    window.addEventListener('resize', build);
-    return () => window.removeEventListener('resize', build);
-  }, [isArMode]);
 
   if (isArMode) {
     return <ArView clientId={clientId} />;
@@ -207,12 +161,47 @@ export default function PublicProfile() {
     },
   ].filter(Boolean);
 
+  // Admin-defined extra fields (see AttributeDefinition) that this client
+  // actually filled in -- rendered the same row style as the fixed fields
+  // above, appended within whichever tab they belong to.
+  function customRowsFor(section) {
+    return attributes
+      .filter((a) => a.section === section)
+      .map((a) => {
+        const value = profile.customAttributes?.[a.key];
+        if (!value) return null;
+        const href =
+          a.fieldType === 'phone' ? `tel:${value}` : a.fieldType === 'email' ? `mailto:${value}` : a.fieldType === 'url' ? value : undefined;
+        return { key: a.key, icon: a.label.slice(0, 2).toUpperCase(), label: `${a.label}: ${value}`, href };
+      })
+      .filter(Boolean);
+  }
+  const contactCustomRows = customRowsFor('contact');
+  const portfolioCustomRows = customRowsFor('portfolio');
+  const socialCustomRows = customRowsFor('social');
+  const huntsworldCustomRows = customRowsFor('huntsworld');
+
   const tabs = [];
   if (profile.bio) tabs.push({ label: 'My Bio', key: 'bio' });
-  if (contactRows.length) tabs.push({ label: 'Contact', key: 'contact' });
-  if (profile.portfolioUrl) tabs.push({ label: 'Portfolio', key: 'portfolio' });
-  if (socialRows.length) tabs.push({ label: 'Social', key: 'social' });
-  if (profile.huntsworldUrl) tabs.push({ label: 'Huntsworld', key: 'huntsworld' });
+  if (contactRows.length || contactCustomRows.length) tabs.push({ label: 'Contact', key: 'contact' });
+  if (profile.portfolioUrl || portfolioCustomRows.length) tabs.push({ label: 'Portfolio', key: 'portfolio' });
+  if (socialRows.length || socialCustomRows.length) tabs.push({ label: 'Social', key: 'social' });
+  if (profile.huntsworldUrl || huntsworldCustomRows.length) tabs.push({ label: 'Huntsworld', key: 'huntsworld' });
+
+  // Sections an admin added beyond the original four (see the admin
+  // Attributes page) -- no hardcoded fields of their own, just whatever
+  // custom rows this client filled in for that section.
+  const BUILTIN_SECTION_KEYS = new Set(['contact', 'portfolio', 'social', 'huntsworld']);
+  const customSectionRows = {};
+  for (const section of new Set(attributes.map((a) => a.section))) {
+    if (BUILTIN_SECTION_KEYS.has(section)) continue;
+    const rows = customRowsFor(section);
+    if (!rows.length) continue;
+    customSectionRows[section] = rows;
+    const label = attributes.find((a) => a.section === section)?.sectionLabel || section;
+    tabs.push({ label, key: section });
+  }
+
   if (tabs.length === 0) tabs.push({ label: 'Info', key: 'empty' });
 
   const clampedTab = Math.min(activeTab, tabs.length - 1);
@@ -220,8 +209,6 @@ export default function PublicProfile() {
 
   return (
     <div className="pv-page">
-      <div className="pv-circuit-grid" aria-hidden="true" />
-      <svg className="pv-circuit-lines" ref={circuitRef} aria-hidden="true" preserveAspectRatio="none" />
       <div className="pv-shell">
         {profile.bannerUrl && (
           <div className="pv-cover">
@@ -261,44 +248,78 @@ export default function PublicProfile() {
         <div className="pv-panel" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           {currentKey === 'bio' && <p className="pv-bio">{profile.bio}</p>}
 
-          {currentKey === 'contact' &&
-            contactRows.map((row) => (
-              <a className="pv-contact-row" key={row.label} href={row.href} target="_blank" rel="noopener noreferrer">
-                <span className="pv-icon">{row.icon}</span>
-                <span className="pv-contact-label">{row.label}</span>
-              </a>
-            ))}
-
-          {currentKey === 'portfolio' && (
-            <a className="pv-contact-row" href={profile.portfolioUrl} target="_blank" rel="noopener noreferrer">
-              <span className="pv-icon">◆</span>
-              <span className="pv-contact-label">{profile.portfolioUrl.replace(/^https?:\/\//, '')}</span>
-            </a>
+          {currentKey === 'contact' && (
+            <>
+              {contactRows.map((row) => (
+                <a className="pv-contact-row" key={row.label} href={row.href} target="_blank" rel="noopener noreferrer">
+                  <span className="pv-icon">{row.icon}</span>
+                  <span className="pv-contact-label">{row.label}</span>
+                </a>
+              ))}
+              {contactCustomRows.map((row) => (
+                <CustomRow key={row.key} row={row} />
+              ))}
+            </>
           )}
 
-          {currentKey === 'social' &&
-            socialRows.map((row) => (
-              <a className="pv-contact-row" key={row.label} href={row.href} target="_blank" rel="noopener noreferrer">
-                <span className="pv-icon">{row.icon}</span>
-                <span className="pv-contact-label">{row.label}</span>
-              </a>
-            ))}
+          {currentKey === 'portfolio' && (
+            <>
+              {profile.portfolioUrl && (
+                <a className="pv-contact-row" href={profile.portfolioUrl} target="_blank" rel="noopener noreferrer">
+                  <span className="pv-icon">◆</span>
+                  <span className="pv-contact-label">{profile.portfolioUrl.replace(/^https?:\/\//, '')}</span>
+                </a>
+              )}
+              {portfolioCustomRows.map((row) => (
+                <CustomRow key={row.key} row={row} />
+              ))}
+            </>
+          )}
+
+          {currentKey === 'social' && (
+            <>
+              {socialRows.map((row) => (
+                <a className="pv-contact-row" key={row.label} href={row.href} target="_blank" rel="noopener noreferrer">
+                  <span className="pv-icon">{row.icon}</span>
+                  <span className="pv-contact-label">{row.label}</span>
+                </a>
+              ))}
+              {socialCustomRows.map((row) => (
+                <CustomRow key={row.key} row={row} />
+              ))}
+            </>
+          )}
 
           {currentKey === 'huntsworld' && (
             <>
-              <div className="pv-section-label">Business listing</div>
-              <div className="pv-hw-block">
-                <div className="pv-hw-head">
-                  <span className="pv-hw-badge">H</span>
-                  <div>
-                    <div className="pv-hw-title">Huntsworld</div>
-                    <div className="pv-hw-sub">{profile.huntsworldUrl.replace(/^https?:\/\//, '')}</div>
+              {profile.huntsworldUrl && (
+                <>
+                  <div className="pv-section-label">Business listing</div>
+                  <div className="pv-hw-block">
+                    <div className="pv-hw-head">
+                      <span className="pv-hw-badge">H</span>
+                      <div>
+                        <div className="pv-hw-title">Huntsworld</div>
+                        <div className="pv-hw-sub">{profile.huntsworldUrl.replace(/^https?:\/\//, '')}</div>
+                      </div>
+                    </div>
+                    <a className="pv-hw-btn" href={profile.huntsworldUrl} target="_blank" rel="noopener noreferrer">
+                      View listing on Huntsworld
+                    </a>
                   </div>
-                </div>
-                <a className="pv-hw-btn" href={profile.huntsworldUrl} target="_blank" rel="noopener noreferrer">
-                  View listing on Huntsworld
-                </a>
-              </div>
+                </>
+              )}
+              {huntsworldCustomRows.map((row) => (
+                <CustomRow key={row.key} row={row} />
+              ))}
+            </>
+          )}
+
+          {currentKey && customSectionRows[currentKey] && (
+            <>
+              {customSectionRows[currentKey].map((row) => (
+                <CustomRow key={row.key} row={row} />
+              ))}
             </>
           )}
 

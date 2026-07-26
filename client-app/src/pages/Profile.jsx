@@ -1,17 +1,47 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import '@google/model-viewer'; // registers the <model-viewer> custom element used for the 3D model preview below
 import { api } from '../api.js';
 
-const FIELD_DEFS = [
-  { key: 'fullName', label: 'Full name', type: 'text' },
+// Name/job title stay above the tabs, same as the photo/banner -- they're
+// identity, not something that belongs to one of the five card tabs.
+const IDENTITY_FIELDS = [
+  { key: 'fullName', label: 'Full name', type: 'text', required: true },
   { key: 'jobTitle', label: 'Job title', type: 'text' },
-  { key: 'phone', label: 'Phone number', type: 'tel' },
-  { key: 'whatsapp', label: 'WhatsApp number', type: 'tel' },
-  { key: 'publicEmail', label: 'Public email', type: 'email' },
-  { key: 'instagramUrl', label: 'Instagram link', type: 'url' },
-  { key: 'twitterUrl', label: 'Twitter / X link', type: 'url' },
-  { key: 'portfolioUrl', label: 'Portfolio link', type: 'url' },
-  { key: 'huntsworldUrl', label: 'Huntsworld profile link', type: 'url' },
 ];
+
+// Everything else groups under the same five tabs the public card itself
+// uses (see PublicProfile.jsx) -- Profile Settings used to be one long
+// flat form, which made it hard to see what actually maps to what on the
+// card. Admin-defined attributes (fetched separately, see `attributes`
+// state below) render alongside these within the matching tab.
+const SECTION_FIELDS = {
+  contact: [
+    { key: 'phone', label: 'Phone number', type: 'tel' },
+    { key: 'whatsapp', label: 'WhatsApp number', type: 'tel' },
+    { key: 'publicEmail', label: 'Public email', type: 'email' },
+  ],
+  portfolio: [{ key: 'portfolioUrl', label: 'Portfolio link', type: 'url' }],
+  social: [
+    { key: 'instagramUrl', label: 'Instagram link', type: 'url' },
+    { key: 'twitterUrl', label: 'Twitter / X link', type: 'url' },
+  ],
+  huntsworld: [{ key: 'huntsworldUrl', label: 'Huntsworld profile link', type: 'url' }],
+};
+
+// Custom sections an admin adds (see the admin Attributes page) get
+// appended after these, discovered from whatever attribute definitions
+// actually come back -- not hardcoded, since there's no fixed list of them.
+const BASE_TABS = [
+  { key: 'bio', label: 'My Bio' },
+  { key: 'contact', label: 'Contact' },
+  { key: 'portfolio', label: 'Portfolio' },
+  { key: 'social', label: 'Social' },
+  { key: 'huntsworld', label: 'Huntsworld' },
+];
+
+// Admin's `fieldType` values map straight onto <input type="..."> except
+// 'phone', which HTML spells 'tel'.
+const INPUT_TYPE = { text: 'text', phone: 'tel', url: 'url', email: 'email' };
 
 export default function Profile() {
   const [profile, setProfile] = useState(null);
@@ -29,9 +59,34 @@ export default function Profile() {
   const [arVideoUploading, setArVideoUploading] = useState(false);
   const [arVideoSaved, setArVideoSaved] = useState(false);
   const [arVideoPreviewUrl, setArVideoPreviewUrl] = useState(null);
+  const [arModelUploading, setArModelUploading] = useState(false);
+  const [arModelSaved, setArModelSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState('bio');
+  const [attributes, setAttributes] = useState([]); // admin-defined extra fields, see AttributeDefinition
   const fileInputRef = useRef(null);
   const bannerInputRef = useRef(null);
   const arVideoInputRef = useRef(null);
+  const arModelInputRef = useRef(null);
+
+  useEffect(() => {
+    // Separate from the profile fetch below -- these are cosmetic extra
+    // fields, so a failure here shouldn't block the rest of the page.
+    api
+      .getAttributeDefinitions()
+      .then(setAttributes)
+      .catch(() => {});
+  }, []);
+
+  const tabs = useMemo(() => {
+    const baseKeys = new Set(BASE_TABS.map((t) => t.key));
+    const customByKey = new Map();
+    for (const attr of attributes) {
+      if (!baseKeys.has(attr.section) && !customByKey.has(attr.section)) {
+        customByKey.set(attr.section, { key: attr.section, label: attr.sectionLabel || attr.section });
+      }
+    }
+    return [...BASE_TABS, ...customByKey.values()];
+  }, [attributes]);
 
   useEffect(() => {
     api
@@ -46,6 +101,11 @@ export default function Profile() {
 
   function updateField(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
+    setSaved(false);
+  }
+
+  function updateCustomAttribute(key, value) {
+    setForm((f) => ({ ...f, customAttributes: { ...(f.customAttributes || {}), [key]: value } }));
     setSaved(false);
   }
 
@@ -139,15 +199,50 @@ export default function Profile() {
     }
   }
 
+  async function handleArModelChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError('');
+    setArModelSaved(false);
+    setArModelUploading(true);
+    try {
+      const updated = await api.uploadArModel(file);
+      setProfile(updated);
+      setArModelSaved(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setArModelUploading(false);
+      if (arModelInputRef.current) arModelInputRef.current.value = '';
+    }
+  }
+
+  async function handleArModelRemove() {
+    setError('');
+    setArModelSaved(false);
+    setArModelUploading(true);
+    try {
+      const updated = await api.removeArModel();
+      setProfile(updated);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setArModelUploading(false);
+    }
+  }
+
   async function handleSaveDetails(e) {
     e.preventDefault();
     setError('');
     setSaving(true);
     setSaved(false);
     try {
-      const updates = {};
-      for (const { key } of FIELD_DEFS) updates[key] = form[key] || '';
-      updates.bio = form.bio || '';
+      const updates = { bio: form.bio || '' };
+      for (const { key } of IDENTITY_FIELDS) updates[key] = form[key] || '';
+      for (const fields of Object.values(SECTION_FIELDS)) {
+        for (const { key } of fields) updates[key] = form[key] || '';
+      }
+      updates.customAttributes = form.customAttributes || {};
       const updated = await api.updateProfile(updates);
       setProfile(updated);
       setSaved(true);
@@ -294,6 +389,87 @@ export default function Profile() {
         )}
       </div>
 
+      {/* The 3D model is an AR Layout element, so it's gated the same way
+          AR Layout itself is -- no point uploading one on a plan that can
+          never actually use it. */}
+      {profile && !profile.arEnabled && (
+        <div className="card" style={{ marginBottom: 16, textAlign: 'center' }}>
+          <p style={{ fontSize: 14, marginBottom: 8 }}>
+            3D model isn't included in your current plan
+            {profile?.cardType ? ` (${profile.cardType})` : ''}.
+          </p>
+          <p className="hint" style={{ marginBottom: 16 }}>
+            Upgrade to a plan with AR to add a real 3D model to your HuntsAR World panel.
+          </p>
+          <a href="/dashboard/upgrade">
+            <button style={{ width: 'auto' }}>See plans with AR</button>
+          </a>
+        </div>
+      )}
+
+      {profile?.arEnabled && (
+      /* --- Real 3D model: rendered as an actual 3D object in HuntsAR
+          World instead of the flat video/photo panel, when set --- */
+      <div className="card" style={{ marginBottom: 16 }}>
+        <label style={{ marginBottom: 8 }}>3D model (optional)</label>
+        <p className="hint" style={{ margin: '0 0 10px' }}>
+          A real 3D model (.glb) shown in HuntsAR World instead of the flat video/photo
+          panel. Without one, your video or photo panel is used instead.
+        </p>
+        <div
+          className="banner-preview"
+          style={{ opacity: arModelUploading ? 0.5 : 1, minHeight: 160 }}
+        >
+          {profile?.arModelUrl ? (
+            <model-viewer
+              src={profile.arModelUrl}
+              camera-controls
+              auto-rotate
+              style={{ width: '100%', height: 220, display: 'block' }}
+            />
+          ) : (
+            <span className="banner-placeholder">No model yet</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 4 }}>
+          <input
+            ref={arModelInputRef}
+            type="file"
+            accept=".glb"
+            onChange={handleArModelChange}
+            style={{ display: 'none' }}
+            id="arModelInput"
+            disabled={arModelUploading}
+          />
+          <label
+            htmlFor="arModelInput"
+            className="secondary"
+            style={{ display: 'inline-block', width: 'auto', cursor: arModelUploading ? 'default' : 'pointer', opacity: arModelUploading ? 0.6 : 1 }}
+          >
+            {arModelUploading ? 'Working…' : profile?.arModelUrl ? 'Change model' : 'Choose model'}
+          </label>
+          {profile?.arModelUrl && !arModelUploading && (
+            <button
+              type="button"
+              className="secondary"
+              style={{ width: 'auto' }}
+              onClick={handleArModelRemove}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+        <p className="hint" style={{ margin: '8px 0 0' }}>
+          {arModelUploading ? 'Saving your model now…' : '.glb format only. Max 50MB. Uploads immediately.'}
+        </p>
+        {arModelSaved && !arModelUploading && (
+          <p className="hint" style={{ margin: '4px 0 0', color: 'var(--holo-cyan)' }}>
+            Model saved.
+          </p>
+        )}
+      </div>
+      )}
+
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
           <div
@@ -351,29 +527,10 @@ export default function Profile() {
       </div>
 
       <form className="card" onSubmit={handleSaveDetails}>
-        <div className="field">
-          <label htmlFor="bio">About (short bio)</label>
-          <textarea
-            id="bio"
-            rows={3}
-            maxLength={280}
-            value={form.bio || ''}
-            onChange={(e) => updateField('bio', e.target.value)}
-            style={{
-              width: '100%',
-              background: 'var(--panel-raised)',
-              border: '1px solid var(--panel-border)',
-              borderRadius: 9,
-              padding: '11px 13px',
-              color: 'var(--text)',
-              fontSize: 14,
-              fontFamily: 'var(--font-ui)',
-              resize: 'vertical',
-            }}
-          />
-        </div>
-        <div className="field-grid">
-          {FIELD_DEFS.map(({ key, label, type }) => (
+        {/* Identity -- shown above the tabs, same as the photo/banner above, since
+            it isn't part of any one of the card's five tabs. */}
+        <div className="field-grid" style={{ marginBottom: 20 }}>
+          {IDENTITY_FIELDS.map(({ key, label, type, required }) => (
             <div className="field" key={key}>
               <label htmlFor={key}>{label}</label>
               <input
@@ -381,12 +538,86 @@ export default function Profile() {
                 type={type}
                 value={form[key] || ''}
                 onChange={(e) => updateField(key, e.target.value)}
-                required={key === 'fullName'}
+                required={required}
               />
             </div>
           ))}
         </div>
-        <button type="submit" disabled={saving} style={{ marginTop: 8 }}>
+
+        {/* Mirrors the public card's own five tabs (see PublicProfile.jsx)
+            so it's obvious what maps to what -- was one long flat form before. */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 6,
+            flexWrap: 'wrap',
+            borderBottom: '1px solid var(--panel-border)',
+            marginBottom: 16,
+            paddingBottom: 10,
+          }}
+        >
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={activeTab === tab.key ? undefined : 'secondary'}
+              style={{ width: 'auto', padding: '8px 14px' }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'bio' && (
+          <div className="field">
+            <label htmlFor="bio">About (short bio)</label>
+            <textarea
+              id="bio"
+              rows={3}
+              maxLength={280}
+              value={form.bio || ''}
+              onChange={(e) => updateField('bio', e.target.value)}
+              style={{
+                width: '100%',
+                background: 'var(--panel-raised)',
+                border: '1px solid var(--panel-border)',
+                borderRadius: 9,
+                padding: '11px 13px',
+                color: 'var(--text)',
+                fontSize: 14,
+                fontFamily: 'var(--font-ui)',
+                resize: 'vertical',
+              }}
+            />
+          </div>
+        )}
+
+        {activeTab !== 'bio' && (
+          <div className="field-grid">
+            {(SECTION_FIELDS[activeTab] || []).map(({ key, label, type }) => (
+              <div className="field" key={key}>
+                <label htmlFor={key}>{label}</label>
+                <input id={key} type={type} value={form[key] || ''} onChange={(e) => updateField(key, e.target.value)} />
+              </div>
+            ))}
+            {attributes
+              .filter((attr) => attr.section === activeTab)
+              .map((attr) => (
+                <div className="field" key={attr.key}>
+                  <label htmlFor={`attr-${attr.key}`}>{attr.label}</label>
+                  <input
+                    id={`attr-${attr.key}`}
+                    type={INPUT_TYPE[attr.fieldType] || 'text'}
+                    value={form.customAttributes?.[attr.key] || ''}
+                    onChange={(e) => updateCustomAttribute(attr.key, e.target.value)}
+                  />
+                </div>
+              ))}
+          </div>
+        )}
+
+        <button type="submit" disabled={saving} style={{ marginTop: 20 }}>
           {saving ? 'Saving…' : 'Save changes'}
         </button>
         {/* Feedback right next to the button -- the top-of-page banner is

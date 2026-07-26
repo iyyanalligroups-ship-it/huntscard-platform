@@ -62,7 +62,11 @@ export default function Layout() {
 
   // The overview page uses a wide grid; every other page keeps the
   // original narrow centered column so existing forms don't stretch.
+  // AR Layout is the one exception -- it's a drag-and-drop canvas shaped
+  // like a real (landscape) business card, and needs the full width next
+  // to the sidebar (not just a wider cap) to be comfortable to use.
   const isOverview = location.pathname === '/dashboard';
+  const isArLayout = location.pathname === '/dashboard/ar-layout';
 
   return (
     <div className="dash-shell">
@@ -110,8 +114,8 @@ export default function Layout() {
         </div>
       </aside>
 
-      <main className={isOverview ? 'dash-main' : 'dash-main page-shell-wrap'}>
-        <div className={isOverview ? 'dash-content' : 'page-shell'}>
+      <main className={isOverview || isArLayout ? 'dash-main' : 'dash-main page-shell-wrap'}>
+        <div className={isOverview ? 'dash-content' : isArLayout ? 'dash-content-full' : 'page-shell'}>
           <Outlet />
         </div>
       </main>

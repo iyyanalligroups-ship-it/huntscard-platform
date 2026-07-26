@@ -226,7 +226,7 @@ router.post('/contacts/:id/photo', requireAuth, (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No photo file received' });
 
     try {
-      const photoUrl = `${process.env.BACKEND_URL}/uploads/contact-photos/${req.file.filename}`;
+      const photoUrl = `${process.env.PUBLIC_BASE_URL}/uploads/contact-photos/${req.file.filename}`;
       const contact = await Contact.findOneAndUpdate(
         { _id: req.params.id, clientId: req.user.clientId },
         { $set: { photoUrl } },
