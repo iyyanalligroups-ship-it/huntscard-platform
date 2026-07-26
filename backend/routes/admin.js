@@ -238,7 +238,7 @@ router.post('/plans', requireAdmin, (req, res) => {
       const existing = await CardPlan.findOne({ key });
       if (existing) key = `${key}-${crypto.randomBytes(2).toString('hex')}`;
 
-      const images = (req.files || []).map((f) => `${process.env.PUBLIC_BASE_URL}/uploads/plans/${f.filename}`);
+      const images = (req.files || []).map((f) => `${process.env.BACKEND_URL}/uploads/plans/${f.filename}`);
 
       const plan = await CardPlan.create({
         name,
@@ -322,7 +322,7 @@ router.post('/plans/:id/images', requireAdmin, (req, res) => {
       const plan = await CardPlan.findById(req.params.id);
       if (!plan) return res.status(404).json({ error: 'Plan not found' });
 
-      const newUrls = req.files.map((f) => `${process.env.PUBLIC_BASE_URL}/uploads/plans/${f.filename}`);
+      const newUrls = req.files.map((f) => `${process.env.BACKEND_URL}/uploads/plans/${f.filename}`);
       const combined = [...plan.images, ...newUrls];
       if (combined.length > 6) {
         return res.status(400).json({ error: `This plan already has ${plan.images.length} image(s) -- max 6 total. Remove some first.` });
@@ -865,7 +865,7 @@ router.post('/ar-icons/:key', requireAdmin, uploadArIcon.single('icon'), async (
 
     const icons = (await ArIcon.findOne({ key: 'global' })) || new ArIcon({ key: 'global' });
     const previousUrl = icons.sectionIcons.get(key) || icons[key];
-    icons.sectionIcons.set(key, `${process.env.PUBLIC_BASE_URL}/uploads/ar-icons/${req.file.filename}`);
+    icons.sectionIcons.set(key, `${process.env.BACKEND_URL}/uploads/ar-icons/${req.file.filename}`);
     icons.updatedBy = req.admin?.email || 'unknown';
     await icons.save();
 
@@ -1062,7 +1062,7 @@ router.post('/catalog/:cardType', requireAdmin, (req, res) => {
       const plan = await CardPlan.findOne({ key: cardType });
       if (!plan) return res.status(404).json({ error: 'No card type matches that key' });
 
-      const videoUrl = `${process.env.PUBLIC_BASE_URL}/uploads/catalog/${req.file.filename}`;
+      const videoUrl = `${process.env.BACKEND_URL}/uploads/catalog/${req.file.filename}`;
       const video = await CatalogVideo.findOneAndUpdate(
         { cardType },
         { $set: { videoUrl, uploadedBy: req.admin?.email || 'unknown' } },

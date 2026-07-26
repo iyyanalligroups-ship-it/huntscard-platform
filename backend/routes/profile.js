@@ -148,7 +148,7 @@ router.post('/photo', requireAuth, (req, res) => {
     }
 
     try {
-      const photoUrl = `${process.env.PUBLIC_BASE_URL}/uploads/photos/${req.file.filename}`;
+      const photoUrl = `${process.env.BACKEND_URL}/uploads/photos/${req.file.filename}`;
       const client = await Client.findOneAndUpdate(
         { clientId: req.user.clientId },
         { $set: { photoUrl } },
@@ -180,7 +180,7 @@ router.post('/banner', requireAuth, (req, res) => {
     }
 
     try {
-      const bannerUrl = `${process.env.PUBLIC_BASE_URL}/uploads/banners/${req.file.filename}`;
+      const bannerUrl = `${process.env.BACKEND_URL}/uploads/banners/${req.file.filename}`;
       const client = await Client.findOneAndUpdate(
         { clientId: req.user.clientId },
         { $set: { bannerUrl } },
@@ -223,7 +223,7 @@ router.post('/ar-video', requireAuth, (req, res) => {
     }
 
     try {
-      const arVideoUrl = `${process.env.PUBLIC_BASE_URL}/uploads/ar-videos/${req.file.filename}`;
+      const arVideoUrl = `${process.env.BACKEND_URL}/uploads/ar-videos/${req.file.filename}`;
       const client = await Client.findOneAndUpdate(
         { clientId: req.user.clientId },
         { $set: { arVideoUrl } },
@@ -274,7 +274,7 @@ router.post('/ar-model', requireAuth, (req, res) => {
         return res.status(403).json({ error: 'The 3D model is not included in your current plan.' });
       }
 
-      const arModelUrl = `${process.env.PUBLIC_BASE_URL}/uploads/ar-models/${req.file.filename}`;
+      const arModelUrl = `${process.env.BACKEND_URL}/uploads/ar-models/${req.file.filename}`;
       const client = await Client.findOneAndUpdate(
         { clientId: req.user.clientId },
         { $set: { arModelUrl } },
