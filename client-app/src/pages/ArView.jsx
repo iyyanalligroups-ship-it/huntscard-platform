@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import jsQR from 'jsqr';
-import posit1 from 'js-aruco2/src/posit1.js';
+import { POS } from '../lib/posit.js';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { api } from '../api.js';
-
-const { POS } = posit1;
 
 /**
  * The live camera AR view -- what actually opens when someone scans the AR
