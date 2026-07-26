@@ -36,14 +36,17 @@ const arLayoutSchema = new mongoose.Schema(
     // printed QR might not be. Every other element's position is
     // interpreted relative to this, not to a fixed 50/50 assumption.
     qr: { type: elementPositionSchema, default: () => ({ x: 50, y: 50 }) },
-    video: { type: elementPositionSchema, default: () => ({ x: 50, y: 20 }) },
-    contact: { type: elementPositionSchema, default: () => ({ x: 50, y: 45 }) },
-    portfolio: { type: elementPositionSchema, default: () => ({ x: 15, y: 60 }) },
-    social: { type: elementPositionSchema, default: () => ({ x: 85, y: 60 }) },
-    huntsworld: { type: elementPositionSchema, default: () => ({ x: 50, y: 85 }) },
-    // Real 3D model (arModelUrl) -- given open space of its own, not
-    // stacked on the video/photo panel's default spot.
-    model: { type: elementPositionSchema, default: () => ({ x: 50, y: 35 }) },
+    // Slide/dashboard panel floats centered above the model, like an
+    // upright screen standing behind it -- not stacked directly over the QR.
+    video: { type: elementPositionSchema, default: () => ({ x: 50, y: -42 }) },
+    // Link icons sit in a single row just past the card's bottom edge.
+    contact: { type: elementPositionSchema, default: () => ({ x: 30, y: 96 }) },
+    portfolio: { type: elementPositionSchema, default: () => ({ x: 45, y: 96 }) },
+    social: { type: elementPositionSchema, default: () => ({ x: 60, y: 96 }) },
+    huntsworld: { type: elementPositionSchema, default: () => ({ x: 75, y: 96 }) },
+    // Real 3D model (arModelUrl) -- sits inside the card itself, toward
+    // the left edge and vertically centered, out of the QR/icon's way.
+    model: { type: elementPositionSchema, default: () => ({ x: 20, y: 50 }) },
     // How the model itself is oriented/sized -- set via the editor's
     // turntable drag + resize controls, applied as-is when actually
     // rendering the model in HuntsAR World (not just an editor preview).

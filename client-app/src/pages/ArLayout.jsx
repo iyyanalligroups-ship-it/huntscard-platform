@@ -63,7 +63,7 @@ export default function ArLayout() {
   // drawing the new orientation/scale.
   useEffect(() => {
     modelViewerRef.current?.updateFraming?.();
-  }, [layout?.modelRotationX, layout?.modelRotationY, layout?.modelScale]);
+  }, [layout?.modelRotationX, layout?.modelRotationY, layout?.modelRotationZ, layout?.modelScale]);
 
   useEffect(() => {
     api
@@ -409,93 +409,94 @@ export default function ArLayout() {
         you want it to float relative to that QR — this is just for your own card.
       </p>
 
-      <div style={{ position: 'relative', width: '100%', maxWidth: 720, margin: '0 0 24px' }}>
-        {/* Grip handle for moving the whole white card around the page --
-            deliberately OUTSIDE the card's own bounds, not on the card
-            itself, so it can't collide with dragging the QR/elements/model
-            that live inside it. */}
-        <div
-          onPointerDown={handleCardMoveStart}
-          onPointerMove={handleCardMoveMove}
-          onPointerUp={handleCardMoveEnd}
-          onPointerCancel={handleCardMoveEnd}
-          title="Drag to move the whole card"
-          style={{
-            position: 'absolute',
-            top: -14,
-            left: -14,
-            width: 28,
-            height: 28,
-            borderRadius: '50%',
-            background: '#f5a524',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 14,
-            cursor: 'grab',
-            touchAction: 'none',
-            userSelect: 'none',
-            zIndex: 20,
-            boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
-          }}
-        >
-          ⠿
-        </div>
-        {(cardOffset.x !== 0 || cardOffset.y !== 0) && (
-          <button
-            type="button"
-            className="secondary"
-            onClick={resetCardPosition}
-            style={{ position: 'absolute', top: -14, right: 0, width: 'auto', fontSize: 11, padding: '3px 10px', zIndex: 20 }}
+      {/* Staging area behind the card -- a real AR preview would show the
+          camera feed, so a flat dark dashboard panel here made the card
+          hard to judge in isolation. A warm "tabletop" backdrop gives the
+          same framing as an actual hand-held-card AR shot, without
+          pretending to be a real camera view. */}
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          maxWidth: 640,
+          margin: '32px 0 24px',
+          padding: '210px 24px 56px',
+          borderRadius: 'var(--radius)',
+          background:
+            'radial-gradient(ellipse at center, #d2a679 0%, #b98956 55%, #96703f 100%)',
+          display: 'flex',
+          justifyContent: 'center',
+        }}
+      >
+        <div style={{ position: 'relative', width: '100%', maxWidth: 460 }}>
+          {/* Grip handle for moving the whole white card around the page --
+              deliberately OUTSIDE the card's own bounds, not on the card
+              itself, so it can't collide with dragging the QR/elements/model
+              that live inside it. */}
+          <div
+            onPointerDown={handleCardMoveStart}
+            onPointerMove={handleCardMoveMove}
+            onPointerUp={handleCardMoveEnd}
+            onPointerCancel={handleCardMoveEnd}
+            title="Drag to move the whole card"
+            style={{
+              position: 'absolute',
+              top: -14,
+              left: -14,
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              background: '#f5a524',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 14,
+              cursor: 'grab',
+              touchAction: 'none',
+              userSelect: 'none',
+              zIndex: 20,
+              boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+            }}
           >
-            Reset position
-          </button>
-        )}
-        <div
-          ref={canvasRef}
-          style={{
-            position: 'relative',
-            width: '100%',
-            // The full-width page column left a card that was much bigger
-            // than the content actually needs -- cap it back down to a
-            // reasonable size instead of stretching edge to edge.
-            maxWidth: 720,
-            // Matches the real physical card -- ISO/IEC 7810 ID-1 (86mm x
-            // 54mm, standard credit-card size, same as the actual NFC tap
-            // card) -- the QR gets printed on an actual card that shape,
-            // so the editor needs to match it, not a paper business card
-            // (3.5in x 2in, what this used to be set to) or an arbitrary
-            // phone-screen shape.
-            aspectRatio: '86 / 54',
-            // A real card is white, not a dark placeholder grid -- this is
-            // what actually gets printed, so the editor should look like it.
-            background: '#fff',
-            border: '2px solid #f5a524',
-            borderRadius: 'var(--radius)',
-            transform: `translate(${cardOffset.x}px, ${cardOffset.y}px)`,
-            userSelect: 'none',
-            touchAction: 'none',
-            // Elements can be dragged past the card's own edges (see
-            // clampPercent above) -- don't clip them off when they are.
-            overflow: 'visible',
-          }}
-        >
-        <div
-          style={{
-            position: 'absolute',
-            top: 8,
-            left: 0,
-            right: 0,
-            textAlign: 'center',
-            fontSize: 11,
-            color: 'rgba(0, 0, 0, 0.4)', // dark text -- the canvas itself is now a white card, not the dark theme
-            fontFamily: 'var(--font-mono)',
-          }}
-        >
-          card area (this is what a phone camera sees)
-        </div>
-
+            ⠿
+          </div>
+          {(cardOffset.x !== 0 || cardOffset.y !== 0) && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={resetCardPosition}
+              style={{ position: 'absolute', top: -14, right: 0, width: 'auto', fontSize: 11, padding: '3px 10px', zIndex: 20 }}
+            >
+              Reset position
+            </button>
+          )}
+          <div
+            ref={canvasRef}
+            style={{
+              position: 'relative',
+              width: '100%',
+              // Matches the real physical card -- ISO/IEC 7810 ID-1 (86mm x
+              // 54mm, standard credit-card size, same as the actual NFC tap
+              // card) -- the QR gets printed on an actual card that shape,
+              // so the editor needs to match it, not a paper business card
+              // (3.5in x 2in, what this used to be set to) or an arbitrary
+              // phone-screen shape.
+              aspectRatio: '86 / 54',
+              // A real card is white, not a dark placeholder grid -- this is
+              // what actually gets printed, so the editor should look like it.
+              background: '#fff',
+              border: '2px solid #f5a524',
+              borderRadius: 'var(--radius)',
+              boxShadow: '0 20px 45px rgba(0,0,0,0.35)',
+              transform: `translate(${cardOffset.x}px, ${cardOffset.y}px)`,
+              userSelect: 'none',
+              touchAction: 'none',
+              // Elements can be dragged past the card's own edges (see
+              // clampPercent above) -- don't clip them off when they are.
+              overflow: 'visible',
+            }}
+          >
         {/* The QR code itself -- draggable, same as every other element.
             This is the physical anchor a phone camera locks onto when
             scanning, so its position here should match where it's
@@ -548,7 +549,7 @@ export default function ArLayout() {
             const rotY = layout.videoRotationY ?? 0;
             const rotZ = layout.videoRotationZ ?? 0;
             const scale = layout.videoScale ?? 1;
-            const previewW = 160;
+            const previewW = 220;
             const previewH = previewW / CARD_ASPECT;
             const rotateRow = (axis, label, value) => (
               <div key={axis} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 2 }}>
@@ -727,7 +728,7 @@ export default function ArLayout() {
                   left: `${pos.x}%`,
                   top: `${pos.y}%`,
                   transform: 'translate(-50%, -50%)',
-                  width: 140,
+                  width: 130,
                   zIndex: dragging === 'model' ? 10 : 1,
                 }}
               >
@@ -757,15 +758,15 @@ export default function ArLayout() {
                     itself. Dragging directly sets orientation/scale
                     attributes, which really do change (and get saved as)
                     the model's own transform. */}
-                <div style={{ position: 'relative', width: 140, height: 140 }}>
+                <div style={{ position: 'relative', width: 130, height: 130 }}>
                   <model-viewer
                     ref={modelViewerRef}
                     src={profile.arModelUrl}
                     orientation={`${rotZ}deg ${rotX}deg ${rotY}deg`}
                     scale={`${scale} ${scale} ${scale}`}
                     style={{
-                      width: 140,
-                      height: 140,
+                      width: 130,
+                      height: 130,
                       display: 'block',
                       background: '#f4f4f4',
                       border: `2px solid ${el.color}`,
@@ -842,15 +843,15 @@ export default function ArLayout() {
                       left: `${pos.x}%`,
                       top: `${pos.y}%`,
                       transform: 'translate(-50%, -50%)',
-                      width: 56,
-                      height: 56,
+                      width: 68,
+                      height: 68,
                       borderRadius: '50%',
                       background: el.color,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       cursor: dragging === el.key ? 'grabbing' : 'grab',
-                      boxShadow: 'var(--shadow-md)',
+                      boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
                       touchAction: 'none',
                       userSelect: 'none',
                       zIndex: dragging === el.key ? 10 : 1,
@@ -888,6 +889,7 @@ export default function ArLayout() {
             </div>
           );
         })}
+          </div>
         </div>
       </div>
 
