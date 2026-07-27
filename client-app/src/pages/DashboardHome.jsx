@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, API_URL } from '../api.js';
+import { api } from '../api.js';
 
 /* Profile fields that count toward completeness -- grouped the same way
    Profile Settings groups them, so the donut legend maps 1:1 to real
@@ -44,14 +44,16 @@ export default function DashboardHome() {
     toastTimeoutRef.current = setTimeout(() => setToast(''), duration);
   }
 
-  // Zing: share this client's own contact card without needing their
+  // Zing: share this client's own profile link without needing their
   // physical NFC card present. A website can't make the phone act as an
   // NFC tag for another phone to tap (that needs native Host Card
   // Emulation, Android-only), so this uses the OS share sheet instead --
   // the nearest no-card, one-tap equivalent that works on any phone.
-  // Prefers sharing the actual vCard file so the recipient's share sheet
-  // can offer "Add to Contacts" directly; falls back to sharing the
-  // profile link, then to a copied link on desktop browsers.
+  // Deliberately shares the profile URL, not the vCard file -- sharing a
+  // .vcf triggers the OS's own native "Add to Contacts" card preview
+  // (both Android and iOS do this) instead of opening the branded profile
+  // page, which read as broken/confusing to recipients unfamiliar with
+  // that native UI. Falls back to a copied link on desktop browsers.
   // Flashes the round Zing button green (success) or red (fail) for a
   // couple seconds so tapping it gives visible confirmation the contact
   // actually went out, then resets back to its normal state.
@@ -67,22 +69,8 @@ export default function DashboardHome() {
     const shareUrl = `${window.location.origin}/c/${profile.clientId}`;
     const shareTitle = `${profile.fullName} — HuntsTAG`;
 
-    let file = null;
     try {
-      const res = await fetch(`${API_URL}/api/public/vcard/${profile.clientId}`);
-      if (res.ok) {
-        const blob = await res.blob();
-        const candidate = new File([blob], `${profile.fullName || 'contact'}.vcf`, { type: 'text/vcard' });
-        if (navigator.canShare?.({ files: [candidate] })) file = candidate;
-      }
-    } catch {
-      /* vCard fetch/packaging failed -- fall back to link share below */
-    }
-
-    try {
-      if (file) {
-        await navigator.share({ files: [file], title: shareTitle });
-      } else if (navigator.share) {
+      if (navigator.share) {
         await navigator.share({ title: shareTitle, url: shareUrl });
       } else {
         await navigator.clipboard.writeText(shareUrl);
