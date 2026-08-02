@@ -29,6 +29,7 @@ export default function DashboardHome() {
   const toastTimeoutRef = useRef(null);
   const [zingState, setZingState] = useState('idle'); // idle | busy | success | fail
   const zingTimeoutRef = useRef(null);
+  const zingFileRef = useRef(null); // pre-fetched vCard File, ready before the button is ever clicked
 
   useEffect(() => {
     api
@@ -37,6 +38,30 @@ export default function DashboardHome() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
+
+  // Pre-fetch the vCard as soon as we know who this client is, instead of
+  // fetching it inside handleZing -- navigator.share() must be called
+  // synchronously off the click for browsers to still consider it a
+  // trusted user gesture; an `await fetch(...)` in front of it is enough
+  // for some browsers to drop that and throw (this was the actual "Zing
+  // button turns red" bug, not a share-sheet/permissions problem).
+  useEffect(() => {
+    if (!profile?.clientId) return;
+    let cancelled = false;
+    fetch(`${API_URL}/api/public/vcard/${profile.clientId}`)
+      .then((res) => (res.ok ? res.blob() : null))
+      .then((blob) => {
+        if (cancelled || !blob) return;
+        const file = new File([blob], `${profile.fullName || 'contact'}.vcf`, { type: 'text/vcard' });
+        zingFileRef.current = navigator.canShare?.({ files: [file] }) ? file : null;
+      })
+      .catch(() => {
+        /* Zing still works via the url/clipboard fallback below without a file */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.clientId, profile?.fullName]);
 
   function showToast(msg, duration = 2600) {
     setToast(msg);
@@ -66,18 +91,9 @@ export default function DashboardHome() {
     setZingState('busy');
     const shareUrl = `${window.location.origin}/c/${profile.clientId}`;
     const shareTitle = `${profile.fullName} — HuntsTAG`;
-
-    let file = null;
-    try {
-      const res = await fetch(`${API_URL}/api/public/vcard/${profile.clientId}`);
-      if (res.ok) {
-        const blob = await res.blob();
-        const candidate = new File([blob], `${profile.fullName || 'contact'}.vcf`, { type: 'text/vcard' });
-        if (navigator.canShare?.({ files: [candidate] })) file = candidate;
-      }
-    } catch {
-      /* vCard fetch/packaging failed -- fall back to link share below */
-    }
+    // Already fetched (see the useEffect above) -- nothing async runs
+    // between the click and navigator.share() below.
+    const file = zingFileRef.current;
 
     try {
       if (file) {
