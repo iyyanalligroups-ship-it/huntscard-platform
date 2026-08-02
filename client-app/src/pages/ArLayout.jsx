@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import '@google/model-viewer'; // registers <model-viewer>, used for the live 3D Model preview below
 import { api, API_URL } from '../api.js';
+import ArScanPreview from '../components/ArScanPreview.jsx';
 
 /**
  * Lets a client visually position where each element appears in their
@@ -31,6 +32,24 @@ const VIDEO_BASE_FRACTION = QR_FRACTION;
 // canvas's own aspectRatio style below.
 const CARD_ASPECT = 86 / 54;
 
+// Tilt preview: a flat, straight-on editor can't show what a REAL tilted
+// phone would do to an element positioned far from the QR (or scaled way
+// up) -- the further out and bigger, the more a real camera angle
+// foreshortens it, and a perfectly flat preview always hides that. This
+// simulates a phone tilted `tiltDeg` degrees using genuine CSS 3D
+// perspective (not a re-implementation of ArView.jsx's own projection
+// math -- CSS perspective + rotateX IS a correct pinhole-camera
+// projection for a flat plane, so leaning on the browser's own 3D
+// rendering here is both simpler and more trustworthy than duplicating
+// that math a third time). TILT_PREVIEW_DISTANCE is an assumed real-world
+// viewing distance in QR-side-length units (same convention as
+// MODEL_SIZE=1 in ArView.jsx) -- not a real calibration (ArView.jsx
+// tracks the actual live distance instead), just close enough to make
+// the preview's foreshortening look plausible for typical close-up phone
+// photography.
+const TILT_PREVIEW_DISTANCE = 18;
+const MAX_TILT_DEG = 45;
+
 // Keyed per client since the same browser could be used to edit more than
 // one card -- this is a per-device editing preference, not part of the
 // layout that gets saved to the server.
@@ -53,6 +72,8 @@ export default function ArLayout() {
   const [saveStatus, setSaveStatus] = useState('');
   const [dragging, setDragging] = useState(null);
   const [cardOffset, setCardOffset] = useState({ x: 0, y: 0 }); // px, purely local -- repositions the editor's own canvas on the page, not saved
+  const [tiltDeg, setTiltDeg] = useState(0); // 0 = normal flat editing; >0 = read-only tilt preview, see TILT_PREVIEW_DISTANCE above
+  const [cardWidthPx, setCardWidthPx] = useState(460); // measured, used to convert TILT_PREVIEW_DISTANCE into a CSS perspective() value
   const canvasRef = useRef(null);
   const modelRotateStartRef = useRef(null); // { x, y, rotX, rotY } at drag start, for the model's turntable rotation
   const videoRotateStartRef = useRef(null); // same, for the AR Video/Photo panel's own turntable rotation
@@ -87,6 +108,22 @@ export default function ArLayout() {
       .getPublicArIcons()
       .then(setIcons)
       .catch(() => {});
+  }, []);
+
+  // Tracks the card canvas's actual rendered width -- needed to convert
+  // TILT_PREVIEW_DISTANCE (in QR-side-length units) into a real CSS
+  // perspective() pixel value, so the tilt preview's foreshortening scales
+  // correctly across different screen sizes instead of assuming a fixed
+  // 460px canvas.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (width) setCardWidthPx(width);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   // Restore where this device last left the card box, once we know which
@@ -453,6 +490,12 @@ export default function ArLayout() {
   }
 
   const qrUrl = `${API_URL}/api/public/qr/${profile.clientId}?type=ar`;
+  const qrPos = layout.qr || { x: 50, y: 50 };
+  // See TILT_PREVIEW_DISTANCE above -- converts that assumed distance
+  // (QR-side-lengths) into a real CSS perspective() value using the
+  // canvas's actual measured width (1 QR-side-length = QR_FRACTION of the
+  // card's width, by definition).
+  const tiltPerspectivePx = TILT_PREVIEW_DISTANCE * cardWidthPx * QR_FRACTION;
 
   return (
     <div>
@@ -462,15 +505,51 @@ export default function ArLayout() {
         you want it to float relative to that QR — this is just for your own card.
       </p>
 
-      {/* Staging area behind the card -- a real AR preview would show the
-          camera feed, so a flat dark dashboard panel here made the card
-          hard to judge in isolation. A warm "tabletop" backdrop gives the
-          same framing as an actual hand-held-card AR shot, without
-          pretending to be a real camera view. */}
+      {/* Tilt preview: read-only (dragging is disabled while tiltDeg > 0,
+          since a CSS-rotated element's own bounding rect no longer maps
+          to flat percentages the way positionFromEvent assumes) --
+          switch it back to 0 to keep editing. See TILT_PREVIEW_DISTANCE
+          above for why this exists at all. */}
+      <div className="card" style={{ marginBottom: 20, padding: '14px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <label htmlFor="tiltPreview" style={{ margin: 0, whiteSpace: 'nowrap' }}>
+            Tilt preview: {tiltDeg}°
+          </label>
+          <input
+            id="tiltPreview"
+            type="range"
+            min={0}
+            max={MAX_TILT_DEG}
+            step={5}
+            value={tiltDeg}
+            onChange={(e) => setTiltDeg(Number(e.target.value))}
+            style={{ flex: 1, minWidth: 140 }}
+          />
+          {tiltDeg > 0 && (
+            <button type="button" className="secondary" style={{ width: 'auto' }} onClick={() => setTiltDeg(0)}>
+              Back to editing
+            </button>
+          )}
+        </div>
+        <p className="hint" style={{ margin: '8px 0 0' }}>
+          Approximates how this layout looks with a phone held at an angle, not straight-on -- elements far
+          from the QR or scaled way up (like an oversized banner) can foreshorten a lot more than they
+          appear here flat. Drag to edit at 0°; slide right to preview, then slide back to keep editing.
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      {/* Staging area behind the card -- a warm "tabletop" backdrop gives
+          the same framing as an actual hand-held-card AR shot, without
+          pretending to be a real camera view. This is the DRAG-TO-EDIT
+          canvas -- flat CSS percentages, not a real rendering pipeline.
+          The "Scan preview" column to its right (ArScanPreview) is the
+          one that actually shows what a phone will see. */}
       <div
         style={{
           position: 'relative',
-          width: '100%',
+          flex: '1 1 460px',
+          minWidth: 280,
           maxWidth: 640,
           margin: '32px 0 24px',
           padding: '210px 24px 56px',
@@ -481,7 +560,17 @@ export default function ArLayout() {
           justifyContent: 'center',
         }}
       >
-        <div style={{ position: 'relative', width: '100%', maxWidth: 460 }}>
+        <div
+          style={{
+            position: 'relative',
+            width: '100%',
+            maxWidth: 460,
+            // perspective must live on an ANCESTOR of the rotated element
+            // (the card itself, below) -- only set while previewing, so a
+            // stray perspective doesn't change how anything renders at 0°.
+            perspective: tiltDeg > 0 ? tiltPerspectivePx : undefined,
+          }}
+        >
           {/* Grip handle for moving the whole white card around the page --
               deliberately OUTSIDE the card's own bounds, not on the card
               itself, so it can't collide with dragging the QR/elements/model
@@ -542,12 +631,22 @@ export default function ArLayout() {
               border: '2px solid #f5a524',
               borderRadius: 'var(--radius)',
               boxShadow: '0 20px 45px rgba(0,0,0,0.35)',
-              transform: `translate(${cardOffset.x}px, ${cardOffset.y}px)`,
+              // rotateX pivots around the QR's own position (transformOrigin
+              // below), same "everything else is relative to wherever the
+              // QR ends up" convention the rest of this editor -- and
+              // ArView.jsx's real tracking -- already use.
+              transform: `translate(${cardOffset.x}px, ${cardOffset.y}px)${tiltDeg > 0 ? ` rotateX(${tiltDeg}deg)` : ''}`,
+              transformOrigin: tiltDeg > 0 ? `${qrPos.x}% ${qrPos.y}%` : undefined,
               userSelect: 'none',
               touchAction: 'none',
               // Elements can be dragged past the card's own edges (see
               // clampPercent above) -- don't clip them off when they are.
               overflow: 'visible',
+              // Read-only while previewing -- a CSS-rotated element's own
+              // bounding rect no longer maps to flat percentages the way
+              // positionFromEvent assumes, so dragging is disabled instead
+              // of producing wrong positions.
+              pointerEvents: tiltDeg > 0 ? 'none' : 'auto',
             }}
           >
         {/* The QR code itself -- draggable, same as every other element.
@@ -1150,6 +1249,21 @@ export default function ArLayout() {
         })}
           </div>
         </div>
+      </div>
+
+      {/* The scan preview -- reuses the real AR renderer (ArScanPreview,
+          same Three.js/projection code ArView.jsx uses) instead of the
+          flat editor's CSS approximation above, so this genuinely shows
+          what a phone will see, not just a relative-position guess.
+          Updates live as `layout` changes above. */}
+      <div style={{ flex: '0 1 320px', minWidth: 260, margin: '32px 0 24px' }}>
+        <h3 style={{ fontSize: 14, margin: '0 0 6px' }}>Scan preview</h3>
+        <p className="hint" style={{ margin: '0 0 10px' }}>
+          What a phone actually sees when it scans this card, straight-on -- the real AR renderer, not the
+          flat editor. Updates live as you drag things on the left.
+        </p>
+        <ArScanPreview profile={profile} layout={layout} />
+      </div>
       </div>
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 24 }}>

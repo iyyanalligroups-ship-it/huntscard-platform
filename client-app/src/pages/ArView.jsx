@@ -5,6 +5,16 @@ import { POS } from '../lib/posit.js';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { api } from '../api.js';
+import {
+  MODEL_SIZE,
+  VIDEO_PLANE_BASE_W,
+  VIDEO_PLANE_BASE_H,
+  MODEL_IMAGE_BASE_W,
+  ASSUMED_FOV_DEG,
+  toLocalOffset,
+  projectLocalPoint,
+  focalPxFor,
+} from '../lib/arProjection.js';
 
 /**
  * The live camera AR view -- what actually opens when someone scans the AR
@@ -25,35 +35,12 @@ import { api } from '../api.js';
  * in 3D (walking around the card), not just rotating in the image plane.
  */
 
-const REF_W = 300; // baseline CSS pixel sizing for panels at "1x" (QR-plane) depth -- not used for positioning anymore
-const QR_FRACTION = 0.15; // must match QR_FRACTION in ArLayout.jsx
-const MODEL_SIZE = 1; // treat the QR's own side length as 1 unit -- everything else is relative to it
-// Matches the real physical card -- ISO/IEC 7810 ID-1 (86mm x 54mm, the
-// standard credit-card-shaped size, same as the actual NFC tap card),
-// NOT a paper business card (3.5in x 2in, which is what this used to be
-// set to -- wrong reference for this product). Must stay in sync with
-// both editors' own canvas aspect ratio, since saved percentage positions
-// are only meaningful relative to the same shape.
-const CARD_ASPECT = 86 / 54;
-const CARD_W_UNITS = 1 / QR_FRACTION;
-const CARD_H_UNITS = CARD_W_UNITS / CARD_ASPECT;
-// Base size (before the panel's own saved videoScaleX/videoScaleY) for
-// the AR Video/Photo 3D card -- shaped like the real card (CARD_ASPECT),
-// same base fraction of the card's width as the QR itself (QR_FRACTION),
-// so it reads as a small floating object next to the card rather than a
-// near-duplicate of it.
-const VIDEO_PLANE_BASE_W = CARD_W_UNITS * QR_FRACTION;
-const VIDEO_PLANE_BASE_H = VIDEO_PLANE_BASE_W / CARD_ASPECT;
-
-// Converts a saved (x%, y%) into a local offset (in the same QR-plane
-// units as MODEL_SIZE) relative to the QR's OWN saved position -- not a
-// fixed 50/50 center. The QR's own detected corners already define local
-// (0,0), so this just expresses "how far is this element from wherever
-// the QR itself is," matching what ArLayout.jsx's editor shows.
-function toLocalOffset(pos, qrPos) {
-  return [((pos.x - qrPos.x) / 100) * CARD_W_UNITS, -((pos.y - qrPos.y) / 100) * CARD_H_UNITS];
-}
-const ASSUMED_FOV_DEG = 62; // typical phone rear-camera vertical FOV -- not a real calibration, see plan notes
+// QR_FRACTION, MODEL_SIZE, CARD_ASPECT, CARD_W_UNITS, VIDEO_PLANE_BASE_W/H,
+// ASSUMED_FOV_DEG, toLocalOffset, and projectLocalPoint all live in
+// lib/arProjection.js now -- shared with ArScanPreview.jsx (the AR Layout
+// editors' static preview of this exact view) so the two can't silently
+// drift out of sync the way "must match X in file Y" comments used to
+// only hope for.
 const COAST_MS = 600; // keep last-known position visible this long after the QR drops out of frame
 // How much of each new pose reading to blend in per frame (0-1) -- lower
 // = smoother but laggier. Adaptive, not fixed: a flat value forces a
@@ -154,23 +141,6 @@ function quatSimilarity(a, b) {
   return Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]);
 }
 
-// Projects a point on the marker plane (in the same MODEL_SIZE units,
-// z=0) through a POSIT pose into real screen pixel coordinates, plus a
-// relative scale factor (1.0 at the QR's own depth, <1 further away,
-// >1 closer) so panel size responds to real perspective/foreshortening.
-function projectLocalPoint(pose, focalPx, centerX, centerY, [lx, ly, lz]) {
-  const move = [0, 1, 2].map(
-    (j) => pose.translation[j] + pose.rotation[j][0] * lx + pose.rotation[j][1] * ly + pose.rotation[j][2] * lz
-  );
-  if (move[2] <= 0) return null; // behind the camera -- shouldn't normally happen for a visible marker
-  const screenX = (focalPx * move[0]) / move[2];
-  const screenY = (focalPx * move[1]) / move[2];
-  return {
-    x: centerX + screenX,
-    y: centerY - screenY, // POSIT's model space is Y-up; screen space is Y-down
-    scale: pose.translation[2] / move[2],
-  };
-}
 
 // The 3D model ('model' key) is NOT in this list -- it's rendered by a
 // separate Three.js layer (see threeRef/updateModel below), not as flat
@@ -328,7 +298,7 @@ export default function ArView({ clientId }) {
           if (cancelled) return;
           const img = texture.image;
           const aspect = img && img.width && img.height ? img.width / img.height : 1;
-          const width = CARD_W_UNITS * 0.25;
+          const width = MODEL_IMAGE_BASE_W;
           const height = width / aspect;
           const geometry = new THREE.PlaneGeometry(width, height);
           const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide });
@@ -364,7 +334,7 @@ export default function ArView({ clientId }) {
           const box = new THREE.Box3().setFromObject(gltf.scene);
           const size = box.getSize(new THREE.Vector3());
           const maxDim = Math.max(size.x, size.y, size.z) || 1;
-          autoFitScaleRef.current = CARD_W_UNITS * 0.25 / maxDim;
+          autoFitScaleRef.current = MODEL_IMAGE_BASE_W / maxDim;
 
           loadedModelRef.current = gltf.scene;
           applyModelTransform();
@@ -483,8 +453,7 @@ export default function ArView({ clientId }) {
       // Focal length (in pixels) depends on canvas size, so the Posit
       // instance -- which is constructed with a fixed focal length --
       // needs rebuilding whenever the canvas resizes.
-      const fovRad = (ASSUMED_FOV_DEG * Math.PI) / 180;
-      focalPxRef.current = canvas.height / (2 * Math.tan(fovRad / 2));
+      focalPxRef.current = focalPxFor(canvas.height);
       positRef.current = new POS.Posit(MODEL_SIZE, focalPxRef.current);
 
       // Keep the (optional) 3D model layer's renderer/camera in sync with
