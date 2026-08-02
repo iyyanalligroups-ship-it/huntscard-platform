@@ -6,18 +6,46 @@ const FEATURES = [
   {
     title: 'Tap to share instantly',
     desc: 'One tap on any phone opens your profile — no app required for the person receiving it. Save Contact works everywhere, natively.',
+    // Same signal-arc + dot motif as the holo card mockup above -- this
+    // literally is the gesture the whole product is built around.
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <path d="M5 13a10 10 0 0 1 14 0" opacity="0.45" />
+        <path d="M7.5 16.3a6.2 6.2 0 0 1 9 0" />
+        <circle cx="12" cy="19.2" r="1.3" fill="currentColor" stroke="none" />
+      </svg>
+    ),
   },
   {
     title: 'Update anytime, card never changes',
     desc: 'Your physical card only stores a link. Change your phone number or add a new social link from your dashboard — it reflects immediately, no reprinting.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 11A8.1 8.1 0 0 0 6.3 6.3M4 4v5h5" />
+        <path d="M4 13a8.1 8.1 0 0 0 13.7 4.7M20 20v-5h-5" />
+      </svg>
+    ),
   },
   {
     title: 'Locked against tampering',
     desc: 'Every card is password-protected at the chip level the moment it\'s made. Nobody can overwrite your card\'s link but us.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="5" y="11" width="14" height="9" rx="2.2" />
+        <path d="M8 11V7.5a4 4 0 0 1 8 0V11" />
+      </svg>
+    ),
   },
   {
     title: 'Your page, your design',
     desc: 'Pick a banner design, add your photo and bio, and link out to Instagram, Twitter, your portfolio, and more.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3a9 9 0 1 0 6.4 15.4c.7-.7.3-1.9-.6-2.1l-.9-.2c-1.2-.3-1.6-1.8-.7-2.6l.3-.3a2 2 0 0 0-1.4-3.4H13a2.2 2.2 0 0 1-1.9-3.3c.4-.7.1-1.6-.6-2A9 9 0 0 0 12 3Z" />
+        <circle cx="7.8" cy="11" r="1" fill="currentColor" stroke="none" />
+        <circle cx="10.5" cy="7.3" r="1" fill="currentColor" stroke="none" />
+      </svg>
+    ),
   },
 ];
 
@@ -286,7 +314,7 @@ export default function Home() {
       <div className="feature-grid">
         {FEATURES.map((f) => (
           <div className="feature-card" key={f.title}>
-            <div className="feature-icon" />
+            <div className="feature-icon">{f.icon}</div>
             <h3>{f.title}</h3>
             <p>{f.desc}</p>
           </div>

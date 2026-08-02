@@ -37,8 +37,6 @@ export default function PublicProfile() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
-  const [qrOpen, setQrOpen] = useState(false);
-  const [arQrOpen, setArQrOpen] = useState(false);
   const [toast, setToast] = useState('');
   const toastTimeoutRef = useRef(null);
   const touchStartX = useRef(null);
@@ -325,32 +323,6 @@ export default function PublicProfile() {
 
           {currentKey === 'empty' && <div className="pv-empty">No additional details added yet.</div>}
         </div>
-
-        <div className="pv-qr-block">
-          <button className="pv-qr-toggle" onClick={() => setQrOpen((v) => !v)}>
-            <span>▦</span> Show QR code
-          </button>
-          {qrOpen && (
-            <div className="pv-qr-panel">
-              <img src={`${API_URL}/api/public/qr/${clientId}`} alt="QR code for this card" />
-              <p>Scan to open this card on another phone</p>
-            </div>
-          )}
-        </div>
-
-        {profile.arEnabled && (
-          <div className="pv-qr-block">
-            <button className="pv-qr-toggle" onClick={() => setArQrOpen((v) => !v)}>
-              <span>🥽</span> Show AR QR code
-            </button>
-            {arQrOpen && (
-              <div className="pv-qr-panel">
-                <img src={`${API_URL}/api/public/qr/${clientId}?type=ar`} alt="QR code to view this card in AR" />
-                <p>Scan in the HuntsAR World app to view this card in AR</p>
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="pv-footer-brand">
           <div className="pv-footer-mark" />

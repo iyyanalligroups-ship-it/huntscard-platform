@@ -37,11 +37,12 @@ const MODEL_SIZE = 1; // treat the QR's own side length as 1 unit -- everything 
 const CARD_ASPECT = 86 / 54;
 const CARD_W_UNITS = 1 / QR_FRACTION;
 const CARD_H_UNITS = CARD_W_UNITS / CARD_ASPECT;
-// Base size (before the panel's own saved videoScale) for the AR
-// Video/Photo 3D card -- shaped like the real card (CARD_ASPECT) but a
-// bit smaller than the full card, so it reads as its own floating object
-// next to the card rather than an exact overlapping duplicate.
-const VIDEO_PLANE_BASE_W = CARD_W_UNITS * 0.4;
+// Base size (before the panel's own saved videoScaleX/videoScaleY) for
+// the AR Video/Photo 3D card -- shaped like the real card (CARD_ASPECT),
+// same base fraction of the card's width as the QR itself (QR_FRACTION),
+// so it reads as a small floating object next to the card rather than a
+// near-duplicate of it.
+const VIDEO_PLANE_BASE_W = CARD_W_UNITS * QR_FRACTION;
 const VIDEO_PLANE_BASE_H = VIDEO_PLANE_BASE_W / CARD_ASPECT;
 
 // Converts a saved (x%, y%) into a local offset (in the same QR-plane
@@ -54,10 +55,24 @@ function toLocalOffset(pos, qrPos) {
 }
 const ASSUMED_FOV_DEG = 62; // typical phone rear-camera vertical FOV -- not a real calibration, see plan notes
 const COAST_MS = 600; // keep last-known position visible this long after the QR drops out of frame
-// How much of each new pose reading to blend in per frame (0-1). Raw
-// per-frame POSIT output is noisy enough (small QR-corner pixel jitter)
-// that panels visibly shake without this -- lower = smoother but laggier.
-const POSE_SMOOTHING = 0.35;
+// How much of each new pose reading to blend in per frame (0-1) -- lower
+// = smoother but laggier. Adaptive, not fixed: a flat value forces a
+// choice between "shakes when the phone is held still" (too responsive)
+// and "visibly lags behind real movement" (too damped). Instead, blend
+// LESS when the pose barely changed since last frame (that's sub-pixel
+// QR-corner detection noise, not real motion -- heavily damp it out) and
+// MORE when it changed a lot (that's the phone actually moving -- track
+// it quickly, don't lag).
+// Tuned toward smoothness over responsiveness -- ordinary handheld shake
+// while pointing a phone at a card is bigger and more continuous than
+// pure QR-corner detection noise, so it needs a wider "treat as noise"
+// band and a lower ceiling than the detection-noise-only case alone would.
+const POSE_SMOOTHING_MIN = 0.05;
+const POSE_SMOOTHING_MAX = 0.3;
+// Translation change (in QR-side-length units, MODEL_SIZE=1) below which
+// a frame-to-frame pose delta is treated as pure noise rather than real
+// movement, for the adaptive blend above.
+const JITTER_TRANSLATION_THRESHOLD = 0.08;
 
 // Rotation can't be smoothed by averaging matrix cells directly (that
 // produces a non-orthogonal, warped matrix) -- convert to a quaternion,
@@ -129,6 +144,14 @@ function slerp(qa, qb, t) {
 function normalizeQuat([x, y, z, w]) {
   const len = Math.hypot(x, y, z, w) || 1;
   return [x / len, y / len, z / len, w / len];
+}
+
+// |dot product| between two quaternions -- 1 means identical orientation
+// (or exactly opposite-signed representations of the same one, since q
+// and -q represent the same rotation), 0 means perpendicular. Used below
+// purely as a similarity measure, not to combine rotations.
+function quatSimilarity(a, b) {
+  return Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]);
 }
 
 // Projects a point on the marker plane (in the same MODEL_SIZE units,
@@ -290,39 +313,78 @@ export default function ArView({ clientId }) {
     setModelError('');
     if (!profile?.arModelUrl) return;
     let cancelled = false;
-    new GLTFLoader().load(
-      profile.arModelUrl,
-      (gltf) => {
-        if (cancelled) return;
-        // Normalize scale roughly to the card's own unit scale so an
-        // arbitrarily-authored GLB (could be modeled in meters, cm,
-        // anything) shows up at a reasonable size relative to the QR --
-        // not physically accurate, just a sane default. Computed once here
-        // (before any scale is applied) and kept in autoFitScaleRef so the
-        // transform effect below can re-derive scale later without ever
-        // measuring an already-scaled bounding box.
-        const box = new THREE.Box3().setFromObject(gltf.scene);
-        const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z) || 1;
-        autoFitScaleRef.current = CARD_W_UNITS * 0.25 / maxDim;
 
-        loadedModelRef.current = gltf.scene;
-        applyModelTransform();
-        if (threeRef.current) {
-          threeRef.current.modelGroup.clear();
-          threeRef.current.modelGroup.add(gltf.scene);
+    if (profile?.arModelType === 'image') {
+      // Flat cutout image case: same PlaneGeometry+MeshBasicMaterial
+      // technique the AR Video/Photo banner plane below already uses,
+      // just added to modelGroup instead of videoGroup so it inherits the
+      // model's own position/rotation/scale controls (applyModelTransform
+      // works unchanged here -- a Mesh has the same .scale/.rotation API
+      // a loaded gltf.scene does). Sized off the image's own aspect ratio
+      // so a non-square cutout doesn't stretch.
+      new THREE.TextureLoader().load(
+        profile.arModelUrl,
+        (texture) => {
+          if (cancelled) return;
+          const img = texture.image;
+          const aspect = img && img.width && img.height ? img.width / img.height : 1;
+          const width = CARD_W_UNITS * 0.25;
+          const height = width / aspect;
+          const geometry = new THREE.PlaneGeometry(width, height);
+          const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide });
+          const mesh = new THREE.Mesh(geometry, material);
+          // Already sized to the target on-card fraction above, unlike the
+          // GLTF case below which needs a computed autofit multiplier.
+          autoFitScaleRef.current = 1;
+          loadedModelRef.current = mesh;
+          applyModelTransform();
+          if (threeRef.current) {
+            threeRef.current.modelGroup.clear();
+            threeRef.current.modelGroup.add(mesh);
+          }
+        },
+        undefined,
+        (err) => {
+          console.error('[ArView] failed to load 3D model image', err);
+          if (!cancelled) setModelError('3D model image failed to load: ' + (err?.message || 'unknown error'));
         }
-      },
-      undefined,
-      (err) => {
-        console.error('[ArView] failed to load 3D model', err);
-        if (!cancelled) setModelError('3D model failed to load: ' + (err?.message || 'unknown error'));
-      }
-    );
+      );
+    } else {
+      new GLTFLoader().load(
+        profile.arModelUrl,
+        (gltf) => {
+          if (cancelled) return;
+          // Normalize scale roughly to the card's own unit scale so an
+          // arbitrarily-authored GLB (could be modeled in meters, cm,
+          // anything) shows up at a reasonable size relative to the QR --
+          // not physically accurate, just a sane default. Computed once here
+          // (before any scale is applied) and kept in autoFitScaleRef so the
+          // transform effect below can re-derive scale later without ever
+          // measuring an already-scaled bounding box.
+          const box = new THREE.Box3().setFromObject(gltf.scene);
+          const size = box.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z) || 1;
+          autoFitScaleRef.current = CARD_W_UNITS * 0.25 / maxDim;
+
+          loadedModelRef.current = gltf.scene;
+          applyModelTransform();
+          if (threeRef.current) {
+            threeRef.current.modelGroup.clear();
+            threeRef.current.modelGroup.add(gltf.scene);
+          }
+        },
+        undefined,
+        (err) => {
+          console.error('[ArView] failed to load 3D model', err);
+          if (!cancelled) setModelError('3D model failed to load: ' + (err?.message || 'unknown error'));
+        }
+      );
+    }
+
     return () => {
       cancelled = true;
     };
-  }, [profile?.arModelUrl]);
+  }, [profile?.arModelUrl, profile?.arModelType]);
 
   // Same idea as applyModelTransform above, for the AR Video/Photo panel's
   // own saved X/Y/Z rotation + scale -- static per-frame-independent
@@ -331,8 +393,12 @@ export default function ArView({ clientId }) {
   function applyVideoTransform() {
     const mesh = videoPlaneRef.current;
     if (!mesh) return;
-    const scale = layoutRef.current?.videoScale ?? 1;
-    mesh.scale.setScalar(scale);
+    // Independent X/Y scale (width/"length" vs height/"breadth"), unlike
+    // the model's uniform scale -- this is a rectangular card image, so
+    // stretching it non-uniformly is a real, useful adjustment.
+    const scaleX = layoutRef.current?.videoScaleX ?? 1;
+    const scaleY = layoutRef.current?.videoScaleY ?? 1;
+    mesh.scale.set(scaleX, scaleY, 1);
     const rotX = layoutRef.current?.videoRotationX ?? 0;
     const rotY = layoutRef.current?.videoRotationY ?? 0;
     const rotZ = layoutRef.current?.videoRotationZ ?? 0;
@@ -342,7 +408,7 @@ export default function ArView({ clientId }) {
 
   useEffect(() => {
     applyVideoTransform();
-  }, [layout?.videoRotationX, layout?.videoRotationY, layout?.videoRotationZ, layout?.videoScale]);
+  }, [layout?.videoRotationX, layout?.videoRotationY, layout?.videoRotationZ, layout?.videoScaleX, layout?.videoScaleY]);
 
   // Loads whichever media exists as a real 3D card -- a video (fed by an
   // off-DOM <video> element via VideoTexture) or a static photo, in that
@@ -372,28 +438,37 @@ export default function ArView({ clientId }) {
       }
     }
 
-    if (profile?.arVideoUrl) {
+    // Resolution order: the new one-slot "HuntsAR World Banner" field
+    // (video or image, arBannerType says which), else the legacy
+    // video-only field for clients who uploaded before the banner slot
+    // existed (implicitly 'video'), else the general profile photo as a
+    // last resort (implicitly 'image').
+    const bannerUrl = profile?.arBannerUrl || profile?.arVideoUrl;
+    const bannerType = profile?.arBannerUrl ? profile?.arBannerType : profile?.arVideoUrl ? 'video' : profile?.photoUrl ? 'image' : null;
+    const resolvedUrl = bannerUrl || profile?.photoUrl;
+
+    if (resolvedUrl && bannerType === 'video') {
       const videoEl = document.createElement('video');
       videoEl.muted = true;
       videoEl.loop = true;
       videoEl.playsInline = true;
-      videoEl.src = profile.arVideoUrl;
+      videoEl.src = resolvedUrl;
       // Autoplay can be rejected before any user gesture on some browsers
       // -- the texture just stays on its first/blank frame until playback
       // actually starts, not worth surfacing as an error.
       videoEl.play().catch(() => {});
       arContentVideoRef.current = videoEl;
       addPlane(new THREE.VideoTexture(videoEl));
-    } else if (profile?.photoUrl) {
-      new THREE.TextureLoader().load(profile.photoUrl, addPlane, undefined, (err) => {
-        console.error('[ArView] failed to load AR photo texture', err);
+    } else if (resolvedUrl) {
+      new THREE.TextureLoader().load(resolvedUrl, addPlane, undefined, (err) => {
+        console.error('[ArView] failed to load AR banner texture', err);
       });
     }
 
     return () => {
       cancelled = true;
     };
-  }, [profile?.arVideoUrl, profile?.photoUrl]);
+  }, [profile?.arBannerUrl, profile?.arBannerType, profile?.arVideoUrl, profile?.photoUrl]);
 
   useEffect(() => {
     let stream;
@@ -455,12 +530,17 @@ export default function ArView({ clientId }) {
     // Positions the 3D model at the same camera-space point the flat
     // panels' projectLocalPoint would compute for its saved (x%, y%), and
     // renders the scene -- same pose data as the flat panels, consumed as
-    // a real 3D transform instead of a 2D projection. The model's own
-    // rotation is left at identity (billboard-style, like the flat
-    // panels and the reference videos' avatar) -- only its position
-    // responds to the pose, which still produces correct parallax/depth
-    // as the camera moves, since the object's position relative to the
-    // fixed virtual camera changes correctly every frame.
+    // a real 3D transform instead of a 2D projection. The GROUP's own
+    // orientation is deliberately left at identity -- only position
+    // tracks the detected pose. The model's own saved rotation (applied
+    // to the mesh, a child of this group, in applyModelTransform) is a
+    // fixed tilt in camera space, unaffected by which way the phone
+    // happens to be facing the card. This was tried the other way
+    // (composing with the live pose so it tilts flush with the card's
+    // real surface) and reverted -- webcam-grade QR-corner tracking is
+    // too noisy for that to read as anything but twitchy; a fixed
+    // orientation that only re-centers as you move reads as far more
+    // premium/stable, same principle most commercial AR card apps use.
     function updateModel(rotation, translation) {
       const three = threeRef.current;
       if (!three || !three.modelGroup.children.length) return;
@@ -475,7 +555,8 @@ export default function ArView({ clientId }) {
 
     // Same positioning as updateModel above, for the AR Video/Photo 3D
     // card -- same pose data, same position-only tracking (its own
-    // rotation is set once elsewhere, see applyVideoTransform).
+    // rotation is set once elsewhere, see applyVideoTransform, and
+    // deliberately doesn't track the live pose -- see updateModel above).
     function updateVideoPlane(rotation, translation) {
       const three = threeRef.current;
       if (!three || !three.videoGroup.children.length) return;
@@ -499,15 +580,73 @@ export default function ArView({ clientId }) {
       const imagePoints = corners.map((c) => ({ x: c.x - cx, y: -(c.y - cy) }));
 
       const result = positRef.current.pose(imagePoints);
-      const rawQuat = matrixToQuaternion(result.bestRotation);
-
       const prev = smoothRef.current;
-      const smoothed = prev
-        ? {
-            quat: slerp(prev.quat, rawQuat, POSE_SMOOTHING),
-            translation: prev.translation.map((v, i) => v + (result.bestTranslation[i] - v) * POSE_SMOOTHING),
-          }
-        : { quat: rawQuat, translation: result.bestTranslation };
+
+      // POSIT is fundamentally ambiguous for a roughly-square planar
+      // marker viewed at an angle -- it always computes TWO candidate
+      // poses (result.bestRotation/Translation and .alternativeRotation/
+      // Translation) and picks whichever fits this frame's pixels
+      // better. Near the ambiguous zone the two solutions' errors are
+      // nearly tied, so trusting "lower error, every single frame" flips
+      // between two very different orientations on tiny detection noise
+      // -- which reads as the AR content suddenly "turning" as the phone
+      // tilts, even though nothing here rotates the mesh directly
+      // (see applyModelTransform/applyVideoTransform). Instead, when a
+      // valid alternative exists, prefer whichever candidate is closer
+      // to LAST frame's actual orientation (temporal continuity) over
+      // whichever merely reprojects best this instant -- the standard
+      // fix for this class of two-solution PnP ambiguity.
+      const bestQuat = matrixToQuaternion(result.bestRotation);
+      let rawQuat = bestQuat;
+      let rawTranslation = result.bestTranslation;
+      if (prev && result.alternativeError >= 0) {
+        const altQuat = matrixToQuaternion(result.alternativeRotation);
+        if (quatSimilarity(altQuat, prev.quat) > quatSimilarity(bestQuat, prev.quat)) {
+          rawQuat = altQuat;
+          rawTranslation = result.alternativeTranslation;
+        }
+      }
+
+      // Outlier rejection -- a second line of defense beyond the
+      // disambiguation above. If even the temporally-closer candidate
+      // still differs wildly from last frame (a translation jump far
+      // beyond anything a hand could produce in ~33ms, or an orientation
+      // more than ~120 degrees off), this frame's corner detection is
+      // more likely a bad read -- motion blur, a partial/angled view of
+      // the QR right at POSIT's least-reliable range -- than real
+      // movement. Freeze on the last good pose (skip this frame's
+      // update entirely) rather than snap to a probably-wrong one; the
+      // next frame gets another chance to confirm before anything moves.
+      const MAX_PLAUSIBLE_JUMP = 0.6; // QR-side-length units (MODEL_SIZE = 1) per frame
+      const MIN_PLAUSIBLE_ROTATION_SIMILARITY = 0.5; // |quat dot| -- below this is >~120 degrees in one frame
+      if (prev) {
+        const jumpDist = Math.hypot(
+          rawTranslation[0] - prev.translation[0],
+          rawTranslation[1] - prev.translation[1],
+          rawTranslation[2] - prev.translation[2]
+        );
+        if (jumpDist > MAX_PLAUSIBLE_JUMP || quatSimilarity(rawQuat, prev.quat) < MIN_PLAUSIBLE_ROTATION_SIMILARITY) {
+          lastSeenRef.current = performance.now();
+          setVisible(true);
+          return;
+        }
+      }
+
+      let smoothed;
+      if (prev) {
+        const dx = rawTranslation[0] - prev.translation[0];
+        const dy = rawTranslation[1] - prev.translation[1];
+        const dz = rawTranslation[2] - prev.translation[2];
+        const moveDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const t = Math.min(1, moveDist / JITTER_TRANSLATION_THRESHOLD);
+        const smoothingFactor = POSE_SMOOTHING_MIN + (POSE_SMOOTHING_MAX - POSE_SMOOTHING_MIN) * t;
+        smoothed = {
+          quat: slerp(prev.quat, rawQuat, smoothingFactor),
+          translation: prev.translation.map((v, i) => v + (rawTranslation[i] - v) * smoothingFactor),
+        };
+      } else {
+        smoothed = { quat: rawQuat, translation: rawTranslation };
+      }
       smoothRef.current = smoothed;
 
       const smoothedRotation = quaternionToMatrix(smoothed.quat);
@@ -669,14 +808,15 @@ export default function ArView({ clientId }) {
             const canvas = canvasRef.current;
             const proj = projectLocalPoint(pose, focalPxRef.current, canvas.width / 2, canvas.height / 2, local);
             if (!proj) return null;
-            const hasVideo = el.key === 'video' && profile.arVideoUrl;
-            const hasPhoto = el.key === 'video' && !hasVideo && profile.photoUrl;
-            // Once there's real media, the AR Video/Photo panel is a real
+            // Once there's real media -- the new one-slot banner (video or
+            // image), the legacy video-only field, or the general profile
+            // photo as a last resort -- the AR Video/Photo panel is a real
             // 3D card rendered by the Three.js layer below (see
             // videoGroup/updateVideoPlane), not a flat HTML billboard --
             // same split 'model' already has between this flat loop and
             // its own Three.js layer.
-            if (hasVideo || hasPhoto) return null;
+            const hasBannerMedia = el.key === 'video' && (profile.arBannerUrl || profile.arVideoUrl || profile.photoUrl);
+            if (hasBannerMedia) return null;
             // Admin-uploaded logo (see ArIcon model) -- only relevant once
             // neither real photo/video content applies, same as the plain
             // text label it replaces.
@@ -725,9 +865,18 @@ export default function ArView({ clientId }) {
                 key={el.key}
                 style={{
                   position: 'fixed',
-                  left: proj.x,
-                  top: proj.y,
-                  transform: `translate(-50%, -50%) scale(${proj.scale})`,
+                  left: 0,
+                  top: 0,
+                  // left/top would force the browser to recompute layout
+                  // every single frame (60fps) -- moved into the transform
+                  // itself (translate3d, not translate) so the browser can
+                  // composite this on the GPU instead, same as the 3D
+                  // layer next to it already gets "for free" from WebGL.
+                  // This was the actual cause of the flat panels visibly
+                  // shaking more than the 3D model/video card, even though
+                  // both consume the exact same smoothed pose data.
+                  transform: `translate3d(${proj.x}px, ${proj.y}px, 0) translate(-50%, -50%) scale(${proj.scale})`,
+                  willChange: 'transform',
                 }}
               >
                 {isSocial ? (

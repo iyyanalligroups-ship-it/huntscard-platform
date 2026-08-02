@@ -144,7 +144,7 @@ export default function PublicLayout() {
                 <span className="status-dot" />
                 ONLINE
               </span>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 12 }}>
                 {loggedIn ? (
                   <button className="pill-outline" onClick={handleLogout}>
                     Log out

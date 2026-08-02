@@ -1,5 +1,8 @@
 const express = require('express');
 const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const { nanoid } = require('nanoid');
 const Razorpay = require('razorpay');
@@ -32,7 +35,9 @@ function generateTempPassword() {
 // names/prices aren't sensitive -- same info a public pricing page would
 // show -- so this is deliberately unauthenticated.
 router.get('/plans', async (req, res) => {
-  const plans = await CardPlan.find({ active: true }).select('name key price priceAmount description images').sort({ createdAt: 1 });
+  const plans = await CardPlan.find({ active: true })
+    .select('name key price priceAmount description images variants requiresDesignUpload')
+    .sort({ createdAt: 1 });
   // chargeAmount is what checkout actually uses -- priceAmount if admin set
   // it, else a plain-number `price` (e.g. "499") parsed as a fallback. Sent
   // as its own field so the frontend doesn't have to duplicate that parsing.
@@ -116,7 +121,10 @@ router.post('/shop-confirm', async (req, res) => {
   try {
     if (!process.env.RAZORPAY_KEY_SECRET) return res.status(503).json({ error: 'Payments are not configured yet.' });
 
-    const { requestedPlan, fullName, loginEmail, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const {
+      requestedPlan, fullName, loginEmail, razorpay_order_id, razorpay_payment_id, razorpay_signature,
+      cardVariantId, designFrontUrl, designBackUrl,
+    } = req.body;
     if (!requestedPlan || !fullName || !loginEmail || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -128,6 +136,17 @@ router.post('/shop-confirm', async (req, res) => {
 
     if (expectedSignature !== razorpay_signature) {
       return res.status(400).json({ error: 'Payment verification failed -- signature mismatch.' });
+    }
+
+    const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase() });
+    if (!plan) return res.status(400).json({ error: 'requestedPlan must match an existing card plan' });
+    if (plan.variants.length > 0) {
+      if (!cardVariantId || !plan.variants.some((v) => v._id.toString() === cardVariantId)) {
+        return res.status(400).json({ error: 'A valid card variant must be selected for this plan.' });
+      }
+    }
+    if (plan.requiresDesignUpload && (!designFrontUrl || !designBackUrl)) {
+      return res.status(400).json({ error: 'Front and back design uploads are required for this plan.' });
     }
 
     const existing = await Client.findOne({ loginEmail: loginEmail.toLowerCase() });
@@ -150,6 +169,9 @@ router.post('/shop-confirm', async (req, res) => {
       passwordHash,
       fullName,
       cardType: requestedPlan.toLowerCase(),
+      cardVariantId: plan.variants.length > 0 ? cardVariantId : null,
+      customDesignFrontUrl: plan.requiresDesignUpload ? designFrontUrl : null,
+      customDesignBackUrl: plan.requiresDesignUpload ? designBackUrl : null,
       paid: true,
       mustChangePassword: true,
     });
@@ -175,6 +197,49 @@ router.post('/shop-confirm', async (req, res) => {
     console.error('[public/shop-confirm POST]', err);
     res.status(500).json({ error: 'Failed to confirm payment' });
   }
+});
+
+// -----------------------------------------------------------------------
+// Custom plan design upload -- front/back artwork the customer supplies
+// at Shop checkout, printed as-is on their card. Public (no auth), same
+// trust model as shop-order/shop-confirm above -- an unauthenticated
+// buyer has no token to gate behind at this point in the flow. Upload
+// happens immediately on file-select (mirroring the AR upload pattern in
+// profile.js): this returns just a URL, which the frontend holds in
+// React state and includes in shop-confirm / upgrade-confirm /
+// new-card-confirm once payment actually completes.
+// -----------------------------------------------------------------------
+
+const DESIGN_UPLOADS_DIR = path.join(__dirname, '..', 'uploads', 'designs');
+fs.mkdirSync(DESIGN_UPLOADS_DIR, { recursive: true });
+const DESIGN_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const designStorage = multer.diskStorage({
+  destination: DESIGN_UPLOADS_DIR,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `design-${crypto.randomBytes(8).toString('hex')}${ext}`);
+  },
+});
+const uploadDesign = multer({
+  storage: designStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB -- print artwork runs larger than a profile photo
+  fileFilter: (req, file, cb) => {
+    if (!DESIGN_MIME_TYPES.includes(file.mimetype)) {
+      return cb(new Error('Only JPEG, PNG, or WEBP images are allowed'));
+    }
+    cb(null, true);
+  },
+});
+
+// POST /api/public/design-upload -- multipart/form-data, field "design"
+router.post('/design-upload', (req, res) => {
+  uploadDesign.single('design')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 10MB.' : err.message });
+    }
+    if (!req.file) return res.status(400).json({ error: 'No file received' });
+    res.json({ url: `${process.env.BACKEND_URL}/uploads/designs/${req.file.filename}` });
+  });
 });
 
 // -----------------------------------------------------------------------
@@ -210,7 +275,7 @@ router.get('/profile/:clientId', async (req, res) => {
     { $inc: { tapCount: 1 } }, // simple tap analytics, per the report's spec
     { new: true }
   ).select(
-    'fullName jobTitle bio photoUrl bannerUrl arVideoUrl arModelUrl phone whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType clientId'
+    'fullName jobTitle bio photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType clientId'
   );
 
   if (!client) {
@@ -359,6 +424,17 @@ router.get('/attributes', async (req, res) => {
 //     to reissue a new QR image later.
 const QRCode = require('qrcode');
 
+// ?fg=/?bg= let the admin match the QR's colors to a physical card design
+// before printing (see admin Clients.jsx) -- plain 6-digit hex, no '#',
+// so it's a clean query param. Validated rather than passed straight
+// through, since this ends up inside a generated image, not user-facing
+// text -- an invalid value just falls back to the standard black-on-white
+// instead of erroring the whole download.
+const HEX_COLOR_RE = /^[0-9a-fA-F]{6}$/;
+function hexColorParam(value, fallback) {
+  return HEX_COLOR_RE.test(value || '') ? `#${value}` : fallback;
+}
+
 router.get('/qr/:clientId', async (req, res) => {
   try {
     const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId');
@@ -368,8 +444,20 @@ router.get('/qr/:clientId', async (req, res) => {
     const type = req.query.type === 'ar' ? 'ar' : 'profile';
     const url = type === 'ar' ? `${base}/c/${client.clientId}?ar=1` : `${base}/c/${client.clientId}`;
 
+    const dark = hexColorParam(req.query.fg, '#000000');
+    let light = hexColorParam(req.query.bg, '#ffffff');
+    // ?transparent=1 -- no background at all, so the QR can sit directly
+    // on a colored/printed card without a visible box behind it. The
+    // qrcode library accepts an 8-digit RRGGBBAA hex (see its own
+    // hex2rgba) -- appending a 00 alpha byte to whichever background hex
+    // was already resolved (chosen or default) makes it fully transparent
+    // while keeping the same dark/light validation path for both cases.
+    if (req.query.transparent === '1' || req.query.transparent === 'true') {
+      light += '00';
+    }
+
     res.setHeader('Content-Type', 'image/png');
-    QRCode.toFileStream(res, url, { width: 512, margin: 2 });
+    QRCode.toFileStream(res, url, { width: 512, margin: 2, color: { dark, light } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

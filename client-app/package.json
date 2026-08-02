@@ -14,6 +14,7 @@
     "jsqr": "^1.4.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-medium-image-zoom": "^5.4.8",
     "react-router-dom": "^6.26.0",
     "three": "^0.185.1",
     "xlsx": "^0.18.5"

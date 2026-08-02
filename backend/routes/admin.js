@@ -14,6 +14,7 @@ const ArIcon = require('../models/ArIcon');
 const AttributeDefinition = require('../models/AttributeDefinition');
 const CardRequest = require('../models/CardRequest');
 const ContactMessage = require('../models/ContactMessage');
+const Contact = require('../models/Contact');
 const CatalogVideo = require('../models/CatalogVideo');
 
 const router = express.Router();
@@ -223,14 +224,44 @@ router.get('/plans', requireAdmin, async (req, res) => {
   res.json(plans);
 });
 
+// Shared validation for a plan's `variants` array -- used by both create
+// and edit below. Each entry needs a non-empty name and a real shape;
+// anything else means the request is malformed, not just "some fields
+// missing" (there's no partial-variant concept).
+function validateVariants(variants) {
+  if (!Array.isArray(variants)) return 'variants must be an array';
+  for (const v of variants) {
+    if (!v || typeof v.name !== 'string' || !v.name.trim()) {
+      return 'Each variant needs a non-empty name';
+    }
+    if (!['horizontal', 'vertical'].includes(v.shape)) {
+      return 'Each variant needs a shape of "horizontal" or "vertical"';
+    }
+  }
+  return null;
+}
+
 // POST /api/admin/plans
 router.post('/plans', requireAdmin, (req, res) => {
   uploadPlanImages.array('images', 6)(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
 
     try {
-      const { name, price, priceAmount, description, arEnabled, zingEnabled } = req.body;
+      const { name, price, priceAmount, description, arEnabled, zingEnabled, requiresDesignUpload, variants } = req.body;
       if (!name) return res.status(400).json({ error: 'name is required' });
+
+      // multipart/form-data can't carry a real nested array -- the
+      // frontend sends `variants` as a JSON string, parsed here.
+      let parsedVariants = [];
+      if (variants) {
+        try {
+          parsedVariants = JSON.parse(variants);
+        } catch {
+          return res.status(400).json({ error: 'variants must be valid JSON' });
+        }
+        const variantError = validateVariants(parsedVariants);
+        if (variantError) return res.status(400).json({ error: variantError });
+      }
 
       let key = slugify(name);
       // Handle a name that collapses to an existing key (e.g. "Elite" and
@@ -249,6 +280,8 @@ router.post('/plans', requireAdmin, (req, res) => {
         images,
         arEnabled: arEnabled === 'true' || arEnabled === true,
         zingEnabled: zingEnabled === 'true' || zingEnabled === true,
+        variants: parsedVariants,
+        requiresDesignUpload: requiresDesignUpload === 'true' || requiresDesignUpload === true,
       });
       res.status(201).json(plan);
     } catch (err2) {
@@ -262,9 +295,19 @@ router.post('/plans', requireAdmin, (req, res) => {
 // Deliberately no DELETE: retiring a plan (active: false) keeps it valid
 // for clients already assigned to it, just removes it from the "create
 // client" dropdown going forward.
+//
+// `variants` is a WHOLE-ARRAY REPLACE, not a merge -- the admin frontend
+// must send back the existing `_id` for every variant row it isn't newly
+// adding. Mongoose only keeps a subdocument's `_id` stable if the object
+// sent still carries that `_id`; omitting it mints a brand new one on
+// save, which silently orphans any Client.cardVariantId already pointing
+// at the old one. This is enforced client-side (Plans.jsx always
+// round-trips loaded variant `_id`s), not re-validated here -- there's no
+// way to distinguish "intentionally re-created variant" from "frontend
+// bug that dropped the id" from the server side alone.
 router.patch('/plans/:id', requireAdmin, async (req, res) => {
   try {
-    const { name, price, priceAmount, description, active, arEnabled, zingEnabled } = req.body;
+    const { name, price, priceAmount, description, active, arEnabled, zingEnabled, requiresDesignUpload, variants } = req.body;
     const updates = {};
     if (name !== undefined) updates.name = name;
     if (price !== undefined) updates.price = price;
@@ -273,6 +316,12 @@ router.patch('/plans/:id', requireAdmin, async (req, res) => {
     if (active !== undefined) updates.active = active;
     if (arEnabled !== undefined) updates.arEnabled = arEnabled === 'true' || arEnabled === true;
     if (zingEnabled !== undefined) updates.zingEnabled = zingEnabled === 'true' || zingEnabled === true;
+    if (requiresDesignUpload !== undefined) updates.requiresDesignUpload = requiresDesignUpload === 'true' || requiresDesignUpload === true;
+    if (variants !== undefined) {
+      const variantError = validateVariants(variants);
+      if (variantError) return res.status(400).json({ error: variantError });
+      updates.variants = variants;
+    }
 
     const plan = await CardPlan.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
     if (!plan) return res.status(404).json({ error: 'Plan not found' });
@@ -366,14 +415,21 @@ router.delete('/plans/:id/images', requireAdmin, async (req, res) => {
 // this call. Admin is responsible for passing it on to the client.
 router.post('/clients', requireAdmin, async (req, res) => {
   try {
-    const { fullName, loginEmail, cardType, phone } = req.body;
+    const { fullName, loginEmail, cardType, phone, cardVariantId } = req.body;
     if (!fullName || !loginEmail) {
       return res.status(400).json({ error: 'fullName and loginEmail are required' });
     }
 
+    let resolvedVariantId = null;
     if (cardType) {
       const plan = await CardPlan.findOne({ key: cardType.toLowerCase(), active: true });
       if (!plan) return res.status(400).json({ error: 'cardType must match an active card plan' });
+      if (cardVariantId) {
+        if (!plan.variants.some((v) => v._id.toString() === cardVariantId)) {
+          return res.status(400).json({ error: 'cardVariantId must match a variant on the selected plan' });
+        }
+        resolvedVariantId = cardVariantId;
+      }
     }
 
     const existing = await Client.findOne({ loginEmail: loginEmail.toLowerCase() });
@@ -392,6 +448,7 @@ router.post('/clients', requireAdmin, async (req, res) => {
       fullName,
       phone,
       cardType: cardType ? cardType.toLowerCase() : null,
+      cardVariantId: resolvedVariantId,
       mustChangePassword: true,
     });
 
@@ -416,9 +473,19 @@ router.get('/clients', requireAdmin, async (req, res) => {
     filter.chipEncoded = false;
   }
   const clients = await Client.find(filter)
-    .select('clientId fullName loginEmail phone cardType paid blocked chipEncoded encodedAt encodedBy createdAt')
+    .select('clientId fullName loginEmail phone gender dateOfBirth cardType logoUrl paid blocked chipEncoded encodedAt encodedBy createdAt')
     .sort({ createdAt: -1 });
   res.json(clients);
+});
+
+// GET /api/admin/clients/:clientId -- one client's full detail, for the
+// admin's per-client detail page (see client-app... err, admin
+// ClientDetail.jsx). Same field whitelist as the list route above.
+router.get('/clients/:clientId', requireAdmin, async (req, res) => {
+  const client = await Client.findOne({ clientId: req.params.clientId })
+    .select('clientId fullName loginEmail phone gender dateOfBirth cardType logoUrl paid blocked chipEncoded encodedAt encodedBy createdAt');
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  res.json(client);
 });
 
 // PATCH /api/admin/clients/:clientId/paid
@@ -441,7 +508,7 @@ router.patch('/clients/:clientId/paid', requireAdmin, async (req, res) => {
 router.patch('/clients/:clientId', requireAdmin, async (req, res) => {
   try {
     const {
-      fullName, loginEmail, phone, cardType, blocked,
+      fullName, loginEmail, phone, cardType, cardVariantId, blocked,
       jobTitle, bio, whatsapp, publicEmail, instagramUrl, twitterUrl, portfolioUrl, huntsworldUrl,
       chipEncoded,
     } = req.body;
@@ -478,8 +545,31 @@ router.patch('/clients/:clientId', requireAdmin, async (req, res) => {
       if (cardType) {
         const plan = await CardPlan.findOne({ key: cardType.toLowerCase() });
         if (!plan) return res.status(400).json({ error: 'cardType must match an existing card plan' });
+        if (cardVariantId) {
+          if (!plan.variants.some((v) => v._id.toString() === cardVariantId)) {
+            return res.status(400).json({ error: 'cardVariantId must match a variant on the selected plan' });
+          }
+          updates.cardVariantId = cardVariantId;
+        } else if (cardVariantId !== undefined) {
+          updates.cardVariantId = null;
+        }
+      } else {
+        // Clearing the plan clears whatever variant it was carrying too.
+        updates.cardVariantId = null;
       }
       updates.cardType = cardType ? cardType.toLowerCase() : null;
+    } else if (cardVariantId !== undefined) {
+      // cardType isn't changing -- validate the variant against the
+      // client's CURRENT plan instead.
+      const existingClient = await Client.findOne({ clientId: req.params.clientId }).select('cardType');
+      if (!existingClient) return res.status(404).json({ error: 'Client not found' });
+      if (cardVariantId) {
+        const plan = existingClient.cardType ? await CardPlan.findOne({ key: existingClient.cardType }) : null;
+        if (!plan || !plan.variants.some((v) => v._id.toString() === cardVariantId)) {
+          return res.status(400).json({ error: "cardVariantId must match a variant on the client's current plan" });
+        }
+      }
+      updates.cardVariantId = cardVariantId || null;
     }
 
     const client = await Client.findOneAndUpdate(
@@ -509,6 +599,20 @@ router.delete('/clients/:clientId', requireAdmin, async (req, res) => {
   const client = await Client.findOneAndDelete({ clientId: req.params.clientId });
   if (!client) return res.status(404).json({ error: 'Client not found' });
   res.json({ ok: true, wasEncoded: client.chipEncoded });
+});
+
+// GET /api/admin/clients/:clientId/contacts -- read-only view into a
+// client's own phone-contacts backup (see models/Contact.js, normally
+// strictly private to that client -- see routes/contacts.js). Admin
+// visibility into this data, per explicit request, is the groundwork for
+// later cross-referencing the same phone number across multiple clients'
+// contacts (a caller-ID-style lookup) -- that cross-client matching isn't
+// built yet, this is just the per-client read.
+router.get('/clients/:clientId/contacts', requireAdmin, async (req, res) => {
+  const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId fullName');
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const contacts = await Contact.find({ clientId: req.params.clientId }).sort({ name: 1 });
+  res.json({ client: { clientId: client.clientId, fullName: client.fullName }, contacts });
 });
 
 // -----------------------------------------------------------------------
@@ -810,7 +914,8 @@ router.put('/ar-layout', requireAdmin, async (req, res) => {
       videoRotationX,
       videoRotationY,
       videoRotationZ,
-      videoScale,
+      videoScaleX,
+      videoScaleY,
     } = req.body || {};
     const updates = { updatedBy: req.admin?.email || 'unknown' };
     if (qr) updates.qr = qr;
@@ -827,7 +932,8 @@ router.put('/ar-layout', requireAdmin, async (req, res) => {
     if (videoRotationX !== undefined) updates.videoRotationX = videoRotationX;
     if (videoRotationY !== undefined) updates.videoRotationY = videoRotationY;
     if (videoRotationZ !== undefined) updates.videoRotationZ = videoRotationZ;
-    if (videoScale !== undefined) updates.videoScale = videoScale;
+    if (videoScaleX !== undefined) updates.videoScaleX = videoScaleX;
+    if (videoScaleY !== undefined) updates.videoScaleY = videoScaleY;
 
     const layout = await ArLayout.findOneAndUpdate(
       { key: 'global' },

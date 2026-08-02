@@ -63,6 +63,10 @@ export default function Shop() {
   const [plans, setPlans] = useState([]);
   const [myProfile, setMyProfile] = useState(null);
   const [selectedKey, setSelectedKey] = useState('');
+  const [selectedVariantId, setSelectedVariantId] = useState('');
+  const [designFrontUrl, setDesignFrontUrl] = useState('');
+  const [designBackUrl, setDesignBackUrl] = useState('');
+  const [uploadingDesign, setUploadingDesign] = useState(null); // 'front' | 'back' | null
   const [quantity, setQuantity] = useState(1);
   const [forSomeoneElse, setForSomeoneElse] = useState(false);
   const [fullName, setFullName] = useState('');
@@ -107,11 +111,29 @@ export default function Shop() {
       return;
     }
     setSelectedKey(key);
+    setSelectedVariantId('');
+    setDesignFrontUrl('');
+    setDesignBackUrl('');
     setQuantity(1);
     setError('');
     setHandoff(null);
     setUpgraded(false);
     setTimeout(() => document.getElementById('checkout-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }
+
+  async function handleDesignUpload(side, file) {
+    if (!file) return;
+    setUploadingDesign(side);
+    setError('');
+    try {
+      const { url } = await api.uploadDesign(file);
+      if (side === 'front') setDesignFrontUrl(url);
+      else setDesignBackUrl(url);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploadingDesign(null);
+    }
   }
 
   const MAX_QUANTITY = 20; // matches the backend's cap
@@ -147,6 +169,9 @@ export default function Shop() {
     });
   }
 
+  const variantOk = !selectedPlan?.variants?.length || Boolean(selectedVariantId);
+  const designOk = !selectedPlan?.requiresDesignUpload || Boolean(designFrontUrl && designBackUrl);
+
   async function handleCheckout(e) {
     e.preventDefault();
     if (!loggedIn || !selectedPlan) return;
@@ -154,6 +179,14 @@ export default function Shop() {
 
     if (!selectedPlan.chargeAmount) {
       setError('This plan isn\'t available for instant checkout yet — please contact us to order it.');
+      return;
+    }
+    if (!variantOk) {
+      setError('Choose a card style before checking out.');
+      return;
+    }
+    if (!designOk) {
+      setError('Upload both a front and back design before checking out.');
       return;
     }
 
@@ -173,6 +206,9 @@ export default function Shop() {
               requestedPlan: selectedKey,
               recipientName: fullName,
               recipientEmail: loginEmail,
+              cardVariantId: selectedVariantId || undefined,
+              designFrontUrl: designFrontUrl || undefined,
+              designBackUrl: designBackUrl || undefined,
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
@@ -190,6 +226,9 @@ export default function Shop() {
           confirmPayment: (response) =>
             api.confirmUpgradePayment({
               requestedPlan: selectedKey,
+              cardVariantId: selectedVariantId || undefined,
+              designFrontUrl: designFrontUrl || undefined,
+              designBackUrl: designBackUrl || undefined,
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
@@ -202,6 +241,9 @@ export default function Shop() {
         setRequests(reqs.filter((r) => r.type === 'upgrade'));
       }
       setSelectedKey('');
+      setSelectedVariantId('');
+      setDesignFrontUrl('');
+      setDesignBackUrl('');
       setQuantity(1);
     } catch (err) {
       setError(err.message);
@@ -364,6 +406,57 @@ export default function Shop() {
             {error && <div className="error-banner">{error}</div>}
 
             <form onSubmit={handleCheckout}>
+              {selectedPlan.variants?.length > 0 && (
+                <div className="field">
+                  <label htmlFor="cardVariant">Card style</label>
+                  <select
+                    id="cardVariant"
+                    value={selectedVariantId}
+                    onChange={(e) => setSelectedVariantId(e.target.value)}
+                    required
+                  >
+                    <option value="">Choose a style…</option>
+                    {selectedPlan.variants.map((v) => (
+                      <option key={v._id} value={v._id}>
+                        {v.name} — {v.shape === 'vertical' ? 'Vertical' : 'Horizontal'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {selectedPlan.requiresDesignUpload && (
+                <>
+                  <div className="field">
+                    <label htmlFor="designFront">Front design (image)</label>
+                    <input
+                      id="designFront"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(e) => handleDesignUpload('front', e.target.files[0])}
+                      disabled={uploadingDesign === 'front'}
+                    />
+                    {uploadingDesign === 'front' && <p className="hint">Uploading…</p>}
+                    {designFrontUrl && (
+                      <img src={designFrontUrl} alt="Front design preview" style={{ width: 120, marginTop: 8, borderRadius: 6 }} />
+                    )}
+                  </div>
+                  <div className="field">
+                    <label htmlFor="designBack">Back design (image)</label>
+                    <input
+                      id="designBack"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(e) => handleDesignUpload('back', e.target.files[0])}
+                      disabled={uploadingDesign === 'back'}
+                    />
+                    {uploadingDesign === 'back' && <p className="hint">Uploading…</p>}
+                    {designBackUrl && (
+                      <img src={designBackUrl} alt="Back design preview" style={{ width: 120, marginTop: 8, borderRadius: 6 }} />
+                    )}
+                  </div>
+                  <p className="hint">We'll print this artwork on your card exactly as uploaded.</p>
+                </>
+              )}
               {selectedPlan.chargeAmount && (
                 <div className="field">
                   <label htmlFor="cardQuantity">
@@ -429,12 +522,16 @@ export default function Shop() {
                   </div>
                 </>
               )}
-              <button type="submit" disabled={submitting || !selectedPlan.chargeAmount}>
+              <button type="submit" disabled={submitting || !selectedPlan.chargeAmount || !variantOk || !designOk}>
                 {submitting
                   ? 'Waiting for payment…'
-                  : totalAmount
-                  ? `Pay ₹${totalAmount}`
-                  : 'Not available for instant checkout'}
+                  : !selectedPlan.chargeAmount
+                  ? 'Not available for instant checkout'
+                  : !variantOk
+                  ? 'Choose a card style'
+                  : !designOk
+                  ? 'Upload front & back design'
+                  : `Pay ₹${totalAmount}`}
               </button>
             </form>
             {!selectedPlan.chargeAmount && (

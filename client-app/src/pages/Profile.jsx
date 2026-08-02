@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import '@google/model-viewer'; // registers the <model-viewer> custom element used for the 3D model preview below
+import Zoom from 'react-medium-image-zoom';
+import 'react-medium-image-zoom/dist/styles.css';
 import { api } from '../api.js';
 
 // Name/job title stay above the tabs, same as the photo/banner -- they're
@@ -56,16 +58,21 @@ export default function Profile() {
   const [bannerUploading, setBannerUploading] = useState(false);
   const [bannerSaved, setBannerSaved] = useState(false);
   const [bannerPreviewUrl, setBannerPreviewUrl] = useState(null);
-  const [arVideoUploading, setArVideoUploading] = useState(false);
-  const [arVideoSaved, setArVideoSaved] = useState(false);
-  const [arVideoPreviewUrl, setArVideoPreviewUrl] = useState(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoSaved, setLogoSaved] = useState(false);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState(null);
+  const [arBannerUploading, setArBannerUploading] = useState(false);
+  const [arBannerSaved, setArBannerSaved] = useState(false);
+  const [arBannerPreviewUrl, setArBannerPreviewUrl] = useState(null);
+  const [arBannerPreviewType, setArBannerPreviewType] = useState(null); // 'video' | 'image' -- only needed for the LOCAL preview before the server's own arBannerType comes back
   const [arModelUploading, setArModelUploading] = useState(false);
   const [arModelSaved, setArModelSaved] = useState(false);
   const [activeTab, setActiveTab] = useState('bio');
   const [attributes, setAttributes] = useState([]); // admin-defined extra fields, see AttributeDefinition
   const fileInputRef = useRef(null);
   const bannerInputRef = useRef(null);
-  const arVideoInputRef = useRef(null);
+  const logoInputRef = useRef(null);
+  const arBannerInputRef = useRef(null);
   const arModelInputRef = useRef(null);
 
   useEffect(() => {
@@ -164,38 +171,74 @@ export default function Profile() {
     }
   }
 
-  async function handleArVideoChange(e) {
+  async function handleLogoChange(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setArVideoPreviewUrl(URL.createObjectURL(file));
+    setLogoPreviewUrl(URL.createObjectURL(file));
     setError('');
-    setArVideoSaved(false);
-    setArVideoUploading(true);
+    setLogoSaved(false);
+    setLogoUploading(true);
     try {
-      const updated = await api.uploadArVideo(file);
+      const updated = await api.uploadLogo(file);
       setProfile(updated);
-      setArVideoSaved(true);
+      setLogoSaved(true);
     } catch (err) {
       setError(err.message);
-      setArVideoPreviewUrl(null); // upload failed -- drop the preview so it doesn't look saved when it isn't
+      setLogoPreviewUrl(null); // upload failed -- drop the preview so it doesn't look saved when it isn't
     } finally {
-      setArVideoUploading(false);
-      if (arVideoInputRef.current) arVideoInputRef.current.value = '';
+      setLogoUploading(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
     }
   }
 
-  async function handleArVideoRemove() {
+  async function handleLogoRemove() {
     setError('');
-    setArVideoSaved(false);
-    setArVideoUploading(true);
+    setLogoSaved(false);
+    setLogoUploading(true);
     try {
-      const updated = await api.removeArVideo();
+      const updated = await api.removeLogo();
       setProfile(updated);
-      setArVideoPreviewUrl(null);
+      setLogoPreviewUrl(null);
     } catch (err) {
       setError(err.message);
     } finally {
-      setArVideoUploading(false);
+      setLogoUploading(false);
+    }
+  }
+
+  async function handleArBannerChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setArBannerPreviewType(file.type.startsWith('video/') ? 'video' : 'image');
+    setArBannerPreviewUrl(URL.createObjectURL(file));
+    setError('');
+    setArBannerSaved(false);
+    setArBannerUploading(true);
+    try {
+      const updated = await api.uploadArBanner(file);
+      setProfile(updated);
+      setArBannerSaved(true);
+    } catch (err) {
+      setError(err.message);
+      setArBannerPreviewUrl(null); // upload failed -- drop the preview so it doesn't look saved when it isn't
+    } finally {
+      setArBannerUploading(false);
+      if (arBannerInputRef.current) arBannerInputRef.current.value = '';
+    }
+  }
+
+  async function handleArBannerRemove() {
+    setError('');
+    setArBannerSaved(false);
+    setArBannerUploading(true);
+    try {
+      const updated = await api.removeArBanner();
+      setProfile(updated);
+      setArBannerPreviewUrl(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setArBannerUploading(false);
     }
   }
 
@@ -242,6 +285,11 @@ export default function Profile() {
       for (const fields of Object.values(SECTION_FIELDS)) {
         for (const { key } of fields) updates[key] = form[key] || '';
       }
+      // Private, admin-only fields -- deliberately NOT part of
+      // IDENTITY_FIELDS/SECTION_FIELDS above, since those all render on
+      // the public card and these must never appear there.
+      updates.gender = form.gender || '';
+      updates.dateOfBirth = form.dateOfBirth || '';
       updates.customAttributes = form.customAttributes || {};
       const updated = await api.updateProfile(updates);
       setProfile(updated);
@@ -257,6 +305,19 @@ export default function Profile() {
 
   const displayPhoto = previewUrl || profile?.photoUrl;
   const displayBanner = bannerPreviewUrl || profile?.bannerUrl;
+  const displayLogo = logoPreviewUrl || profile?.logoUrl;
+  // Resolution order: a fresh local pick, then the new one-slot field, then
+  // the legacy video-only field (implicitly 'video') for clients who
+  // uploaded before this existed -- never falls back to the general
+  // profile photo here, that's shown separately in AR when this is empty.
+  const displayArBannerUrl = arBannerPreviewUrl || profile?.arBannerUrl || profile?.arVideoUrl;
+  const displayArBannerType = arBannerPreviewUrl
+    ? arBannerPreviewType
+    : profile?.arBannerUrl
+    ? profile?.arBannerType
+    : profile?.arVideoUrl
+    ? 'video'
+    : null;
 
   return (
     <div>
@@ -281,7 +342,9 @@ export default function Profile() {
           style={{ opacity: bannerUploading ? 0.5 : 1 }}
         >
           {displayBanner ? (
-            <img src={displayBanner} alt="" />
+            <Zoom>
+              <img src={displayBanner} alt="" />
+            </Zoom>
           ) : (
             <span className="banner-placeholder">No banner yet</span>
           )}
@@ -326,65 +389,129 @@ export default function Profile() {
         )}
       </div>
 
-      {/* --- HuntsAR World video: the floating "hologram" figure people see
-          in the app when they scan your card's QR code --- */}
+      {/* --- logo: for print production, admin downloads this from the
+          Clients page to send to the physical card printer --- */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <label style={{ marginBottom: 8 }}>HuntsAR World video (optional)</label>
-        <p className="hint" style={{ margin: '0 0 10px' }}>
-          Filmed against a plain green or blue background, this plays as a floating figure of you when someone
-          scans your card in the HuntsAR World app. Without one, they'll just see your photo and name instead.
-        </p>
+        <label style={{ marginBottom: 8 }}>Logo (optional, for printing on your card)</label>
         <div
           className="banner-preview"
-          style={{ opacity: arVideoUploading ? 0.5 : 1, minHeight: 90 }}
+          style={{ opacity: logoUploading ? 0.5 : 1 }}
         >
-          {profile?.arVideoUrl || arVideoPreviewUrl ? (
-            <video
-              src={arVideoPreviewUrl || profile.arVideoUrl}
-              controls
-              muted
-              style={{ width: '100%', maxHeight: 220, display: 'block' }}
-            />
+          {displayLogo ? (
+            <Zoom>
+              <img src={displayLogo} alt="" style={{ objectFit: 'contain' }} />
+            </Zoom>
           ) : (
-            <span className="banner-placeholder">No video yet</span>
+            <span className="banner-placeholder">No logo yet</span>
           )}
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 4 }}>
           <input
-            ref={arVideoInputRef}
+            ref={logoInputRef}
             type="file"
-            accept="video/mp4,video/quicktime"
-            onChange={handleArVideoChange}
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleLogoChange}
             style={{ display: 'none' }}
-            id="arVideoInput"
-            disabled={arVideoUploading}
+            id="logoInput"
+            disabled={logoUploading}
           />
           <label
-            htmlFor="arVideoInput"
+            htmlFor="logoInput"
             className="secondary"
-            style={{ display: 'inline-block', width: 'auto', cursor: arVideoUploading ? 'default' : 'pointer', opacity: arVideoUploading ? 0.6 : 1 }}
+            style={{ display: 'inline-block', width: 'auto', cursor: logoUploading ? 'default' : 'pointer', opacity: logoUploading ? 0.6 : 1 }}
           >
-            {arVideoUploading ? 'Working…' : profile?.arVideoUrl ? 'Change video' : 'Choose video'}
+            {logoUploading ? 'Working…' : displayLogo ? 'Change logo' : 'Choose logo'}
           </label>
-          {profile?.arVideoUrl && !arVideoUploading && (
+          {displayLogo && !logoUploading && (
             <button
               type="button"
               className="secondary"
               style={{ width: 'auto' }}
-              onClick={handleArVideoRemove}
+              onClick={handleLogoRemove}
             >
               Remove
             </button>
           )}
         </div>
         <p className="hint" style={{ margin: '8px 0 0' }}>
-          {arVideoUploading
-            ? 'Saving your video now…'
-            : 'MP4 or MOV. Max 80MB. Green/blue screen background required for the floating effect to work. Uploads immediately.'}
+          {logoUploading
+            ? 'Saving your logo now…'
+            : "JPEG, PNG, or WEBP. Max 5MB. We'll print this on your physical card as uploaded."}
         </p>
-        {arVideoSaved && !arVideoUploading && (
+        {logoSaved && !logoUploading && (
           <p className="hint" style={{ margin: '4px 0 0', color: 'var(--holo-cyan)' }}>
-            Video saved.
+            Logo saved.
+          </p>
+        )}
+      </div>
+
+      {/* --- HuntsAR World Banner: one slot for either a floating "hologram"
+          video or a still image, shown when someone scans your card's QR
+          code --- */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <label style={{ marginBottom: 8 }}>HuntsAR World Banner (optional)</label>
+        <p className="hint" style={{ margin: '0 0 10px' }}>
+          Upload either a video (filmed against a plain green or blue background, plays as a floating
+          hologram figure of you) or a still image -- whichever you have. Shown when someone scans your
+          card in the HuntsAR World app. Without one, they'll just see your photo and name instead.
+        </p>
+        <div
+          className="banner-preview"
+          style={{ opacity: arBannerUploading ? 0.5 : 1, minHeight: 90 }}
+        >
+          {displayArBannerUrl ? (
+            displayArBannerType === 'video' ? (
+              <video
+                src={displayArBannerUrl}
+                controls
+                muted
+                style={{ width: '100%', maxHeight: 220, display: 'block' }}
+              />
+            ) : (
+              <Zoom>
+                <img src={displayArBannerUrl} alt="" style={{ width: '100%', maxHeight: 220, display: 'block', objectFit: 'contain' }} />
+              </Zoom>
+            )
+          ) : (
+            <span className="banner-placeholder">No banner yet</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 4 }}>
+          <input
+            ref={arBannerInputRef}
+            type="file"
+            accept="video/mp4,video/quicktime,image/jpeg,image/png,image/webp"
+            onChange={handleArBannerChange}
+            style={{ display: 'none' }}
+            id="arBannerInput"
+            disabled={arBannerUploading}
+          />
+          <label
+            htmlFor="arBannerInput"
+            className="secondary"
+            style={{ display: 'inline-block', width: 'auto', cursor: arBannerUploading ? 'default' : 'pointer', opacity: arBannerUploading ? 0.6 : 1 }}
+          >
+            {arBannerUploading ? 'Working…' : displayArBannerUrl ? 'Change banner' : 'Choose video or image'}
+          </label>
+          {displayArBannerUrl && !arBannerUploading && (
+            <button
+              type="button"
+              className="secondary"
+              style={{ width: 'auto' }}
+              onClick={handleArBannerRemove}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+        <p className="hint" style={{ margin: '8px 0 0' }}>
+          {arBannerUploading
+            ? 'Saving your banner now…'
+            : 'MP4/MOV video (max 80MB, green/blue screen required for the floating effect) or JPEG/PNG/WEBP image. Uploads immediately.'}
+        </p>
+        {arBannerSaved && !arBannerUploading && (
+          <p className="hint" style={{ margin: '4px 0 0', color: 'var(--holo-cyan)' }}>
+            Banner saved.
           </p>
         )}
       </div>
@@ -413,14 +540,23 @@ export default function Profile() {
       <div className="card" style={{ marginBottom: 16 }}>
         <label style={{ marginBottom: 8 }}>3D model (optional)</label>
         <p className="hint" style={{ margin: '0 0 10px' }}>
-          A real 3D model (.glb) shown in HuntsAR World instead of the flat video/photo
-          panel. Without one, your video or photo panel is used instead.
+          Upload either a real 3D model (.glb, shown as an actual 3D object) or a flat cutout
+          image (PNG/JPEG/WEBP -- a transparent PNG works well, shown as a real 3D card in
+          HuntsAR World, same as the banner). Without one, your video or photo panel is used
+          instead.
         </p>
         <div
           className="banner-preview"
           style={{ opacity: arModelUploading ? 0.5 : 1, minHeight: 160 }}
         >
-          {profile?.arModelUrl ? (
+          {profile?.arModelUrl && profile?.arModelType === 'image' ? (
+            // Click to zoom to a full-size lightbox -- the model-viewer
+            // case below already has its own built-in orbit/zoom, this is
+            // only needed for the flat-image case.
+            <Zoom>
+              <img src={profile.arModelUrl} alt="" style={{ maxHeight: 220, display: 'block', margin: '0 auto' }} />
+            </Zoom>
+          ) : profile?.arModelUrl ? (
             <model-viewer
               src={profile.arModelUrl}
               camera-controls
@@ -435,7 +571,7 @@ export default function Profile() {
           <input
             ref={arModelInputRef}
             type="file"
-            accept=".glb"
+            accept=".glb,image/jpeg,image/png,image/webp"
             onChange={handleArModelChange}
             style={{ display: 'none' }}
             id="arModelInput"
@@ -446,7 +582,7 @@ export default function Profile() {
             className="secondary"
             style={{ display: 'inline-block', width: 'auto', cursor: arModelUploading ? 'default' : 'pointer', opacity: arModelUploading ? 0.6 : 1 }}
           >
-            {arModelUploading ? 'Working…' : profile?.arModelUrl ? 'Change model' : 'Choose model'}
+            {arModelUploading ? 'Working…' : profile?.arModelUrl ? 'Change model' : 'Choose model or image'}
           </label>
           {profile?.arModelUrl && !arModelUploading && (
             <button
@@ -460,7 +596,7 @@ export default function Profile() {
           )}
         </div>
         <p className="hint" style={{ margin: '8px 0 0' }}>
-          {arModelUploading ? 'Saving your model now…' : '.glb format only. Max 50MB. Uploads immediately.'}
+          {arModelUploading ? 'Saving your model now…' : '.glb, JPEG, PNG, or WEBP. Max 50MB. Uploads immediately.'}
         </p>
         {arModelSaved && !arModelUploading && (
           <p className="hint" style={{ margin: '4px 0 0', color: 'var(--holo-cyan)' }}>
@@ -492,7 +628,9 @@ export default function Profile() {
             }}
           >
             {displayPhoto ? (
-              <img src={displayPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <Zoom>
+                <img src={displayPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </Zoom>
             ) : (
               (profile?.fullName || '?').charAt(0).toUpperCase()
             )}
@@ -542,6 +680,36 @@ export default function Profile() {
               />
             </div>
           ))}
+        </div>
+
+        {/* Private, for our records only -- never sent to the public
+            profile route, never rendered on the public card. Kept
+            visually separate from the identity/tab fields above/below,
+            which are all things a stranger tapping the card sees. */}
+        <div className="field-grid" style={{ marginBottom: 20 }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <p className="hint" style={{ margin: '0 0 10px', fontWeight: 600 }}>
+              Private details (for our records only — never shown on your public card)
+            </p>
+          </div>
+          <div className="field">
+            <label htmlFor="gender">Gender</label>
+            <select id="gender" value={form.gender || ''} onChange={(e) => updateField('gender', e.target.value)}>
+              <option value="">Prefer not to say</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="dateOfBirth">Date of birth</label>
+            <input
+              id="dateOfBirth"
+              type="date"
+              value={(form.dateOfBirth || '').slice(0, 10)}
+              onChange={(e) => updateField('dateOfBirth', e.target.value)}
+            />
+          </div>
         </div>
 
         {/* Mirrors the public card's own five tabs (see PublicProfile.jsx)

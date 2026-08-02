@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -52,14 +52,19 @@ const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 const PHOTOS_DIR = path.join(__dirname, '..', 'uploads', 'photos');
 const BANNERS_DIR = path.join(__dirname, '..', 'uploads', 'banners');
-const AR_VIDEOS_DIR = path.join(__dirname, '..', 'uploads', 'ar-videos');
 const AR_MODELS_DIR = path.join(__dirname, '..', 'uploads', 'ar-models');
+const AR_BANNERS_DIR = path.join(__dirname, '..', 'uploads', 'ar-banners');
+const LOGOS_DIR = path.join(__dirname, '..', 'uploads', 'logos');
 // multer does NOT create destination directories -- make sure both exist
-// so a fresh clone doesn't 500 on first upload.
+// so a fresh clone doesn't 500 on first upload. Note: uploads/ar-videos/
+// (legacy) isn't created here anymore since nothing writes to it, but any
+// files already there keep being served fine by server.js's static
+// /uploads mount regardless.
 fs.mkdirSync(PHOTOS_DIR, { recursive: true });
 fs.mkdirSync(BANNERS_DIR, { recursive: true });
-fs.mkdirSync(AR_VIDEOS_DIR, { recursive: true });
 fs.mkdirSync(AR_MODELS_DIR, { recursive: true });
+fs.mkdirSync(AR_BANNERS_DIR, { recursive: true });
+fs.mkdirSync(LOGOS_DIR, { recursive: true });
 
 function makeStorage(dir) {
   return multer.diskStorage({
@@ -94,37 +99,53 @@ const bannerUpload = multer({
   fileFilter: imageFileFilter,
 });
 
-// Green-screen AR video for HuntsAR World. Much larger than the image
-// limits above -- even a short (10-15s) green-screen clip is easily
-// 20-50MB depending on resolution/bitrate, unlike a compressed photo.
+const logoUpload = multer({
+  storage: makeStorage(LOGOS_DIR),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: imageFileFilter,
+});
+
+// Green-screen AR video mimetypes -- much larger than the image limits
+// above (even a short 10-15s clip easily runs 20-50MB), reused below by
+// the combined banner filter since it accepts video as one of two options.
 const ALLOWED_VIDEO_MIME_TYPES = ['video/mp4', 'video/quicktime']; // .mp4, .mov -- matches ViroVideo's supported formats
-const videoFileFilter = (req, file, cb) => {
-  if (!ALLOWED_VIDEO_MIME_TYPES.includes(file.mimetype)) {
-    return cb(new Error('Only MP4 or MOV videos are allowed'));
+
+// "HuntsAR World Banner" -- one upload slot accepting EITHER a video or a
+// still image (client picks whichever they have); arBannerType records
+// which one this actually was, set from the file's own mimetype below.
+// Ceiling matches the video limit -- an image is always well under that
+// anyway, no need for two separate size limits.
+const arBannerFileFilter = (req, file, cb) => {
+  if (!ALLOWED_MIME_TYPES.includes(file.mimetype) && !ALLOWED_VIDEO_MIME_TYPES.includes(file.mimetype)) {
+    return cb(new Error('Only JPEG, PNG, WEBP images or MP4/MOV videos are allowed'));
   }
   cb(null, true);
 };
-const arVideoUpload = multer({
-  storage: makeStorage(AR_VIDEOS_DIR),
+const arBannerUpload = multer({
+  storage: makeStorage(AR_BANNERS_DIR),
   limits: { fileSize: 80 * 1024 * 1024 }, // 80MB
-  fileFilter: videoFileFilter,
+  fileFilter: arBannerFileFilter,
 });
 
-// Real 3D model for HuntsAR World. Gated on the .glb file EXTENSION, not
-// mimetype -- unlike images/video, browsers and OSes are inconsistent
-// about what (if any) MIME type they report for .glb, so mimetype
-// sniffing here would reject legitimate files as often as it'd catch bad
-// ones.
-const glbFileFilter = (req, file, cb) => {
-  if (path.extname(file.originalname).toLowerCase() !== '.glb') {
-    return cb(new Error('Only .glb 3D model files are allowed'));
+// "3D Model" slot -- EITHER a real .glb model OR a flat cutout image
+// (arModelType records which, set below from whichever check matched).
+// .glb is gated on file EXTENSION, not mimetype -- unlike images,
+// browsers/OSes are inconsistent about what (if any) MIME type they
+// report for .glb, so mimetype sniffing here would reject legitimate
+// files as often as it'd catch bad ones. Images use the normal mimetype
+// check, same as every other image upload in this file.
+const glbOrImageFileFilter = (req, file, cb) => {
+  const isGlb = path.extname(file.originalname).toLowerCase() === '.glb';
+  const isImage = ALLOWED_MIME_TYPES.includes(file.mimetype);
+  if (!isGlb && !isImage) {
+    return cb(new Error('Only .glb 3D model files or JPEG/PNG/WEBP images are allowed'));
   }
   cb(null, true);
 };
 const arModelUpload = multer({
   storage: makeStorage(AR_MODELS_DIR),
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB -- GLBs vary a lot with texture complexity
-  fileFilter: glbFileFilter,
+  fileFilter: glbOrImageFileFilter,
 });
 
 // Multer's own message for an oversize file is just "File too large" --
@@ -135,6 +156,25 @@ const arModelUpload = multer({
 function uploadErrorMessage(err, maxSizeLabel) {
   if (err.code === 'LIMIT_FILE_SIZE') return `File is too large -- max ${maxSizeLabel}.`;
   return err.message;
+}
+
+// Every mutation route below returns the updated client so the dashboard
+// can setProfile(updated) straight from the response instead of refetching
+// -- but a raw Client document doesn't carry arEnabled/zingEnabled (those
+// are computed from the client's CardPlan, not stored on Client itself).
+// Without this, any UI gated on profile.arEnabled (e.g. the 3D model
+// section) would flash into its "not included in your plan" state right
+// after a successful upload, since the fresh response has arEnabled
+// missing/falsy even though the plan really does include it. Mirrors GET
+// /me's own computation exactly, including the customAttributes Map fix
+// (see that route for why).
+async function withPlanFlags(client) {
+  const plan = await CardPlan.findOne({ key: client.cardType }).select('arEnabled zingEnabled');
+  const clientObj = client.toObject();
+  clientObj.arEnabled = !!plan?.arEnabled;
+  clientObj.zingEnabled = !!plan?.zingEnabled;
+  clientObj.customAttributes = Object.fromEntries(client.customAttributes || []);
+  return clientObj;
 }
 
 // POST /api/profile/photo -- multipart/form-data, field name "photo"
@@ -155,7 +195,7 @@ router.post('/photo', requireAuth, (req, res) => {
         { new: true }
       ).select('-passwordHash -chipPasswordHash');
 
-      res.json(client);
+      res.json(await withPlanFlags(client));
     } catch (err2) {
       console.error('[profile/photo POST]', err2);
       res.status(500).json({ error: 'Failed to save photo' });
@@ -187,7 +227,7 @@ router.post('/banner', requireAuth, (req, res) => {
         { new: true }
       ).select('-passwordHash -chipPasswordHash');
 
-      res.json(client);
+      res.json(await withPlanFlags(client));
     } catch (err2) {
       console.error('[profile/banner POST]', err2);
       res.status(500).json({ error: 'Failed to save banner' });
@@ -204,53 +244,107 @@ router.delete('/banner', requireAuth, async (req, res) => {
       { new: true }
     ).select('-passwordHash -chipPasswordHash');
     if (!client) return res.status(404).json({ error: 'Client not found' });
-    res.json(client);
+    res.json(await withPlanFlags(client));
   } catch (err) {
     console.error('[profile/banner DELETE]', err);
     res.status(500).json({ error: 'Failed to remove banner' });
   }
 });
 
-// POST /api/profile/ar-video -- green-screen video for HuntsAR World.
-// Same upload/store/update pattern as photo and banner above.
-router.post('/ar-video', requireAuth, (req, res) => {
-  arVideoUpload.single('video')(req, res, async (err) => {
+// ---------------------------------------------------------------------
+// Logo upload -- the client's own (e.g. company) logo, for print
+// production on the physical card. Direct client upload, mirrors the
+// photo/banner flow exactly -- admin downloads it from the Clients page.
+// ---------------------------------------------------------------------
+
+// POST /api/profile/logo -- multipart/form-data, field name "logo"
+router.post('/logo', requireAuth, (req, res) => {
+  logoUpload.single('logo')(req, res, async (err) => {
     if (err) {
-      return res.status(400).json({ error: uploadErrorMessage(err, '80MB') });
+      return res.status(400).json({ error: uploadErrorMessage(err, '5MB') });
     }
     if (!req.file) {
-      return res.status(400).json({ error: 'No video file received' });
+      return res.status(400).json({ error: 'No logo file received' });
     }
 
     try {
-      const arVideoUrl = `${process.env.BACKEND_URL}/uploads/ar-videos/${req.file.filename}`;
+      const logoUrl = `${process.env.BACKEND_URL}/uploads/logos/${req.file.filename}`;
       const client = await Client.findOneAndUpdate(
         { clientId: req.user.clientId },
-        { $set: { arVideoUrl } },
+        { $set: { logoUrl } },
         { new: true }
       ).select('-passwordHash -chipPasswordHash');
 
-      res.json(client);
+      res.json(await withPlanFlags(client));
     } catch (err2) {
-      console.error('[profile/ar-video POST]', err2);
-      res.status(500).json({ error: 'Failed to save video' });
+      console.error('[profile/logo POST]', err2);
+      res.status(500).json({ error: 'Failed to save logo' });
     }
   });
 });
 
-// DELETE /api/profile/ar-video -- go back to the plain photo panel in AR
-router.delete('/ar-video', requireAuth, async (req, res) => {
+// DELETE /api/profile/logo -- go back to no logo
+router.delete('/logo', requireAuth, async (req, res) => {
   try {
     const client = await Client.findOneAndUpdate(
       { clientId: req.user.clientId },
-      { $set: { arVideoUrl: null } },
+      { $set: { logoUrl: null } },
       { new: true }
     ).select('-passwordHash -chipPasswordHash');
     if (!client) return res.status(404).json({ error: 'Client not found' });
-    res.json(client);
+    res.json(await withPlanFlags(client));
   } catch (err) {
-    console.error('[profile/ar-video DELETE]', err);
-    res.status(500).json({ error: 'Failed to remove video' });
+    console.error('[profile/logo DELETE]', err);
+    res.status(500).json({ error: 'Failed to remove logo' });
+  }
+});
+
+// POST /api/profile/ar-banner -- "HuntsAR World Banner", one upload slot
+// for EITHER a green-screen video or a still image (arBannerType records
+// which). Replaces the old video-only /ar-video route; arVideoUrl stays
+// on the schema as a read-only fallback for whatever was uploaded before
+// this existed (see Client.js), but nothing writes to it anymore.
+router.post('/ar-banner', requireAuth, (req, res) => {
+  arBannerUpload.single('banner')(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ error: uploadErrorMessage(err, '80MB') });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file received' });
+    }
+
+    try {
+      const arBannerUrl = `${process.env.BACKEND_URL}/uploads/ar-banners/${req.file.filename}`;
+      const arBannerType = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
+      const client = await Client.findOneAndUpdate(
+        { clientId: req.user.clientId },
+        { $set: { arBannerUrl, arBannerType } },
+        { new: true }
+      ).select('-passwordHash -chipPasswordHash');
+
+      res.json(await withPlanFlags(client));
+    } catch (err2) {
+      console.error('[profile/ar-banner POST]', err2);
+      res.status(500).json({ error: 'Failed to save banner' });
+    }
+  });
+});
+
+// DELETE /api/profile/ar-banner -- go back to the plain photo/text panel
+// in AR. Clears the legacy arVideoUrl too, so removing the banner really
+// empties the slot regardless of which field it came from.
+router.delete('/ar-banner', requireAuth, async (req, res) => {
+  try {
+    const client = await Client.findOneAndUpdate(
+      { clientId: req.user.clientId },
+      { $set: { arBannerUrl: null, arBannerType: null, arVideoUrl: null } },
+      { new: true }
+    ).select('-passwordHash -chipPasswordHash');
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    res.json(await withPlanFlags(client));
+  } catch (err) {
+    console.error('[profile/ar-banner DELETE]', err);
+    res.status(500).json({ error: 'Failed to remove banner' });
   }
 });
 
@@ -275,13 +369,14 @@ router.post('/ar-model', requireAuth, (req, res) => {
       }
 
       const arModelUrl = `${process.env.BACKEND_URL}/uploads/ar-models/${req.file.filename}`;
+      const arModelType = path.extname(req.file.originalname).toLowerCase() === '.glb' ? 'glb' : 'image';
       const client = await Client.findOneAndUpdate(
         { clientId: req.user.clientId },
-        { $set: { arModelUrl } },
+        { $set: { arModelUrl, arModelType } },
         { new: true }
       ).select('-passwordHash -chipPasswordHash');
 
-      res.json(client);
+      res.json(await withPlanFlags(client));
     } catch (err2) {
       console.error('[profile/ar-model POST]', err2);
       res.status(500).json({ error: 'Failed to save model' });
@@ -294,11 +389,11 @@ router.delete('/ar-model', requireAuth, async (req, res) => {
   try {
     const client = await Client.findOneAndUpdate(
       { clientId: req.user.clientId },
-      { $set: { arModelUrl: null } },
+      { $set: { arModelUrl: null, arModelType: null } },
       { new: true }
     ).select('-passwordHash -chipPasswordHash');
     if (!client) return res.status(404).json({ error: 'Client not found' });
-    res.json(client);
+    res.json(await withPlanFlags(client));
   } catch (err) {
     console.error('[profile/ar-model DELETE]', err);
     res.status(500).json({ error: 'Failed to remove model' });
@@ -322,6 +417,10 @@ const EDITABLE_FIELDS = [
   'twitterUrl',
   'portfolioUrl',
   'huntsworldUrl',
+  // Admin-only fields -- editable here, but never returned by the public
+  // profile route or rendered on the tap page (see Client.js comment).
+  'gender',
+  'dateOfBirth',
 ];
 
 // GET /api/profile/me -- return the logged-in client's own full profile
@@ -329,20 +428,7 @@ router.get('/me', requireAuth, async (req, res) => {
   const client = await Client.findOne({ clientId: req.user.clientId }).select('-passwordHash -chipPasswordHash');
   if (!client) return res.status(404).json({ error: 'Client not found' });
 
-  // Whether this client's plan includes the AR feature -- the dashboard
-  // uses this to gate the AR Layout page to clients who've actually
-  // purchased a plan that includes it. Zing is gated the same way.
-  const plan = await CardPlan.findOne({ key: client.cardType }).select('arEnabled zingEnabled');
-  const clientObj = client.toObject();
-  clientObj.arEnabled = !!plan?.arEnabled;
-  clientObj.zingEnabled = !!plan?.zingEnabled;
-  // client.toObject() does NOT flatten Map-type fields the way a Mongoose
-  // document's own toJSON() would -- left as-is, customAttributes would
-  // silently serialize as {} below, since a plain Map instance nested in a
-  // plain object has no JSON.stringify-visible keys.
-  clientObj.customAttributes = Object.fromEntries(client.customAttributes || []);
-
-  res.json(clientObj);
+  res.json(await withPlanFlags(client));
 });
 
 // PUT /api/profile/me -- update the logged-in client's own profile.
@@ -351,10 +437,20 @@ router.get('/me', requireAuth, async (req, res) => {
 // client from editing another client's data.
 router.put('/me', requireAuth, async (req, res) => {
   try {
+    if (req.body.gender && !['male', 'female', 'other'].includes(req.body.gender)) {
+      return res.status(400).json({ error: 'gender must be male, female, or other' });
+    }
+
     const updates = {};
     for (const field of EDITABLE_FIELDS) {
       if (field in req.body) updates[field] = req.body[field];
     }
+    // Empty string means "cleared" from the Profile Settings form -- for
+    // dateOfBirth Mongoose would otherwise try to cast '' to a Date and
+    // throw; for gender, '' isn't one of the enum's allowed values
+    // (only 'male'/'female'/'other'/null are) and would fail validation.
+    if (updates.dateOfBirth === '') updates.dateOfBirth = null;
+    if (updates.gender === '') updates.gender = null;
 
     // Admin-defined extra fields (see AttributeDefinition) -- only keys
     // that are currently a real, active definition get saved; anything
@@ -381,7 +477,7 @@ router.put('/me', requireAuth, async (req, res) => {
     ).select('-passwordHash -chipPasswordHash');
 
     if (!client) return res.status(404).json({ error: 'Client not found' });
-    res.json(client);
+    res.json(await withPlanFlags(client));
   } catch (err) {
     console.error('[profile/me PUT]', err);
     // Surface validation problems (e.g. a required field failing) as a
@@ -455,7 +551,10 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
       return res.status(503).json({ error: 'Payments are not configured yet.' });
     }
 
-    const { requestedPlan, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const {
+      requestedPlan, razorpay_order_id, razorpay_payment_id, razorpay_signature,
+      cardVariantId, designFrontUrl, designBackUrl,
+    } = req.body;
     if (!requestedPlan || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({ error: 'Missing payment verification fields' });
     }
@@ -467,6 +566,22 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
 
     if (expectedSignature !== razorpay_signature) {
       return res.status(400).json({ error: 'Payment verification failed -- signature mismatch.' });
+    }
+
+    // Variant/design fields don't affect the charge amount (unlike
+    // quantity below), so there's no tampering risk in trusting them
+    // straight from this request body -- same trust level requestedPlan
+    // itself already has here (no order.notes cross-check exists for it
+    // either).
+    const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase() });
+    if (!plan) return res.status(400).json({ error: 'requestedPlan must match an existing card plan' });
+    if (plan.variants.length > 0) {
+      if (!cardVariantId || !plan.variants.some((v) => v._id.toString() === cardVariantId)) {
+        return res.status(400).json({ error: 'A valid card variant must be selected for this plan.' });
+      }
+    }
+    if (plan.requiresDesignUpload && (!designFrontUrl || !designBackUrl)) {
+      return res.status(400).json({ error: 'Front and back design uploads are required for this plan.' });
     }
 
     // Quantity comes from the ORDER we created (server-controlled at
@@ -486,7 +601,13 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
     // client with no cardType yet, not just later upgrades.
     await Client.findOneAndUpdate(
       { clientId: req.user.clientId },
-      { $set: { cardType: requestedPlan.toLowerCase(), paid: true } }
+      { $set: {
+          cardType: requestedPlan.toLowerCase(),
+          paid: true,
+          cardVariantId: plan.variants.length > 0 ? cardVariantId : null,
+          customDesignFrontUrl: plan.requiresDesignUpload ? designFrontUrl : null,
+          customDesignBackUrl: plan.requiresDesignUpload ? designBackUrl : null,
+        } }
     );
 
     const request = await CardRequest.create({
@@ -586,6 +707,9 @@ router.post('/new-card-confirm', requireAuth, async (req, res) => {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
+      cardVariantId,
+      designFrontUrl,
+      designBackUrl,
     } = req.body;
     if (!requestedPlan || !recipientName || !recipientEmail || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -598,6 +722,20 @@ router.post('/new-card-confirm', requireAuth, async (req, res) => {
 
     if (expectedSignature !== razorpay_signature) {
       return res.status(400).json({ error: 'Payment verification failed -- signature mismatch.' });
+    }
+
+    // Same reasoning as upgrade-confirm above: variant/design don't
+    // affect the charge amount, so trusting them from this request body
+    // (rather than order.notes) carries no tampering risk.
+    const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase() });
+    if (!plan) return res.status(400).json({ error: 'requestedPlan must match an existing card plan' });
+    if (plan.variants.length > 0) {
+      if (!cardVariantId || !plan.variants.some((v) => v._id.toString() === cardVariantId)) {
+        return res.status(400).json({ error: 'A valid card variant must be selected for this plan.' });
+      }
+    }
+    if (plan.requiresDesignUpload && (!designFrontUrl || !designBackUrl)) {
+      return res.status(400).json({ error: 'Front and back design uploads are required for this plan.' });
     }
 
     // Same as upgrade-confirm above: quantity comes from the order WE
@@ -625,6 +763,9 @@ router.post('/new-card-confirm', requireAuth, async (req, res) => {
       passwordHash,
       fullName: recipientName,
       cardType: requestedPlan.toLowerCase(),
+      cardVariantId: plan.variants.length > 0 ? cardVariantId : null,
+      customDesignFrontUrl: plan.requiresDesignUpload ? designFrontUrl : null,
+      customDesignBackUrl: plan.requiresDesignUpload ? designBackUrl : null,
       paid: true, // verified above -- real payment already happened
       mustChangePassword: true,
     });
@@ -721,7 +862,8 @@ router.get('/ar-layout', requireAuth, async (req, res) => {
         videoRotationX: fallback.videoRotationX,
         videoRotationY: fallback.videoRotationY,
         videoRotationZ: fallback.videoRotationZ,
-        videoScale: fallback.videoScale,
+        videoScaleX: fallback.videoScaleX,
+        videoScaleY: fallback.videoScaleY,
       });
     }
     res.json(layout);
@@ -755,7 +897,8 @@ router.put('/ar-layout', requireAuth, async (req, res) => {
       videoRotationX,
       videoRotationY,
       videoRotationZ,
-      videoScale,
+      videoScaleX,
+      videoScaleY,
     } = req.body || {};
     const updates = { clientId, updatedBy: req.user.loginEmail || clientId };
     if (qr) updates.qr = qr;
@@ -774,7 +917,8 @@ router.put('/ar-layout', requireAuth, async (req, res) => {
     if (videoRotationX !== undefined) updates.videoRotationX = videoRotationX;
     if (videoRotationY !== undefined) updates.videoRotationY = videoRotationY;
     if (videoRotationZ !== undefined) updates.videoRotationZ = videoRotationZ;
-    if (videoScale !== undefined) updates.videoScale = videoScale;
+    if (videoScaleX !== undefined) updates.videoScaleX = videoScaleX;
+    if (videoScaleY !== undefined) updates.videoScaleY = videoScaleY;
 
     const layout = await ArLayout.findOneAndUpdate(
       { clientId },

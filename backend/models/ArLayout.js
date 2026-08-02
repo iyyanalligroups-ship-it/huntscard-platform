@@ -61,7 +61,12 @@ const arLayoutSchema = new mongoose.Schema(
     videoRotationX: { type: Number, min: -90, max: 90, default: 0 },
     videoRotationY: { type: Number, default: 0 },
     videoRotationZ: { type: Number, default: 0 },
-    videoScale: { type: Number, min: 0.3, max: 2.5, default: 1 },
+    // Independent width ("length") / height ("breadth") scale, unlike the
+    // model's single uniform modelScale -- the banner is a rectangular
+    // card image/video, so stretching it non-uniformly is a real, useful
+    // adjustment the model (usually a roughly-centered figure) doesn't need.
+    videoScaleX: { type: Number, min: 0.3, max: 10, default: 1 },
+    videoScaleY: { type: Number, min: 0.3, max: 10, default: 1 },
     updatedBy: { type: String, trim: true },
   },
   { timestamps: true }

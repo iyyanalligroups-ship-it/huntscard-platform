@@ -481,6 +481,7 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   padding: 20px 32px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 24px;
   flex-wrap: wrap;
 }
@@ -685,17 +686,26 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 /* --- Profile view page: light preview matching the real public tap page,
    scoped to this one page only via custom properties defined here, so the
    rest of the app (nav, login, settings form) stays on the dark theme. --- */
+/* This in-dashboard preview is dark/holographic, matching the rest of the
+   app shell around it -- unlike the real public tap page (.pv-page,
+   PublicProfile.jsx below), which keeps its own light, print-card-style
+   --pv-* values untouched, since that's what strangers actually see when
+   they scan the card. Every .pv-* rule below is written in terms of these
+   custom properties for exactly this reason: redeclaring them here is
+   enough to re-theme the whole card without duplicating any layout rules. */
 .profile-preview {
-  --pv-bg: #faf9f7;
-  --pv-surface: #ffffff;
-  --pv-border: #ece9e4;
-  --pv-text: #171717;
-  --pv-text-dim: #78716c;
+  --pv-bg: var(--panel);
+  --pv-surface: var(--panel-raised);
+  --pv-border: var(--panel-border);
+  --pv-text: var(--text);
+  --pv-text-dim: var(--text-dim);
   position: relative;
   background: var(--pv-bg);
   color: var(--pv-text);
   margin: 0 -20px;
   border-radius: 16px;
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--glow-cyan);
   overflow: hidden;
 }
 
@@ -814,23 +824,68 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 }
 .pv-empty { color: var(--pv-text-dim); font-size: 13px; text-align: center; padding: 20px 0; }
 
+/* A handful of pv-* rules above hardcode a light-mode color instead of
+   using the --pv-* custom properties (built for the .pv-page/public case,
+   which never needed anything else) -- scoped overrides for exactly those,
+   so only this dashboard preview picks up the dark/holo look. */
+.profile-preview .pv-banner { background: var(--panel-raised); }
+.profile-preview .pv-btn-primary,
+.profile-preview .pv-hw-btn {
+  background: var(--holo-gradient);
+  color: #06120f;
+}
+.profile-preview .pv-icon {
+  background: var(--panel);
+  color: var(--holo-cyan);
+}
+.profile-preview .pv-bio { color: var(--text); }
+.profile-preview .pv-tab-btn.active { box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.25) inset; }
+
 /* --- standalone public tap page (PublicProfile.jsx) -- full-viewport
-   version of the same pv-* look above, instead of a card floating inside
-   the dashboard's dark shell. --- */
+   version of the same pv-* look above, now dark/holographic to match the
+   rest of the app (same --pv-* re-theming approach .profile-preview above
+   uses -- redeclare the custom properties here, every pv-* rule already
+   reads through them). Background mirrors body's own radial-gradient
+   wash so this reads as part of the same app, not a separate light page. */
 .pv-page {
-  --pv-bg: #faf9f7;
-  --pv-surface: #ffffff;
-  --pv-border: #ece9e4;
-  --pv-text: #171717;
-  --pv-text-dim: #78716c;
+  --pv-bg: var(--space);
+  --pv-surface: var(--panel-raised);
+  --pv-border: var(--panel-border);
+  --pv-text: var(--text);
+  --pv-text-dim: var(--text-dim);
   min-height: 100vh;
-  background: var(--pv-bg);
+  background:
+    radial-gradient(circle at 15% -10%, rgba(94, 234, 212, 0.12), transparent 40%),
+    radial-gradient(circle at 90% 0%, rgba(167, 139, 250, 0.10), transparent 45%),
+    radial-gradient(circle at 50% 120%, rgba(244, 114, 182, 0.08), transparent 50%),
+    var(--pv-bg);
   color: var(--pv-text);
   font-family: var(--font-ui);
   display: flex;
   justify-content: center;
 }
 .pv-shell { width: 100%; max-width: 420px; }
+
+/* Same handful of hardcoded-light-color pv-* rules that .profile-preview
+   overrides above, mirrored here for this standalone page. */
+.pv-page .pv-banner { background: var(--panel-raised); }
+.pv-page .pv-btn-primary,
+.pv-page .pv-hw-btn {
+  background: var(--holo-gradient);
+  color: #06120f;
+}
+.pv-page .pv-icon {
+  background: var(--panel);
+  color: var(--holo-cyan);
+}
+.pv-page .pv-bio { color: var(--text); }
+.pv-page .pv-tab-btn.active { box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.25) inset; }
+.pv-page .pv-toast {
+  background: var(--panel-raised);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--glow-cyan);
+}
 .pv-state-msg { text-align: center; color: var(--pv-text-dim, #78716c); font-size: 14px; padding: 60px 20px; }
 
 .pv-qr-block { padding: 4px 22px 40px; text-align: center; }
@@ -1331,17 +1386,51 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   border: 1px solid var(--panel-border);
   border-radius: 16px;
   padding: 24px;
-  transition: border-color 0.2s, transform 0.2s;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
 }
-.feature-card:hover { border-color: rgba(94, 234, 212, 0.3); transform: translateY(-2px); }
-.feature-card .feature-icon {
-  width: 40px; height: 40px;
-  border-radius: 10px;
+/* Gradient top-accent, same motif as .tap-card's own -- hidden until
+   hover, so it reads as the card "waking up" rather than static trim. */
+.feature-card::before {
+  content: '';
+  position: absolute; inset: 0 0 auto 0; height: 2px;
   background: var(--holo-gradient);
-  margin-bottom: 14px;
+  opacity: 0;
+  transition: opacity 0.2s;
 }
+.feature-card:hover {
+  border-color: rgba(94, 234, 212, 0.3);
+  transform: translateY(-4px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+}
+.feature-card:hover::before { opacity: 1; }
+
+.feature-card .feature-icon {
+  width: 46px; height: 46px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  transition: transform 0.2s;
+}
+.feature-card .feature-icon svg { width: 23px; height: 23px; }
+.feature-card:hover .feature-icon { transform: scale(1.08) rotate(-4deg); }
+
+/* Same cyan/violet/magenta/cyan rotation .nav-link:nth-child already uses
+   for its own hover accents -- ties the landing page's rhythm to the
+   header's, instead of every card reaching for the same one color. */
+.feature-card:nth-child(1) .feature-icon { color: var(--holo-cyan); background: rgba(94, 234, 212, 0.12); box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.2) inset; }
+.feature-card:nth-child(2) .feature-icon { color: var(--holo-violet); background: rgba(167, 139, 250, 0.12); box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.2) inset; }
+.feature-card:nth-child(3) .feature-icon { color: var(--holo-magenta); background: rgba(244, 114, 182, 0.12); box-shadow: 0 0 0 1px rgba(244, 114, 182, 0.2) inset; }
+.feature-card:nth-child(4) .feature-icon { color: var(--holo-cyan); background: rgba(94, 234, 212, 0.12); box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.2) inset; }
+
 .feature-card h3 { font-size: 15px; margin: 0 0 8px; }
 .feature-card p { font-size: 13px; color: var(--text-dim); line-height: 1.6; margin: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .feature-card, .feature-card .feature-icon, .feature-card::before { transition: none; }
+}
 
 .section-heading {
   font-family: var(--font-display);

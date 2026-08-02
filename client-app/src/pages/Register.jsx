@@ -6,6 +6,8 @@ import WaveBackdrop from '../components/WaveBackdrop.jsx';
 export default function Register() {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [gender, setGender] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -17,7 +19,7 @@ export default function Register() {
     setError('');
     setLoading(true);
     try {
-      const res = await api.register({ fullName, phone, loginEmail, password });
+      const res = await api.register({ fullName, phone, gender: gender || undefined, dateOfBirth: dateOfBirth || undefined, loginEmail, password });
       setSession({ token: res.token, clientId: res.clientId });
       navigate('/dashboard');
     } catch (err) {
@@ -56,6 +58,24 @@ export default function Register() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               required
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="gender">Gender (optional)</label>
+            <select id="gender" value={gender} onChange={(e) => setGender(e.target.value)}>
+              <option value="">Prefer not to say</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="dateOfBirth">Date of birth (optional)</label>
+            <input
+              id="dateOfBirth"
+              type="date"
+              value={dateOfBirth}
+              onChange={(e) => setDateOfBirth(e.target.value)}
             />
           </div>
           <div className="field">

@@ -44,11 +44,22 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
 }
 
 export const api = {
-  login: (loginEmail, password) =>
-    request('/api/auth/login', { method: 'POST', body: { loginEmail, password }, auth: false }),
+  // identifier is either the login email or the phone number -- same
+  // shared password either way.
+  login: (identifier, password) =>
+    request('/api/auth/login', { method: 'POST', body: { identifier, password }, auth: false }),
   register: (payload) => request('/api/auth/register', { method: 'POST', body: payload, auth: false }),
   changePassword: (currentPassword, newPassword) =>
     request('/api/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } }),
+  // Passwordless login via phone OTP -- phone only, no email equivalent.
+  requestLoginOtp: (phone) => request('/api/auth/login-otp/request', { method: 'POST', body: { phone }, auth: false }),
+  verifyLoginOtp: (phone, otp) =>
+    request('/api/auth/login-otp/verify', { method: 'POST', body: { phone, otp }, auth: false }),
+  // Forgot-password: emails a reset link (see pages/ResetPassword.jsx).
+  forgotPassword: (loginEmail) =>
+    request('/api/auth/forgot-password', { method: 'POST', body: { loginEmail }, auth: false }),
+  resetPassword: (token, newPassword) =>
+    request('/api/auth/reset-password', { method: 'POST', body: { token, newPassword }, auth: false }),
   getProfile: () => request('/api/profile/me'),
   updateProfile: (updates) => request('/api/profile/me', { method: 'PUT', body: updates }),
 
@@ -82,6 +93,20 @@ export const api = {
   confirmShopPayment: (payload) => request('/api/public/shop-confirm', { method: 'POST', body: payload, auth: false }),
   submitContactForm: (payload) => request('/api/public/contact', { method: 'POST', body: payload, auth: false }),
 
+  // Custom plan front/back design artwork -- uploads immediately on
+  // file-select at Shop checkout (before payment), returning just a URL
+  // to hold in state and send along with the confirm-payment call once
+  // checkout completes. Public (no auth) -- mirrors the rest of the Shop
+  // checkout flow, and unauthenticated new buyers have no token yet.
+  uploadDesign: async (file) => {
+    const formData = new FormData();
+    formData.append('design', file);
+    const res = await fetch(`${API_URL}/api/public/design-upload`, { method: 'POST', body: formData });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+    return data;
+  },
+
   // Multipart upload -- can't go through the generic request() helper
   // since that always sets Content-Type: application/json.
   uploadPhoto: async (file) => {
@@ -113,11 +138,11 @@ export const api = {
   },
   removeBanner: () => request('/api/profile/banner', { method: 'DELETE' }),
 
-  uploadArVideo: async (file) => {
+  uploadLogo: async (file) => {
     const formData = new FormData();
-    formData.append('video', file);
+    formData.append('logo', file);
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/profile/ar-video`, {
+    const res = await fetch(`${API_URL}/api/profile/logo`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
@@ -126,7 +151,22 @@ export const api = {
     if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
     return data;
   },
-  removeArVideo: () => request('/api/profile/ar-video', { method: 'DELETE' }),
+  removeLogo: () => request('/api/profile/logo', { method: 'DELETE' }),
+
+  uploadArBanner: async (file) => {
+    const formData = new FormData();
+    formData.append('banner', file);
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/profile/ar-banner`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+    return data;
+  },
+  removeArBanner: () => request('/api/profile/ar-banner', { method: 'DELETE' }),
 
   uploadArModel: async (file) => {
     const formData = new FormData();
