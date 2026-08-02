@@ -120,13 +120,20 @@ const ClientSchema = new mongoose.Schema(
     // login and redirects to a forced change-password screen if true.
     mustChangePassword: { type: Boolean, default: true },
 
-    // ---- Forgot-password, via emailed reset link (see routes/auth.js
-    // POST /forgot-password and /reset-password). The token is a
-    // high-entropy random value, never typed by hand, so it's hashed with
-    // plain SHA-256 (not bcrypt -- bcrypt's slowness defends against
-    // brute-forcing a *short* secret, irrelevant for an unguessable
-    // 256-bit token) -- same "never store the raw secret" principle as
-    // passwordHash.
+    // ---- Forgot-password, via emailed 6-digit OTP (see routes/auth.js
+    // POST /forgot-password, /forgot-password/verify-otp, and
+    // /reset-password). The OTP itself is short/guessable, so it's hashed
+    // with bcrypt (like loginOtpHash below) and attempt-capped. Once
+    // correctly entered, /verify-otp mints a resetToken (a high-entropy
+    // value never typed by hand, so SHA-256 is enough -- same "never store
+    // the raw secret" principle as passwordHash) that the final "set new
+    // password" step submits instead of the OTP itself, so the OTP fields
+    // can be cleared immediately on verification without losing the
+    // client's place in the flow.
+    resetOtpHash: { type: String, default: null },
+    resetOtpExpiresAt: { type: Date, default: null },
+    resetOtpAttempts: { type: Number, default: 0 },
+    resetOtpLastSentAt: { type: Date, default: null },
     resetTokenHash: { type: String, default: null },
     resetTokenExpiresAt: { type: Date, default: null },
 
@@ -139,6 +146,12 @@ const ClientSchema = new mongoose.Schema(
     loginOtpHash: { type: String, default: null },
     loginOtpExpiresAt: { type: Date, default: null },
     loginOtpAttempts: { type: Number, default: 0 },
+    // When the last OTP was actually sent -- lets POST /login-otp/request
+    // silently no-op a resend that arrives before the cooldown elapses
+    // (button double-tap, multiple tabs, a direct API hit) without
+    // regenerating/re-sending, instead of relying on the client's own
+    // countdown timer alone.
+    loginOtpLastSentAt: { type: Date, default: null },
 
     // ---- Admin-only fields, never editable via the client PUT route ----
     paid: { type: Boolean, default: false },

@@ -1,11 +1,36 @@
-// Email sending -- currently a stub, mirroring utils/sms.js exactly. No
-// real provider (SMTP/SendGrid/etc) is wired up yet, so this just logs to
-// the backend's own console for now, which makes the reset-link flow fully
-// testable locally without live credentials. Swap the body of this one
-// function for a real provider call once credentials are available --
-// nothing else in the reset flow needs to change.
+const nodemailer = require('nodemailer');
+
+// Zoho Mail SMTP -- built lazily (not at require-time) so a missing
+// APP_EMAIL/APP_PASSWORD during local dev doesn't crash the whole server on
+// boot, same reasoning as getRazorpay() in routes/profile.js.
+let transporter = null;
+function getTransporter() {
+  if (transporter) return transporter;
+  if (!process.env.APP_EMAIL || !process.env.APP_PASSWORD) return null;
+  transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.zoho.in',
+    port: Number(process.env.SMTP_PORT) || 465,
+    secure: true,
+    auth: {
+      user: process.env.APP_EMAIL,
+      pass: process.env.APP_PASSWORD,
+    },
+  });
+  return transporter;
+}
+
 async function sendEmail(to, subject, body) {
-  console.log(`[EMAIL STUB] to ${to} | subject: ${subject}\n${body}`);
+  const t = getTransporter();
+  if (!t) {
+    console.log(`[EMAIL STUB -- APP_EMAIL/APP_PASSWORD not set] to ${to} | subject: ${subject}\n${body}`);
+    return;
+  }
+  try {
+    await t.sendMail({ from: `HuntsTAG <${process.env.APP_EMAIL}>`, to, subject, text: body });
+    console.log(`[EMAIL] sent to ${to}: ${subject}`);
+  } catch (err) {
+    console.error(`[EMAIL] failed to send to ${to}:`, err.message);
+  }
 }
 
 module.exports = { sendEmail };

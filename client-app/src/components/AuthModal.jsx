@@ -1,6 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, setSession } from '../api.js';
+
+// Matches the backend's own LOGIN_OTP_RESEND_COOLDOWN_MS (routes/auth.js)
+// -- purely a UX countdown here, the server enforces the real cooldown
+// itself regardless of what this button shows.
+const OTP_RESEND_COOLDOWN_SECONDS = 45;
 
 export default function AuthModal({ mode: initialMode, onClose }) {
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
@@ -12,6 +17,25 @@ export default function AuthModal({ mode: initialMode, onClose }) {
   const [loginPassword, setLoginPassword] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resending, setResending] = useState(false);
+  const resendIntervalRef = useRef(null);
+
+  function startResendCooldown() {
+    setResendCooldown(OTP_RESEND_COOLDOWN_SECONDS);
+    clearInterval(resendIntervalRef.current);
+    resendIntervalRef.current = setInterval(() => {
+      setResendCooldown((s) => {
+        if (s <= 1) {
+          clearInterval(resendIntervalRef.current);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+  }
+
+  useEffect(() => () => clearInterval(resendIntervalRef.current), []);
 
   // register fields
   const [fullName, setFullName] = useState('');
@@ -33,6 +57,8 @@ export default function AuthModal({ mode: initialMode, onClose }) {
     setError('');
     setOtpSent(false);
     setOtp('');
+    setResendCooldown(0);
+    clearInterval(resendIntervalRef.current);
   }
 
   function onSession(res) {
@@ -62,10 +88,26 @@ export default function AuthModal({ mode: initialMode, onClose }) {
     try {
       await api.requestLoginOtp(loginEmail);
       setOtpSent(true);
+      startResendCooldown();
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleResendOtp() {
+    if (resendCooldown > 0 || resending) return;
+    setError('');
+    setResending(true);
+    try {
+      await api.requestLoginOtp(loginEmail);
+      setOtp('');
+      startResendCooldown();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setResending(false);
     }
   }
 
@@ -213,7 +255,16 @@ export default function AuthModal({ mode: initialMode, onClose }) {
                 <button type="submit" disabled={loading}>
                   {loading ? 'Logging in…' : 'Log in'}
                 </button>
-                <button type="button" className="secondary" style={{ marginTop: 8 }} onClick={() => setOtpSent(false)}>
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{ marginTop: 8 }}
+                  disabled={resendCooldown > 0 || resending}
+                  onClick={handleResendOtp}
+                >
+                  {resending ? 'Resending…' : resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend code'}
+                </button>
+                <button type="button" className="secondary" style={{ marginTop: 8 }} onClick={() => switchLoginMethod('otp')}>
                   Use a different number
                 </button>
               </form>

@@ -17,7 +17,7 @@ const router = express.Router();
 // find a real account to target more easily than in a typical app.
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5,
+  max: 20,
   message: { error: 'Too many login attempts. Try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -44,7 +44,11 @@ const otpLimiter = rateLimit({
 
 const LOGIN_OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const LOGIN_OTP_MAX_ATTEMPTS = 5;
+const LOGIN_OTP_RESEND_COOLDOWN_MS = 45 * 1000; // matches the Resend button's own countdown in AuthModal.jsx
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+const RESET_OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const RESET_OTP_MAX_ATTEMPTS = 5;
+const RESET_OTP_RESEND_COOLDOWN_MS = 45 * 1000;
 
 function hashResetToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
@@ -162,13 +166,25 @@ router.post('/login-otp/request', otpLimiter, async (req, res) => {
     if (!phone) return res.status(400).json({ error: 'phone is required' });
 
     const client = await Client.findOne({ phone });
-    if (client) {
+    // A too-soon resend (button double-tap, multiple tabs, a direct API
+    // hit before the cooldown elapses) silently no-ops instead of erroring
+    // -- an explicit "please wait" response here would leak whether this
+    // phone number has an account, the same enumeration risk the generic
+    // response below already guards against.
+    const withinCooldown =
+      client?.loginOtpLastSentAt && Date.now() - client.loginOtpLastSentAt.getTime() < LOGIN_OTP_RESEND_COOLDOWN_MS;
+    if (client && !withinCooldown) {
       const otp = crypto.randomInt(100000, 1000000).toString();
       client.loginOtpHash = await bcrypt.hash(otp, 10);
       client.loginOtpExpiresAt = new Date(Date.now() + LOGIN_OTP_TTL_MS);
       client.loginOtpAttempts = 0;
+      client.loginOtpLastSentAt = new Date();
       await client.save();
-      await sendSms(phone, `Your HuntsTAG login code is ${otp}. It expires in 10 minutes.`);
+      // This exact wording (including the en dash and no other text) is
+      // the DLT-registered template on the ChennaiSMS account -- India's
+      // TRAI regulations reject anything that doesn't match a pre-approved
+      // template byte-for-byte, confirmed against this exact string.
+      await sendSms(phone, `Your OTP for login/verification is ${otp}. Please do not share this with anyone. – HUNTSWORLD`);
     }
 
     res.json({ ok: true, message: 'If an account exists for this number, an OTP has been sent.' });
@@ -260,42 +276,93 @@ router.post('/change-password', requireAuth, async (req, res) => {
 });
 
 // POST /api/auth/forgot-password
-// Looks up the client by login email and emails a reset link (stubbed to
-// console for now, see utils/email.js). Always returns the same generic
-// message whether or not the email matched an account, same "don't reveal
-// which part was wrong" principle /login already follows -- otherwise this
-// endpoint could be used to enumerate registered accounts.
+// Looks up the client by login email and emails a 6-digit OTP (see
+// utils/email.js). Always returns the same generic message whether or not
+// the email matched an account, same "don't reveal which part was wrong"
+// principle /login already follows -- otherwise this endpoint could be used
+// to enumerate registered accounts. A too-soon resend (see loginOtpLastSentAt
+// above for the same pattern on the phone-login flow) silently no-ops
+// instead of erroring, for the same enumeration-safety reason.
 router.post('/forgot-password', otpLimiter, async (req, res) => {
   try {
     const { loginEmail } = req.body;
     if (!loginEmail) return res.status(400).json({ error: 'loginEmail is required' });
 
     const client = await Client.findOne({ loginEmail: loginEmail.toLowerCase() });
-    if (client) {
-      const rawToken = crypto.randomBytes(32).toString('hex');
-      client.resetTokenHash = hashResetToken(rawToken);
-      client.resetTokenExpiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+    const withinCooldown =
+      client?.resetOtpLastSentAt && Date.now() - client.resetOtpLastSentAt.getTime() < RESET_OTP_RESEND_COOLDOWN_MS;
+    if (client && !withinCooldown) {
+      const otp = crypto.randomInt(100000, 1000000).toString();
+      client.resetOtpHash = await bcrypt.hash(otp, 10);
+      client.resetOtpExpiresAt = new Date(Date.now() + RESET_OTP_TTL_MS);
+      client.resetOtpAttempts = 0;
+      client.resetOtpLastSentAt = new Date();
       await client.save();
-      const link = `${process.env.PUBLIC_BASE_URL}/reset-password?token=${rawToken}`;
       await sendEmail(
         client.loginEmail,
-        'Reset your HuntsTAG password',
-        `Click the link below to reset your password. This link expires in 1 hour.\n\n${link}`
+        'Your HuntsTAG password reset code',
+        `Your password reset code is ${otp}. It expires in 10 minutes. If you didn't request this, you can ignore this email.`
       );
     }
 
-    res.json({ ok: true, message: 'If an account exists for this email, a reset link has been sent.' });
+    res.json({ ok: true, message: 'If an account exists for this email, a reset code has been sent.' });
   } catch (err) {
     console.error('[auth/forgot-password]', err);
-    res.status(500).json({ error: 'Failed to send reset link' });
+    res.status(500).json({ error: 'Failed to send reset code' });
+  }
+});
+
+// POST /api/auth/forgot-password/verify-otp
+// Checks the emailed code and, on success, mints a resetToken -- the same
+// kind of token /reset-password already expects, so that route (and its
+// "not guessable, no attempt-limiting needed" reasoning below) is completely
+// unchanged by this OTP step being added in front of it. Clears the OTP
+// fields immediately on success so the code can't be reused.
+router.post('/forgot-password/verify-otp', otpLimiter, async (req, res) => {
+  try {
+    const { loginEmail, otp } = req.body;
+    if (!loginEmail || !otp) {
+      return res.status(400).json({ error: 'loginEmail and otp are required' });
+    }
+
+    const client = await Client.findOne({ loginEmail: loginEmail.toLowerCase() });
+    if (!client || !client.resetOtpHash || !client.resetOtpExpiresAt) {
+      return res.status(400).json({ error: 'Invalid or expired code. Request a new one.' });
+    }
+    if (client.resetOtpExpiresAt < new Date()) {
+      return res.status(400).json({ error: 'Code expired. Request a new one.' });
+    }
+    if (client.resetOtpAttempts >= RESET_OTP_MAX_ATTEMPTS) {
+      return res.status(429).json({ error: 'Too many incorrect attempts. Request a new code.' });
+    }
+
+    const ok = await bcrypt.compare(otp, client.resetOtpHash);
+    if (!ok) {
+      client.resetOtpAttempts += 1;
+      await client.save();
+      return res.status(401).json({ error: 'Incorrect code' });
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    client.resetTokenHash = hashResetToken(rawToken);
+    client.resetTokenExpiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+    client.resetOtpHash = null;
+    client.resetOtpExpiresAt = null;
+    client.resetOtpAttempts = 0;
+    await client.save();
+
+    res.json({ ok: true, token: rawToken });
+  } catch (err) {
+    console.error('[auth/forgot-password/verify-otp]', err);
+    res.status(500).json({ error: 'Verification failed' });
   }
 });
 
 // POST /api/auth/reset-password
-// Verifies the token emailed above and sets a new password. No
-// attempt-limiting needed here (unlike a 6-digit OTP) since a 256-bit
-// token isn't guessable -- the otpLimiter rate limit still applies for
-// general abuse protection.
+// Verifies the token minted by /forgot-password/verify-otp above and sets a
+// new password. No attempt-limiting needed here (unlike the 6-digit OTP)
+// since a 256-bit token isn't guessable -- the otpLimiter rate limit still
+// applies for general abuse protection.
 router.post('/reset-password', otpLimiter, async (req, res) => {
   try {
     const { token, newPassword } = req.body;

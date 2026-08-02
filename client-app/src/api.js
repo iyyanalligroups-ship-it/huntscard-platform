@@ -55,9 +55,12 @@ export const api = {
   requestLoginOtp: (phone) => request('/api/auth/login-otp/request', { method: 'POST', body: { phone }, auth: false }),
   verifyLoginOtp: (phone, otp) =>
     request('/api/auth/login-otp/verify', { method: 'POST', body: { phone, otp }, auth: false }),
-  // Forgot-password: emails a reset link (see pages/ResetPassword.jsx).
+  // Forgot-password: emails a 6-digit code (see pages/ForgotPassword.jsx),
+  // verified in-page, which unlocks the "set new password" step.
   forgotPassword: (loginEmail) =>
     request('/api/auth/forgot-password', { method: 'POST', body: { loginEmail }, auth: false }),
+  verifyForgotPasswordOtp: (loginEmail, otp) =>
+    request('/api/auth/forgot-password/verify-otp', { method: 'POST', body: { loginEmail, otp }, auth: false }),
   resetPassword: (token, newPassword) =>
     request('/api/auth/reset-password', { method: 'POST', body: { token, newPassword }, auth: false }),
   getProfile: () => request('/api/profile/me'),
