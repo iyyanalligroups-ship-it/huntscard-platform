@@ -67,6 +67,11 @@ const arLayoutSchema = new mongoose.Schema(
     // adjustment the model (usually a roughly-centered figure) doesn't need.
     videoScaleX: { type: Number, min: 0.3, max: 10, default: 1 },
     videoScaleY: { type: Number, min: 0.3, max: 10, default: 1 },
+    // Positions for admin-defined custom AR Layout components (see
+    // ArComponentDefinition) -- same idea as the named position fields
+    // above (contact, portfolio, etc.), but keyed dynamically since the
+    // set of custom components can grow without a schema change.
+    customElements: { type: Map, of: elementPositionSchema, default: {} },
     updatedBy: { type: String, trim: true },
   },
   { timestamps: true }

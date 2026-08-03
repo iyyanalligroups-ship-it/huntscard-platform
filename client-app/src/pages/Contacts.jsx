@@ -6,6 +6,32 @@ import { api } from '../api.js';
 const CONTACT_PICKER_SUPPORTED =
   typeof navigator !== 'undefined' && 'contacts' in navigator && 'ContactsManager' in window;
 
+// Formats a Date as the local (no-timezone) string <input
+// type="datetime-local"> expects/returns, e.g. "2026-08-05T14:30".
+function toDatetimeLocalValue(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function roundUpToNext5Min(date) {
+  const rounded = new Date(date);
+  rounded.setSeconds(0, 0);
+  rounded.setMinutes(Math.ceil(rounded.getMinutes() / 5) * 5);
+  return rounded;
+}
+
+// wa.me needs a full international number (no +, no spaces/dashes) to
+// open a chat with a SPECIFIC contact rather than a generic "pick
+// someone" share -- contact phone numbers in this app are entered in
+// wildly inconsistent formats (see normalizePhone in
+// routes/appointments.js), so this strips to digits and assumes a bare
+// 10-digit number is Indian (country code 91), same assumption the rest
+// of this codebase's SMS integration already makes.
+function waNumber(phone) {
+  const digits = (phone || '').replace(/\D/g, '');
+  return digits.length === 10 ? `91${digits}` : digits;
+}
+
 // A ContactAddress from the picker is a structured object, not a string --
 // flatten it to one line for storage/display.
 function formatAddress(addr) {
@@ -106,6 +132,28 @@ export default function Contacts() {
   const [formError, setFormError] = useState('');
   const [formSaving, setFormSaving] = useState(false);
   const formPhotoInputRef = useRef(null);
+
+  // Appointment-request modal -- opened by the arrow icon on a contact
+  // row (see routes/appointments.js). `appointmentTarget` is the contact
+  // being requested, or null when the modal's closed.
+  const [appointmentTarget, setAppointmentTarget] = useState(null);
+  const [appointmentNote, setAppointmentNote] = useState('');
+  const [appointmentProposedAt, setAppointmentProposedAt] = useState(''); // <input type="datetime-local"> value, local to the sender's own clock
+  const [busyTimes, setBusyTimes] = useState([]); // this contact's own upcoming accepted appointments, if they're a registered account -- see openAppointmentModal
+  const [appointmentSending, setAppointmentSending] = useState(false);
+  const [appointmentError, setAppointmentError] = useState('');
+  const [appointmentSentIds, setAppointmentSentIds] = useState(new Set());
+  // The just-created request, once sent -- switches the modal into a
+  // "sent" state offering a WhatsApp quick-share. This is a MANUAL
+  // share the sender chooses to send themselves, not an automated
+  // notification -- real automated WhatsApp delivery needs a WhatsApp
+  // Business API account (Meta Cloud API/Twilio/etc.) with an
+  // approved message template, the same kind of credential this app
+  // doesn't have for SMS either (see routes/appointments.js). Email
+  // (matched accounts) and SMS (unmatched, once DLT-approved) are the
+  // real automated channels; this is the honest middle ground for
+  // WhatsApp specifically.
+  const [sentRequest, setSentRequest] = useState(null);
 
   function loadContacts() {
     return api
@@ -244,6 +292,52 @@ export default function Contacts() {
       setError(err.message);
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  function openAppointmentModal(contact) {
+    setAppointmentTarget(contact);
+    setAppointmentNote('');
+    // Defaults to an hour from now, not blank -- an empty field made it
+    // easy to either submit with no time at all or (worse) hand-type a
+    // date in the past with nothing stopping you. Rounded to the next 5
+    // minutes so it doesn't look like an oddly specific auto-pick.
+    setAppointmentProposedAt(toDatetimeLocalValue(roundUpToNext5Min(new Date(Date.now() + 60 * 60 * 1000))));
+    setAppointmentError('');
+    setBusyTimes([]);
+    setSentRequest(null);
+    if (contact.phone) {
+      api
+        .getAppointmentBusyTimes(contact.phone)
+        .then((res) => setBusyTimes(res.matched ? res.busy : []))
+        .catch(() => {});
+    }
+  }
+
+  async function handleSendAppointment(e) {
+    e.preventDefault();
+    if (!appointmentTarget) return;
+    // <input type="datetime-local"> gives a value with no timezone (e.g.
+    // "2026-08-05T14:30") -- `new Date(...)` on that string interprets it
+    // in the BROWSER's own local timezone, which is exactly what was
+    // intended (the sender picked a time on their own clock).
+    const proposedDate = appointmentProposedAt ? new Date(appointmentProposedAt) : null;
+    if (proposedDate && proposedDate.getTime() < Date.now()) {
+      setAppointmentError('That time has already passed -- pick a time in the future.');
+      return;
+    }
+    setAppointmentSending(true);
+    setAppointmentError('');
+    try {
+      const request = await api.sendAppointmentRequest(appointmentTarget._id, appointmentNote, proposedDate?.toISOString());
+      setAppointmentSentIds((ids) => new Set(ids).add(appointmentTarget._id));
+      // Stays open in a "sent" state (see the modal JSX) instead of
+      // closing outright -- that's where the WhatsApp quick-share lives.
+      setSentRequest(request);
+    } catch (err) {
+      setAppointmentError(err.message);
+    } finally {
+      setAppointmentSending(false);
     }
   }
 
@@ -551,6 +645,23 @@ export default function Contacts() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    className="secondary"
+                    title="Send an appointment request"
+                    aria-label="Send an appointment request"
+                    style={{ width: 36, height: 36, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                    onClick={() => openAppointmentModal(c)}
+                  >
+                    {appointmentSentIds.has(c._id) ? (
+                      <span style={{ color: 'var(--holo-cyan)', fontSize: 16 }}>✓</span>
+                    ) : (
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 19V5" />
+                        <path d="M5 12l7-7 7 7" />
+                      </svg>
+                    )}
+                  </button>
                   <button type="button" className="secondary" style={{ width: 'auto' }} onClick={() => openEditForm(c)}>
                     Edit
                   </button>
@@ -569,6 +680,119 @@ export default function Contacts() {
           </div>
         )}
       </div>
+
+      {appointmentTarget && (
+        <div className="auth-modal-backdrop" onClick={(e) => e.target === e.currentTarget && setAppointmentTarget(null)}>
+          <div className="auth-modal-card">
+            <button className="auth-modal-close" onClick={() => setAppointmentTarget(null)} aria-label="Close">
+              ×
+            </button>
+            {sentRequest ? (
+              <>
+                <h1 style={{ fontSize: 18 }}>Request sent</h1>
+                <p className="subtitle" style={{ marginBottom: 20 }}>
+                  {sentRequest.toClientId
+                    ? `${appointmentTarget.name} is already on HuntsTAG -- they've been emailed, and it's waiting on their Appointment Requests page.`
+                    : `We texted ${appointmentTarget.name} a link to create an account and see it -- that text needs your SMS provider's template approved before it actually delivers (ask your dev if unsure).`}
+                </p>
+                <p className="hint" style={{ margin: '0 0 12px' }}>
+                  Want to make sure it doesn't get missed? Send it yourself too:
+                </p>
+                <a
+                  href={`https://wa.me/${waNumber(appointmentTarget.phone)}?text=${encodeURIComponent(
+                    sentRequest.toClientId
+                      ? `Hi ${appointmentTarget.name.split(' ')[0]}, I just sent you an appointment request on HuntsTAG${
+                          sentRequest.proposedAt ? ` for ${new Date(sentRequest.proposedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : ''
+                        }. Check it out: ${window.location.origin}/dashboard/appointments`
+                      : `Hi, I'd like to schedule an appointment with you${
+                          sentRequest.proposedAt ? ` for ${new Date(sentRequest.proposedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : ''
+                        }. Create your free HuntsTAG account to see my request: ${window.location.origin}/register`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    background: '#25D366',
+                    color: '#06120f',
+                    fontWeight: 700,
+                    fontSize: 14,
+                    padding: 13,
+                    borderRadius: 9,
+                    textDecoration: 'none',
+                    marginBottom: 10,
+                  }}
+                >
+                  Send via WhatsApp
+                </a>
+                <button type="button" className="secondary" onClick={() => setAppointmentTarget(null)}>
+                  Done
+                </button>
+              </>
+            ) : (
+              <>
+                <h1 style={{ fontSize: 18 }}>Request an appointment</h1>
+                <p className="subtitle" style={{ marginBottom: 20 }}>
+                  {appointmentTarget.name}
+                  {' — '}
+                  if they're already on HuntsTAG they'll see this on their Appointment Requests page (and get
+                  emailed); otherwise we'll text them a link to create an account and view it.
+                </p>
+                {appointmentError && <div className="error-banner">{appointmentError}</div>}
+                <form onSubmit={handleSendAppointment}>
+                  <div className="field">
+                    <label htmlFor="appointmentProposedAt">Proposed date &amp; time (optional)</label>
+                    <input
+                      id="appointmentProposedAt"
+                      type="datetime-local"
+                      value={appointmentProposedAt}
+                      min={toDatetimeLocalValue(new Date())}
+                      onChange={(e) => setAppointmentProposedAt(e.target.value)}
+                    />
+                    {busyTimes.length > 0 && (
+                      <p className="hint" style={{ margin: '6px 0 0' }}>
+                        {appointmentTarget.name} already has an appointment around:{' '}
+                        {busyTimes
+                          .map((t) =>
+                            new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                          )
+                          .join(', ')}
+                      </p>
+                    )}
+                  </div>
+                  <div className="field">
+                    <label htmlFor="appointmentNote">Note (optional)</label>
+                    <textarea
+                      id="appointmentNote"
+                      rows={3}
+                      maxLength={500}
+                      value={appointmentNote}
+                      onChange={(e) => setAppointmentNote(e.target.value)}
+                      placeholder="What's this about…"
+                      style={{
+                        width: '100%',
+                        background: 'var(--panel-raised)',
+                        border: '1px solid var(--panel-border)',
+                        borderRadius: 9,
+                        padding: '11px 13px',
+                        color: 'var(--text)',
+                        fontSize: 14,
+                        fontFamily: 'var(--font-ui)',
+                        resize: 'vertical',
+                      }}
+                    />
+                  </div>
+                  <button type="submit" disabled={appointmentSending}>
+                    {appointmentSending ? 'Sending…' : 'Send request'}
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

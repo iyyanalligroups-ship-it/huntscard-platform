@@ -12,6 +12,7 @@ const CardPlan = require('../models/CardPlan');
 const ArLayout = require('../models/ArLayout');
 const ArIcon = require('../models/ArIcon');
 const AttributeDefinition = require('../models/AttributeDefinition');
+const ArComponentDefinition = require('../models/ArComponentDefinition');
 const CardRequest = require('../models/CardRequest');
 const ContactMessage = require('../models/ContactMessage');
 const Contact = require('../models/Contact');
@@ -81,7 +82,8 @@ const uploadCatalogVideo = multer({
 // itself uses).
 async function getValidArIconKeys() {
   const customSections = await AttributeDefinition.distinct('section');
-  return new Set(['video', 'contact', 'portfolio', 'social', 'huntsworld', ...customSections]);
+  const customArComponents = await ArComponentDefinition.distinct('key', { active: true });
+  return new Set(['video', 'contact', 'portfolio', 'social', 'huntsworld', ...customSections, ...customArComponents]);
 }
 
 // Every upload writes into sectionIcons now (works for any key); the five
@@ -916,6 +918,7 @@ router.put('/ar-layout', requireAdmin, async (req, res) => {
       videoRotationZ,
       videoScaleX,
       videoScaleY,
+      customElements,
     } = req.body || {};
     const updates = { updatedBy: req.admin?.email || 'unknown' };
     if (qr) updates.qr = qr;
@@ -934,6 +937,10 @@ router.put('/ar-layout', requireAdmin, async (req, res) => {
     if (videoRotationZ !== undefined) updates.videoRotationZ = videoRotationZ;
     if (videoScaleX !== undefined) updates.videoScaleX = videoScaleX;
     if (videoScaleY !== undefined) updates.videoScaleY = videoScaleY;
+    // Custom AR component positions (see ArComponentDefinition) -- a
+    // whole-map replace, same as every other field here being "whatever
+    // the editor actually sent," not a per-key merge.
+    if (customElements && typeof customElements === 'object') updates.customElements = customElements;
 
     const layout = await ArLayout.findOneAndUpdate(
       { key: 'global' },
@@ -1125,6 +1132,85 @@ router.delete('/attributes/:id', requireAdmin, async (req, res) => {
     // Clients' saved values for this key are left in place (harmless,
     // unused Map entries) -- not worth a bulk update across every client
     // just to scrub a key nothing reads anymore.
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------
+// AR component definitions -- admin-defined extra AR Layout panel
+// elements (see models/ArComponentDefinition.js for the full picture).
+// Same CRUD shape as /attributes above, minus the "section" concept
+// (each one IS its own draggable panel element, not grouped into a tab).
+// ---------------------------------------------------------------------
+
+// Fixed field names on the ArLayout schema/ELEMENTS arrays -- a custom
+// component's key can never collide with one of these, or it'd silently
+// overwrite a real built-in panel's saved position instead of getting
+// its own slot in ArLayout.customElements.
+const RESERVED_AR_COMPONENT_KEYS = ['qr', 'video', 'contact', 'portfolio', 'social', 'huntsworld', 'model'];
+
+router.get('/ar-components', requireAdmin, async (req, res) => {
+  try {
+    const components = await ArComponentDefinition.find().sort({ order: 1, createdAt: 1 });
+    res.json(components);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/ar-components', requireAdmin, async (req, res) => {
+  try {
+    const { label, order } = req.body || {};
+    if (!label || !String(label).trim()) return res.status(400).json({ error: 'Label is required' });
+
+    const baseKey = slugifyAttributeKey(label);
+    if (!baseKey) return res.status(400).json({ error: 'Label must contain at least one letter or number' });
+    if (RESERVED_AR_COMPONENT_KEYS.includes(baseKey)) {
+      return res.status(400).json({ error: `"${label}" is a reserved name -- pick a different label.` });
+    }
+    // Slug collisions get a numeric suffix rather than rejecting the
+    // create outright, same as /attributes above.
+    let key = baseKey;
+    let suffix = 2;
+    while (await ArComponentDefinition.exists({ key })) {
+      key = `${baseKey}_${suffix++}`;
+    }
+
+    const component = await ArComponentDefinition.create({
+      key,
+      label: String(label).trim(),
+      order: Number.isFinite(order) ? order : 0,
+    });
+    res.status(201).json(component);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/ar-components/:id', requireAdmin, async (req, res) => {
+  try {
+    const { label, order, active } = req.body || {};
+    const updates = {};
+    if (label !== undefined) updates.label = String(label).trim();
+    if (order !== undefined) updates.order = order;
+    if (active !== undefined) updates.active = Boolean(active);
+
+    const component = await ArComponentDefinition.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
+    if (!component) return res.status(404).json({ error: 'Component not found' });
+    res.json(component);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/ar-components/:id', requireAdmin, async (req, res) => {
+  try {
+    const component = await ArComponentDefinition.findByIdAndDelete(req.params.id);
+    if (!component) return res.status(404).json({ error: 'Component not found' });
+    // Clients' saved values/positions for this key are left in place
+    // (harmless, unused Map entries) -- same reasoning as /attributes above.
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

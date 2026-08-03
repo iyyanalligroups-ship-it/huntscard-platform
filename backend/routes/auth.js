@@ -8,6 +8,7 @@ const { requireAuth } = require('../middleware/auth');
 const Client = require('../models/Client');
 const { sendSms } = require('../utils/sms');
 const { sendEmail } = require('../utils/email');
+const { claimAppointmentRequests } = require('./appointments');
 
 const router = express.Router();
 
@@ -98,6 +99,11 @@ router.post('/register', registerLimiter, async (req, res) => {
       dateOfBirth: dateOfBirth || null,
       mustChangePassword: false, // they chose this password themselves, no forced change needed
     });
+
+    // Best-effort -- claims any appointment requests sent to this phone
+    // number before this account existed (see routes/appointments.js).
+    // Never blocks/fails registration if this has a problem.
+    claimAppointmentRequests(client).catch((err) => console.error('[claimAppointmentRequests]', err));
 
     const token = signToken(client);
     res.status(201).json({

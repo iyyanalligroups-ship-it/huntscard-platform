@@ -92,6 +92,12 @@ const ClientSchema = new mongoose.Schema(
     // as they are; this is purely for whatever fields an admin adds later
     // without needing a schema change here.
     customAttributes: { type: Map, of: String, default: {} },
+    // Values for admin-defined custom AR Layout components (see
+    // ArComponentDefinition) -- keyed by that doc's `key`, e.g. a
+    // client's own Google Maps link for the "map" component. Same "one
+    // flexible Map, no schema change per new component" shape as
+    // customAttributes above.
+    arComponentValues: { type: Map, of: String, default: {} },
 
     // Set by admin at account-creation time, read-only for the client.
     // References a CardPlan.key (e.g. "basic", "pro", "elite", or any

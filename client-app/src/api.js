@@ -80,6 +80,11 @@ export const api = {
   // by both Profile Settings (to know which extra inputs to render) and
   // the public profile page (to know which extra rows to render).
   getAttributeDefinitions: () => request('/api/public/attributes', { auth: false }),
+  // Admin-defined extra AR Layout panel elements (see
+  // ArComponentDefinition) -- e.g. "Map". Used by Profile Settings (to
+  // know which extra link inputs to render) and both AR Layout editors
+  // (to know which extra draggable elements to render).
+  getArComponentDefinitions: () => request('/api/public/ar-components', { auth: false }),
   getCatalog: () => request('/api/public/catalog', { auth: false }),
   submitRequest: (payload) => request('/api/profile/requests', { method: 'POST', body: payload }),
   listMyRequests: () => request('/api/profile/requests'),
@@ -237,4 +242,17 @@ export const api = {
     a.remove();
     URL.revokeObjectURL(url);
   },
+
+  // Appointment requests -- sent from a contact's own saved phone number
+  // (see pages/Contacts.jsx), in-app if they're already a Huntstag
+  // account, an SMS invite otherwise. See pages/Appointments.jsx.
+  sendAppointmentRequest: (contactId, note, proposedAt) =>
+    request('/api/profile/appointments', { method: 'POST', body: { contactId, note, proposedAt } }),
+  getReceivedAppointments: () => request('/api/profile/appointments/received'),
+  getSentAppointments: () => request('/api/profile/appointments/sent'),
+  respondToAppointment: (id, status) => request(`/api/profile/appointments/${id}`, { method: 'PATCH', body: { status } }),
+  // Free/busy check before proposing a time -- { matched, busy: [isoString] }.
+  // Only ever times, never who-with/notes, same "just enough to avoid a
+  // conflict, nothing more" privacy level a calendar's free/busy view uses.
+  getAppointmentBusyTimes: (phone) => request(`/api/profile/appointments/busy?phone=${encodeURIComponent(phone)}`),
 };

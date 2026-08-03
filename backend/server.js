@@ -7,6 +7,7 @@ const connectDB = require('./db');
 const authRoutes = require('./routes/auth');
 const profileRoutes = require('./routes/profile');
 const contactsRoutes = require('./routes/contacts');
+const appointmentsRoutes = require('./routes/appointments');
 const publicRoutes = require('./routes/public');
 const adminAuthRoutes = require('./routes/adminAuth');
 const adminRoutes = require('./routes/admin');
@@ -43,6 +44,7 @@ async function main() {
   app.use('/api/auth', authRoutes);
   app.use('/api/profile', profileRoutes);
   app.use('/api/profile', contactsRoutes);
+  app.use('/api/profile', appointmentsRoutes);
   app.use('/api/public', publicRoutes);
   app.use('/api/admin/auth', adminAuthRoutes);
   app.use('/api/admin', adminRoutes);

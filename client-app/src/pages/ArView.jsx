@@ -197,6 +197,7 @@ export default function ArView({ clientId }) {
   const [profile, setProfile] = useState(null);
   const [layout, setLayout] = useState(null);
   const [icons, setIcons] = useState(null); // admin-managed logo per attribute -- see ArIcon model. {} once loaded if none set.
+  const [arComponents, setArComponents] = useState([]); // admin-defined extra AR Layout panel elements, see ArComponentDefinition
   const [loadError, setLoadError] = useState('');
   const [cameraError, setCameraError] = useState('');
   const [pose, setPose] = useState(null); // { rotation: number[3][3], translation: number[3] }
@@ -218,6 +219,12 @@ export default function ArView({ clientId }) {
       .getPublicArIcons()
       .then(setIcons)
       .catch(() => setIcons({}));
+    // Same "cosmetic nice-to-have, don't block the view" reasoning as
+    // the icons fetch above.
+    api
+      .getArComponentDefinitions()
+      .then(setArComponents)
+      .catch(() => {});
   }, [clientId]);
 
   useEffect(() => {
@@ -897,6 +904,80 @@ export default function ArView({ clientId }) {
                     )}
                   </div>
                 ) : href ? (
+                  <a href={href} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                    {content}
+                  </a>
+                ) : (
+                  content
+                )}
+              </div>
+            );
+          })}
+
+          {/* Admin-defined extra AR Layout panel elements (see
+              ArComponentDefinition) -- same flat-panel treatment as the
+              built-in contact/portfolio/social/huntsworld pills above,
+              since that's all a simple "icon + link" component needs.
+              The client's own value for each lives in
+              profile.arComponentValues, keyed the same way. */}
+          {arComponents.map((c) => {
+            const pos = layout.customElements?.[c.key] || { x: 50, y: 50 };
+            const qrPos = layout.qr || { x: 50, y: 50 };
+            const local = [...toLocalOffset(pos, qrPos), 0];
+            const canvas = canvasRef.current;
+            const proj = projectLocalPoint(pose, focalPxRef.current, canvas.width / 2, canvas.height / 2, local);
+            if (!proj) return null;
+            const iconUrl = icons?.[c.key];
+            const href = profile?.arComponentValues?.[c.key] || undefined;
+
+            const pill = iconUrl ? (
+              <img src={iconUrl} alt={c.label} style={{ width: '60%', height: '60%', objectFit: 'contain' }} />
+            ) : (
+              c.label
+            );
+
+            const content = (
+              <div
+                style={
+                  iconUrl
+                    ? {
+                        width: 56,
+                        height: 56,
+                        borderRadius: '50%',
+                        background: '#22d3ee',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
+                      }
+                    : {
+                        background: '#22d3ee',
+                        color: '#fff',
+                        padding: '8px 12px',
+                        borderRadius: 999,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap',
+                        boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
+                      }
+                }
+              >
+                {pill}
+              </div>
+            );
+
+            return (
+              <div
+                key={c.key}
+                style={{
+                  position: 'fixed',
+                  left: 0,
+                  top: 0,
+                  transform: `translate3d(${proj.x}px, ${proj.y}px, 0) translate(-50%, -50%) scale(${proj.scale})`,
+                  willChange: 'transform',
+                }}
+              >
+                {href ? (
                   <a href={href} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
                     {content}
                   </a>

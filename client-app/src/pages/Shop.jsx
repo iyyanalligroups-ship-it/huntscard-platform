@@ -19,7 +19,7 @@ function PlanImageGallery({ images }) {
           marginBottom: images.length > 1 ? 8 : 0,
         }}
       >
-        <img src={images[index]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <img src={images[index]} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
       </div>
       {images.length > 1 && (
         <div style={{ display: 'flex', gap: 6 }}>
@@ -380,6 +380,11 @@ export default function Shop() {
                 <div className="shop-plan-name">{p.name}</div>
                 <div className="shop-plan-price">{p.chargeAmount ? `₹${p.chargeAmount}` : p.price || 'Contact us'}</div>
                 <p className="shop-plan-desc">{p.description || 'A HuntsTAG smart card, tap-to-share ready.'}</p>
+                {p.variants?.length > 0 && (
+                  <p className="shop-plan-desc" style={{ color: 'var(--holo-cyan)', fontSize: 12, fontWeight: 600, marginTop: -8 }}>
+                    Available in: {p.variants.map((v) => `${v.name} (${v.shape === 'vertical' ? 'Vertical' : 'Horizontal'})`).join(', ')}
+                  </p>
+                )}
                 <button onClick={() => pickPlan(p.key)}>
                   {!loggedIn
                     ? 'Log in to buy'

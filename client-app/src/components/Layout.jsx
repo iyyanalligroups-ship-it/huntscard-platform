@@ -28,6 +28,9 @@ const ICONS = {
   contacts: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="10" r="2.5"/><path d="M8 17c0-1.8 1.8-3 4-3s4 1.2 4 3"/></svg>
   ),
+  appointments: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/><path d="M8 2v4"/><path d="M16 2v4"/><circle cx="15.5" cy="15.5" r="3"/><path d="M15.5 14v1.5l1 1"/></svg>
+  ),
   home: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
   ),
@@ -41,6 +44,7 @@ const ICONS = {
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', end: true },
+  { to: '/dashboard/appointments', label: 'Appointment Requests', icon: 'appointments' },
   { to: '/dashboard/profile', label: 'Profile', icon: 'profile' },
   { to: '/dashboard/settings', label: 'Profile Settings', icon: 'profileSettings' },
   { to: '/dashboard/ar-layout', label: 'AR Layout', icon: 'arLayout' },

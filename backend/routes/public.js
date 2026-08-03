@@ -13,6 +13,7 @@ const ContactMessage = require('../models/ContactMessage');
 const ArLayout = require('../models/ArLayout');
 const ArIcon = require('../models/ArIcon');
 const AttributeDefinition = require('../models/AttributeDefinition');
+const ArComponentDefinition = require('../models/ArComponentDefinition');
 const CatalogVideo = require('../models/CatalogVideo');
 const { getChargeAmount } = require('../utils/pricing');
 
@@ -275,7 +276,7 @@ router.get('/profile/:clientId', async (req, res) => {
     { $inc: { tapCount: 1 } }, // simple tap analytics, per the report's spec
     { new: true }
   ).select(
-    'fullName jobTitle bio photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType clientId'
+    'fullName jobTitle bio photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes arComponentValues cardType clientId'
   );
 
   if (!client) {
@@ -293,6 +294,7 @@ router.get('/profile/:clientId', async (req, res) => {
   // silently serialize as {} below, since a plain Map instance nested in a
   // plain object has no JSON.stringify-visible keys.
   clientObj.customAttributes = Object.fromEntries(client.customAttributes || []);
+  clientObj.arComponentValues = Object.fromEntries(client.arComponentValues || []);
 
   res.json(clientObj);
 });
@@ -406,6 +408,20 @@ router.get('/attributes', async (req, res) => {
     const attributes = await AttributeDefinition.find({ active: true }).sort({ section: 1, order: 1 });
     res.set('Cache-Control', 'no-store');
     res.json(attributes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/public/ar-components -- admin-defined extra AR Layout panel
+// elements (see ArComponentDefinition), active ones only. Used by both
+// editors (to know which extra draggable elements to render) and by
+// Profile Settings (to know which extra link inputs to render).
+router.get('/ar-components', async (req, res) => {
+  try {
+    const components = await ArComponentDefinition.find({ active: true }).sort({ order: 1, createdAt: 1 });
+    res.set('Cache-Control', 'no-store');
+    res.json(components);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

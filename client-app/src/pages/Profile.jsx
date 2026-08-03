@@ -69,6 +69,7 @@ export default function Profile() {
   const [arModelSaved, setArModelSaved] = useState(false);
   const [activeTab, setActiveTab] = useState('bio');
   const [attributes, setAttributes] = useState([]); // admin-defined extra fields, see AttributeDefinition
+  const [arComponents, setArComponents] = useState([]); // admin-defined extra AR Layout panel elements, see ArComponentDefinition
   const fileInputRef = useRef(null);
   const bannerInputRef = useRef(null);
   const logoInputRef = useRef(null);
@@ -81,6 +82,10 @@ export default function Profile() {
     api
       .getAttributeDefinitions()
       .then(setAttributes)
+      .catch(() => {});
+    api
+      .getArComponentDefinitions()
+      .then(setArComponents)
       .catch(() => {});
   }, []);
 
@@ -113,6 +118,11 @@ export default function Profile() {
 
   function updateCustomAttribute(key, value) {
     setForm((f) => ({ ...f, customAttributes: { ...(f.customAttributes || {}), [key]: value } }));
+    setSaved(false);
+  }
+
+  function updateArComponentValue(key, value) {
+    setForm((f) => ({ ...f, arComponentValues: { ...(f.arComponentValues || {}), [key]: value } }));
     setSaved(false);
   }
 
@@ -291,6 +301,7 @@ export default function Profile() {
       updates.gender = form.gender || '';
       updates.dateOfBirth = form.dateOfBirth || '';
       updates.customAttributes = form.customAttributes || {};
+      updates.arComponentValues = form.arComponentValues || {};
       const updated = await api.updateProfile(updates);
       setProfile(updated);
       setSaved(true);
@@ -604,6 +615,34 @@ export default function Profile() {
           </p>
         )}
       </div>
+      )}
+
+      {/* Admin-defined extra AR Layout panel elements (see
+          ArComponentDefinition) -- e.g. "Map" (a Google Maps link).
+          Gated the same way the banner/3D model above are, since these
+          are AR Layout elements too. */}
+      {profile?.arEnabled && arComponents.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <label style={{ marginBottom: 8 }}>AR links</label>
+          <p className="hint" style={{ margin: '0 0 10px' }}>
+            Fill any of these in and they show up as their own draggable block in HuntsAR World -- position
+            them from the AR Layout page.
+          </p>
+          <div className="field-grid">
+            {arComponents.map((c) => (
+              <div className="field" key={c.key}>
+                <label htmlFor={`ar-component-${c.key}`}>{c.label}</label>
+                <input
+                  id={`ar-component-${c.key}`}
+                  type="url"
+                  placeholder="https://…"
+                  value={form.arComponentValues?.[c.key] || ''}
+                  onChange={(e) => updateArComponentValue(c.key, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <div className="card" style={{ marginBottom: 16 }}>

@@ -8,6 +8,14 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
   const touchStartX = useRef(null);
+  // Direct WhatsApp/Telegram/email share links, not the OS share sheet --
+  // navigator.share({files:[...]}) for a .vcf is unreliable on desktop
+  // (most desktop share sheets have nothing registered that accepts a raw
+  // vCard file, so it just throws). Sharing the profile LINK through
+  // these three specific, always-available deep links is what was
+  // actually asked for and works every time, no share-sheet roulette.
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     api
@@ -16,6 +24,24 @@ export default function Dashboard() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
+
+  const shareUrl = profile?.clientId ? `${window.location.origin}/c/${profile.clientId}` : '';
+  const shareText = profile?.fullName ? `${profile.fullName} — HuntsTAG\n${shareUrl}` : shareUrl;
+
+  function closeShareMenu() {
+    setShareMenuOpen(false);
+    setLinkCopied(false);
+  }
+
+  async function handleCopyLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1800);
+    } catch {
+      /* clipboard blocked -- the link is still right there in the popup to select by hand */
+    }
+  }
 
   if (loading) return <p className="subtitle">Loading…</p>;
   if (error) return <div className="error-banner">{error}</div>;
@@ -129,6 +155,102 @@ export default function Dashboard() {
             <Link className="pv-btn pv-btn-secondary" to="/dashboard/settings">
               Edit
             </Link>
+            <div style={{ position: 'relative', flex: '0 0 auto' }}>
+              <button
+                type="button"
+                onClick={() => setShareMenuOpen((v) => !v)}
+                title="Share your profile"
+                aria-label="Share your profile"
+                style={{
+                  width: 44,
+                  padding: 0,
+                  borderRadius: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'var(--pv-surface)',
+                  border: '1px solid var(--pv-border)',
+                  color: 'var(--pv-text)',
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+                  <path d="M16 6l-4-4-4 4" />
+                  <path d="M12 2v14" />
+                </svg>
+              </button>
+
+              {shareMenuOpen && (
+                <>
+                  {/* Click-outside catcher -- a full-viewport transparent
+                      layer under the popup, same trick the AR Layout
+                      editors use for their own dropdowns. */}
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 9 }} onClick={closeShareMenu} />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      right: 0,
+                      marginTop: 8,
+                      background: 'var(--pv-surface)',
+                      border: '1px solid var(--pv-border)',
+                      borderRadius: 12,
+                      boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
+                      minWidth: 190,
+                      overflow: 'hidden',
+                      zIndex: 10,
+                    }}
+                  >
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(shareText)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={closeShareMenu}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', color: 'var(--pv-text)', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}
+                    >
+                      <span style={{ color: '#25D366' }}>●</span> WhatsApp
+                    </a>
+                    <a
+                      href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(`${profile?.fullName || ''} — HuntsTAG`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={closeShareMenu}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', color: 'var(--pv-text)', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}
+                    >
+                      <span style={{ color: '#29A9EA' }}>●</span> Telegram
+                    </a>
+                    <a
+                      href={`mailto:?subject=${encodeURIComponent(`${profile?.fullName || ''} — HuntsTAG`)}&body=${encodeURIComponent(shareText)}`}
+                      onClick={closeShareMenu}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', color: 'var(--pv-text)', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}
+                    >
+                      <span style={{ color: 'var(--holo-cyan)' }}>●</span> Email
+                    </a>
+                    <button
+                      type="button"
+                      onClick={handleCopyLink}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        width: '100%',
+                        padding: '11px 14px',
+                        background: 'none',
+                        border: 'none',
+                        borderTop: '1px solid var(--pv-border)',
+                        color: 'var(--pv-text)',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span style={{ color: 'var(--pv-text-dim)' }}>●</span> {linkCopied ? 'Link copied!' : 'Copy link'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 

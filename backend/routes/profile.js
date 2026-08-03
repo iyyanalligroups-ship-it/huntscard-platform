@@ -11,6 +11,7 @@ const Client = require('../models/Client');
 const CardRequest = require('../models/CardRequest');
 const CardPlan = require('../models/CardPlan');
 const AttributeDefinition = require('../models/AttributeDefinition');
+const ArComponentDefinition = require('../models/ArComponentDefinition');
 const { getChargeAmount } = require('../utils/pricing');
 
 const router = express.Router();
@@ -174,6 +175,7 @@ async function withPlanFlags(client) {
   clientObj.arEnabled = !!plan?.arEnabled;
   clientObj.zingEnabled = !!plan?.zingEnabled;
   clientObj.customAttributes = Object.fromEntries(client.customAttributes || []);
+  clientObj.arComponentValues = Object.fromEntries(client.arComponentValues || []);
   return clientObj;
 }
 
@@ -468,6 +470,19 @@ router.put('/me', requireAuth, async (req, res) => {
         if (activeKeys.has(key)) merged[key] = value;
       }
       updates.customAttributes = merged;
+    }
+
+    // Same merge-onto-existing-map pattern as customAttributes above, for
+    // admin-defined custom AR Layout components (see ArComponentDefinition)
+    // -- e.g. a client's own Google Maps link for the "map" component.
+    if (req.body.arComponentValues && typeof req.body.arComponentValues === 'object') {
+      const activeKeys = new Set((await ArComponentDefinition.find({ active: true }).select('key')).map((c) => c.key));
+      const current = await Client.findOne({ clientId: req.user.clientId }).select('arComponentValues');
+      const merged = Object.fromEntries(current?.arComponentValues || []);
+      for (const [key, value] of Object.entries(req.body.arComponentValues)) {
+        if (activeKeys.has(key)) merged[key] = value;
+      }
+      updates.arComponentValues = merged;
     }
 
     const client = await Client.findOneAndUpdate(
@@ -864,6 +879,7 @@ router.get('/ar-layout', requireAuth, async (req, res) => {
         videoRotationZ: fallback.videoRotationZ,
         videoScaleX: fallback.videoScaleX,
         videoScaleY: fallback.videoScaleY,
+        customElements: fallback.customElements,
       });
     }
     res.json(layout);
@@ -899,6 +915,7 @@ router.put('/ar-layout', requireAuth, async (req, res) => {
       videoRotationZ,
       videoScaleX,
       videoScaleY,
+      customElements,
     } = req.body || {};
     const updates = { clientId, updatedBy: req.user.loginEmail || clientId };
     if (qr) updates.qr = qr;
@@ -919,6 +936,9 @@ router.put('/ar-layout', requireAuth, async (req, res) => {
     if (videoRotationZ !== undefined) updates.videoRotationZ = videoRotationZ;
     if (videoScaleX !== undefined) updates.videoScaleX = videoScaleX;
     if (videoScaleY !== undefined) updates.videoScaleY = videoScaleY;
+    // Custom AR component positions (see ArComponentDefinition) -- a
+    // whole-map replace, same as every other field here.
+    if (customElements && typeof customElements === 'object') updates.customElements = customElements;
 
     const layout = await ArLayout.findOneAndUpdate(
       { clientId },

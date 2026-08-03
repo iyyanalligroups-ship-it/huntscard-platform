@@ -68,6 +68,7 @@ export default function ArLayout() {
   const [profile, setProfile] = useState(null);
   const [layout, setLayout] = useState(null);
   const [icons, setIcons] = useState({}); // admin-managed logo per attribute -- see ArIcon model, read-only here
+  const [arComponents, setArComponents] = useState([]); // admin-defined extra AR Layout panel elements, see ArComponentDefinition
   const [error, setError] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
   const [dragging, setDragging] = useState(null);
@@ -100,13 +101,24 @@ export default function ArLayout() {
       .then((profileData) => {
         setProfile(profileData);
         if (profileData.arEnabled) {
-          return api.getMyArLayout().then(setLayout);
+          // Custom AR component positions come back nested under
+          // customElements (see ArLayout model) -- flattened onto the
+          // layout's own top level here so every existing position
+          // handler (handlePointerMove, positionFromEvent, etc.) works
+          // on a custom component's key exactly like a built-in one,
+          // with zero changes to that logic. Reassembled back into
+          // customElements on save, see handleSave below.
+          return api.getMyArLayout().then((raw) => setLayout({ ...raw, ...(raw.customElements || {}) }));
         }
       })
       .catch((err) => setError(err.message));
     api
       .getPublicArIcons()
       .then(setIcons)
+      .catch(() => {});
+    api
+      .getArComponentDefinitions()
+      .then(setArComponents)
       .catch(() => {});
   }, []);
 
@@ -423,6 +435,15 @@ export default function ArLayout() {
         videoScaleX,
         videoScaleY,
       } = layout;
+      // Reassemble the flattened custom-component positions (see the
+      // load effect above) back into the nested shape the server
+      // expects -- one entry per currently-active component, pulled
+      // straight off the same top-level layout keys everything else
+      // reads from.
+      const customElements = {};
+      for (const c of arComponents) {
+        if (layout[c.key]) customElements[c.key] = layout[c.key];
+      }
       const updated = await api.saveMyArLayout({
         qr,
         video,
@@ -440,8 +461,9 @@ export default function ArLayout() {
         videoRotationZ,
         videoScaleX,
         videoScaleY,
+        customElements,
       });
-      setLayout(updated);
+      setLayout({ ...updated, ...(updated.customElements || {}) });
       setSaveStatus('Saved -- this is how your card will look in HuntsAR World.');
     } catch (err) {
       setError(err.message);
@@ -1243,6 +1265,75 @@ export default function ArLayout() {
                 />
               ) : (
                 el.label
+              )}
+            </div>
+          );
+        })}
+
+        {/* Admin-defined extra AR Layout panel elements (see
+            ArComponentDefinition) -- same plain-pill treatment as the
+            built-in contact/portfolio/social/huntsworld elements above,
+            since that's all a simple "icon + link" component needs. */}
+        {arComponents.map((c) => {
+          const pos = layout[c.key] || { x: 50, y: 50 };
+          const iconUrl = icons?.[c.key];
+          return (
+            <div
+              key={c.key}
+              onPointerDown={(e) => handlePointerDown(c.key, e)}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              title={c.label}
+              style={
+                iconUrl
+                  ? {
+                      position: 'absolute',
+                      left: `${pos.x}%`,
+                      top: `${pos.y}%`,
+                      transform: 'translate(-50%, -50%)',
+                      width: 68,
+                      height: 68,
+                      borderRadius: '50%',
+                      background: '#22d3ee',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: dragging === c.key ? 'grabbing' : 'grab',
+                      boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
+                      touchAction: 'none',
+                      userSelect: 'none',
+                      zIndex: dragging === c.key ? 10 : 1,
+                    }
+                  : {
+                      position: 'absolute',
+                      left: `${pos.x}%`,
+                      top: `${pos.y}%`,
+                      transform: 'translate(-50%, -50%)',
+                      background: '#22d3ee',
+                      color: '#fff',
+                      padding: '8px 12px',
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: dragging === c.key ? 'grabbing' : 'grab',
+                      boxShadow: 'var(--shadow-md)',
+                      whiteSpace: 'nowrap',
+                      touchAction: 'none',
+                      userSelect: 'none',
+                      zIndex: dragging === c.key ? 10 : 1,
+                    }
+              }
+            >
+              {iconUrl ? (
+                <img
+                  src={iconUrl}
+                  alt={c.label}
+                  draggable={false}
+                  style={{ width: '60%', height: '60%', objectFit: 'contain', pointerEvents: 'none' }}
+                />
+              ) : (
+                c.label
               )}
             </div>
           );

@@ -18,6 +18,7 @@ import Track from './pages/Track.jsx';
 import Settings from './pages/Settings.jsx';
 import ArLayout from './pages/ArLayout.jsx';
 import Contacts from './pages/Contacts.jsx';
+import Appointments from './pages/Appointments.jsx';
 import PublicProfile from './pages/PublicProfile.jsx';
 
 function RequireAuth({ children }) {
@@ -65,6 +66,7 @@ export default function App() {
         }
       >
         <Route index element={<DashboardHome />} />
+        <Route path="appointments" element={<Appointments />} />
         <Route path="profile" element={<Dashboard />} />
         <Route path="settings" element={<Profile />} />
         <Route path="ar-layout" element={<ArLayout />} />
