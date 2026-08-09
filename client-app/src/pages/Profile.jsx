@@ -69,7 +69,6 @@ export default function Profile() {
   const [arModelSaved, setArModelSaved] = useState(false);
   const [activeTab, setActiveTab] = useState('bio');
   const [attributes, setAttributes] = useState([]); // admin-defined extra fields, see AttributeDefinition
-  const [arComponents, setArComponents] = useState([]); // admin-defined extra AR Layout panel elements, see ArComponentDefinition
   const fileInputRef = useRef(null);
   const bannerInputRef = useRef(null);
   const logoInputRef = useRef(null);
@@ -83,10 +82,6 @@ export default function Profile() {
       .getAttributeDefinitions()
       .then(setAttributes)
       .catch(() => {});
-    api
-      .getArComponentDefinitions()
-      .then(setArComponents)
-      .catch(() => {});
   }, []);
 
   const tabs = useMemo(() => {
@@ -99,6 +94,11 @@ export default function Profile() {
     }
     return [...BASE_TABS, ...customByKey.values()];
   }, [attributes]);
+
+  // AR-flagged attributes (AttributeDefinition.arComponent) -- rendered
+  // below as extra link inputs, values read/written via the same
+  // customAttributes map every other custom field already uses.
+  const arComponents = useMemo(() => attributes.filter((a) => a.arComponent), [attributes]);
 
   useEffect(() => {
     api
@@ -118,11 +118,6 @@ export default function Profile() {
 
   function updateCustomAttribute(key, value) {
     setForm((f) => ({ ...f, customAttributes: { ...(f.customAttributes || {}), [key]: value } }));
-    setSaved(false);
-  }
-
-  function updateArComponentValue(key, value) {
-    setForm((f) => ({ ...f, arComponentValues: { ...(f.arComponentValues || {}), [key]: value } }));
     setSaved(false);
   }
 
@@ -301,7 +296,6 @@ export default function Profile() {
       updates.gender = form.gender || '';
       updates.dateOfBirth = form.dateOfBirth || '';
       updates.customAttributes = form.customAttributes || {};
-      updates.arComponentValues = form.arComponentValues || {};
       const updated = await api.updateProfile(updates);
       setProfile(updated);
       setSaved(true);
@@ -617,10 +611,9 @@ export default function Profile() {
       </div>
       )}
 
-      {/* Admin-defined extra AR Layout panel elements (see
-          ArComponentDefinition) -- e.g. "Map" (a Google Maps link).
-          Gated the same way the banner/3D model above are, since these
-          are AR Layout elements too. */}
+      {/* AR-flagged attributes (AttributeDefinition.arComponent) -- e.g.
+          "Map" (a Google Maps link). Gated the same way the banner/3D
+          model above are, since these are AR Layout elements too. */}
       {profile?.arEnabled && arComponents.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
           <label style={{ marginBottom: 8 }}>AR links</label>
@@ -636,8 +629,8 @@ export default function Profile() {
                   id={`ar-component-${c.key}`}
                   type="url"
                   placeholder="https://…"
-                  value={form.arComponentValues?.[c.key] || ''}
-                  onChange={(e) => updateArComponentValue(c.key, e.target.value)}
+                  value={form.customAttributes?.[c.key] || ''}
+                  onChange={(e) => updateCustomAttribute(c.key, e.target.value)}
                 />
               </div>
             ))}

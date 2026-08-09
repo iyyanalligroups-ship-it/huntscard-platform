@@ -1,29 +1,22 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const rateLimit = require('express-rate-limit');
 const { requireAdmin } = require('../middleware/auth');
 const Admin = require('../models/Admin');
 
 const router = express.Router();
 
-// Same brute-force protection as client login. If anything, admin login
-// deserves it more -- this is the account that gates who can write to
-// physical cards.
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: { error: 'Too many login attempts. Try again in 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 // Deliberately NO POST /register here. Admin accounts are created with
 // seed-admin.js, run directly on the server / by whoever holds DB access
 // -- not exposed as a public API endpoint.
 
+// No brute-force rate limiting on this route -- removed at the user's
+// request so admins/employees can retry as many times as needed (e.g.
+// re-typing a password on the encode tool) without getting locked out.
+// This route is shared by both the web admin dashboard and the encode
+// tool, so the change applies to both.
 // POST /api/admin/auth/login
-router.post('/login', loginLimiter, async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {

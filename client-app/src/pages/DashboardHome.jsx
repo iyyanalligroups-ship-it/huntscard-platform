@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, API_URL } from '../api.js';
+import DeviceProtectionCard from '../components/DeviceProtectionCard.jsx';
+import NotificationBell from '../components/NotificationBell.jsx';
 
 /* Profile fields that count toward completeness -- grouped the same way
    Profile Settings groups them, so the donut legend maps 1:1 to real
@@ -180,6 +182,20 @@ export default function DashboardHome() {
 
   return (
     <div className="dash-home">
+      {/* A real, easy-to-hit footgun otherwise -- pause the card while
+          traveling (see Settings.jsx's "Card status"), forget it's still
+          off. Anyone tapping/scanning sees a "deactivated" message the
+          whole time this banner is up. */}
+      {profile?.cardActive === false && (
+        <div className="error-banner" style={{ marginBottom: 20 }}>
+          Your card is currently deactivated -- visitors see a "card deactivated" message
+          instead of your profile.{' '}
+          <Link to="/dashboard/account-settings" style={{ color: 'inherit', textDecoration: 'underline' }}>
+            Reactivate it
+          </Link>
+        </div>
+      )}
+
       {/* Hero -- greeting + shortcut to the live card preview */}
       <section className="dash-hero">
         <div>
@@ -193,9 +209,12 @@ export default function DashboardHome() {
           </p>
           <Link to="/dashboard/profile" className="dash-hero-btn">View my card</Link>
         </div>
-        <div className={`tap-card mini ${profile?.cardType || 'unassigned'}`}>
-          <span className="tap-card-tier">{planLabel}</span>
-          <span className="tap-card-name">{profile?.fullName}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 12 }}>
+          <NotificationBell />
+          <div className={`tap-card mini ${profile?.cardType || 'unassigned'}`}>
+            <span className="tap-card-tier">{planLabel}</span>
+            <span className="tap-card-name">{profile?.fullName}</span>
+          </div>
         </div>
       </section>
 
@@ -305,6 +324,8 @@ export default function DashboardHome() {
           )}
         </div>
       </section>
+
+      <DeviceProtectionCard />
 
       <div className={`pv-toast${toast ? ' show' : ''}`}>{toast}</div>
     </div>

@@ -160,10 +160,10 @@ input:disabled { opacity: 0.55; cursor: not-allowed; background: rgba(255,255,25
   background: #0e0f16;
   border: 1px solid var(--panel-border);
 }
-.pending-item-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pending-item-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .pending-item-name { font-weight: 600; font-size: 14px; }
 .pending-item-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
-.pending-item-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.pending-item-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
 .preview-link { font-size: 12px; color: var(--text-dim); text-decoration: underline; }
 .preview-link:hover { color: var(--text); }
 .pending-item-actions .edit-toggle {

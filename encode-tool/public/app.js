@@ -174,7 +174,7 @@ function showView(view) {
   view.classList.remove('hidden');
 }
 
-const TAB_IDS = ['writeCard', 'readCard', 'protectTestCard', 'recoverCard', 'pickerView'];
+const TAB_IDS = ['writeCard', 'readCard', 'protectTestCard', 'recoverCard', 'pickerView', 'analyzeCard'];
 
 // Shows exactly one tab's content, hides the rest, and highlights the
 // matching tab button. This is the logged-in "home" -- separate pages in
@@ -521,12 +521,15 @@ evtSource.addEventListener('success', (e) => {
   setStep('locking', 'done');
   setStep('success', 'done');
   document.getElementById('cancelBtn').classList.add('hidden');
+  document.getElementById('successCardNumber').textContent = data.cardNumber ? `#${data.cardNumber}` : '';
   document.getElementById('chipPassword').textContent = data.chipPassword;
   document.getElementById('successPanel').classList.remove('hidden');
 
-  // Force acknowledgment before letting anyone move on -- this is the
-  // ONLY moment this password is ever shown again, so walking away
-  // without saving it means the card can never be rewritten later.
+  // Still force acknowledgment before letting anyone move on -- not
+  // because the password is lost forever if they don't (it's saved
+  // encrypted in the database now, an admin can look it up later), just
+  // to make sure it was actually noted at the point of handing over the
+  // physical card, when it's cheapest to double-check.
   const passwordSavedCheck = document.getElementById('passwordSavedCheck');
   passwordSavedCheck.checked = false;
   document.getElementById('doneBtn').disabled = true;
@@ -674,8 +677,9 @@ document.getElementById('writeLookupBtn').addEventListener('click', async () => 
     return;
   }
 
+  const cardCount = Array.isArray(body.cards) ? body.cards.length : 0;
   document.getElementById('writeFormMeta').textContent =
-    `${body.clientId} · ${body.paid ? 'paid' : 'not paid'} · ${body.chipEncoded ? 'card already encoded' : 'no card yet'}`;
+    `${body.clientId} · ${body.paid ? 'paid' : 'not paid'} · ${cardCount === 0 ? 'no cards yet' : `${cardCount} card${cardCount === 1 ? '' : 's'} encoded`}`;
   document.getElementById('writeFullName').value = body.fullName || '';
   document.getElementById('writeJobTitle').value = body.jobTitle || '';
   document.getElementById('writeBio').value = body.bio || '';
@@ -727,40 +731,16 @@ document.getElementById('writeSaveBtn').addEventListener('click', async () => {
 
 // ---------------------------------------------------------------------
 // 3b. Gift a card by Client ID -- same encode flow as picking from the
-// paid list, but skips the paid:true requirement entirely.
+// paid list, but skips the paid:true requirement entirely. A client can
+// have several cards now (see models/Card.js), so this always reserves a
+// NEW card slot -- there's no more "already encoded, replace it?" block.
 // ---------------------------------------------------------------------
 document.getElementById('giftLookupBtn').addEventListener('click', () => attemptGiftArm());
-
-document.getElementById('giftReplaceBtn').addEventListener('click', async () => {
-  const clientId = document.getElementById('giftIdInput').value.trim();
-  const replaceBtn = document.getElementById('giftReplaceBtn');
-  replaceBtn.disabled = true;
-  replaceBtn.textContent = 'Resetting...';
-
-  const res = await fetch('/api/allow-new-card', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientId }),
-  });
-  const body = await res.json().catch(() => ({}));
-  replaceBtn.disabled = false;
-  replaceBtn.textContent = 'Yes, write a replacement card';
-
-  if (!res.ok) {
-    document.getElementById('giftError').textContent = body.error || 'Could not reset';
-    document.getElementById('giftError').classList.remove('hidden');
-    return;
-  }
-  document.getElementById('giftReplaceConfirm').classList.add('hidden');
-  attemptGiftArm(); // now that chipEncoded is cleared, arm-by-id should succeed
-});
 
 async function attemptGiftArm() {
   const clientId = document.getElementById('giftIdInput').value.trim();
   const errorEl = document.getElementById('giftError');
-  const confirmEl = document.getElementById('giftReplaceConfirm');
   errorEl.classList.add('hidden');
-  confirmEl.classList.add('hidden');
   if (!clientId) return;
 
   const res = await fetch('/api/arm-by-id', {
@@ -773,15 +753,6 @@ async function attemptGiftArm() {
   if (!res.ok) {
     errorEl.textContent = body.error || 'Could not start encoding';
     errorEl.classList.remove('hidden');
-    // Distinguish "already encoded" from "doesn't exist at all" -- only
-    // offer the replacement path when we know the client is real.
-    const lookupRes = await fetch(`${getBackendUrl()}/api/admin/encode/client/${encodeURIComponent(clientId)}`, {
-      headers: getAuthHeader(),
-    });
-    if (lookupRes.ok) {
-      const client = await lookupRes.json();
-      if (client.chipEncoded) confirmEl.classList.remove('hidden');
-    }
     return;
   }
 
@@ -958,6 +929,167 @@ evtSource.addEventListener('recover-error', (e) => {
   recoverResult.className = 'read-result read-error';
   recoverResult.textContent = `❌ ${data.message || 'Recovery failed'}`;
   recoverResult.classList.remove('hidden');
+});
+
+// ---------------------------------------------------------------------
+// Blank a card with no password -- same idea as Recover above, but for a
+// card that was never password-locked in the first place, so there's no
+// password to enter or authenticate with.
+// ---------------------------------------------------------------------
+const blankBtn = document.getElementById('blankBtn');
+const blankStatus = document.getElementById('blankStatus');
+const blankStatusText = document.getElementById('blankStatusText');
+const blankCancelBtn = document.getElementById('blankCancelBtn');
+const blankResult = document.getElementById('blankResult');
+let blankTimeoutId = null;
+
+function resetBlankUI() {
+  clearTimeout(blankTimeoutId);
+  blankStatus.classList.add('hidden');
+  blankCancelBtn.classList.add('hidden');
+  blankBtn.disabled = false;
+}
+
+blankBtn.addEventListener('click', async () => {
+  blankResult.classList.add('hidden');
+
+  const confirmed = await showConfirm(
+    'This permanently wipes the card\'s current data. This cannot be undone. Continue?'
+  );
+  if (!confirmed) return;
+
+  blankStatusText.textContent = 'Arming...';
+  blankStatus.classList.remove('hidden');
+  blankCancelBtn.classList.add('hidden');
+  blankBtn.disabled = true;
+
+  const res = await fetch('/api/arm-blank', { method: 'POST' });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    resetBlankUI();
+    blankResult.className = 'read-result read-error';
+    blankResult.textContent = `⚠️ ${body.error || 'Could not arm wipe'}`;
+    blankResult.classList.remove('hidden');
+    return;
+  }
+
+  blankStatusText.textContent = 'Armed -- lift the card off the reader first, then place it flat.';
+  blankCancelBtn.classList.remove('hidden');
+
+  blankTimeoutId = setTimeout(() => {
+    resetBlankUI();
+    blankResult.className = 'read-result read-error';
+    blankResult.textContent = '⚠️ No card detected in 20s. Lift the card off, then try again.';
+    blankResult.classList.remove('hidden');
+  }, 20000);
+});
+
+blankCancelBtn.addEventListener('click', async () => {
+  await fetch('/api/disarm', { method: 'POST' });
+  resetBlankUI();
+});
+
+evtSource.addEventListener('blank-success', () => {
+  resetBlankUI();
+  blankResult.className = 'read-result read-ok';
+  blankResult.textContent = '✅ Wiped -- this card is now blank, ready for Write or Create a card.';
+  blankResult.classList.remove('hidden');
+});
+
+evtSource.addEventListener('blank-error', (e) => {
+  const data = JSON.parse(e.data);
+  resetBlankUI();
+  blankResult.className = 'read-result read-error';
+  blankResult.textContent = `❌ ${data.message || 'Wipe failed'}`;
+  blankResult.classList.remove('hidden');
+});
+
+// ---------------------------------------------------------------------
+// Card type analyser -- read-only chip identification (NTAG213/215/216).
+// Exists because some cards handed out as "NTAG216" turned out to
+// actually be NTAG213, which this tool's password lock doesn't support.
+// ---------------------------------------------------------------------
+const analyzeBtn = document.getElementById('analyzeBtn');
+const analyzeStatus = document.getElementById('analyzeStatus');
+const analyzeStatusText = document.getElementById('analyzeStatusText');
+const analyzeCancelBtn = document.getElementById('analyzeCancelBtn');
+const analyzeResult = document.getElementById('analyzeResult');
+let analyzeTimeoutId = null;
+
+function resetAnalyzeUI() {
+  clearTimeout(analyzeTimeoutId);
+  analyzeStatus.classList.add('hidden');
+  analyzeCancelBtn.classList.add('hidden');
+  analyzeBtn.disabled = false;
+}
+
+analyzeBtn.addEventListener('click', async () => {
+  analyzeResult.classList.add('hidden');
+
+  analyzeStatusText.textContent = 'Arming...';
+  analyzeStatus.classList.remove('hidden');
+  analyzeCancelBtn.classList.add('hidden');
+  analyzeBtn.disabled = true;
+
+  const res = await fetch('/api/arm-analyze', { method: 'POST' });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    resetAnalyzeUI();
+    analyzeResult.className = 'read-result read-error';
+    analyzeResult.textContent = `⚠️ ${body.error || 'Could not arm analyser'}`;
+    analyzeResult.classList.remove('hidden');
+    return;
+  }
+
+  analyzeStatusText.textContent = 'Armed -- lift the card off the reader first, then place it flat.';
+  analyzeCancelBtn.classList.remove('hidden');
+
+  analyzeTimeoutId = setTimeout(() => {
+    resetAnalyzeUI();
+    analyzeResult.className = 'read-result read-error';
+    analyzeResult.textContent = '⚠️ No card detected in 20s. Lift the card off, then try again.';
+    analyzeResult.classList.remove('hidden');
+  }, 20000);
+});
+
+analyzeCancelBtn.addEventListener('click', async () => {
+  await fetch('/api/disarm', { method: 'POST' });
+  resetAnalyzeUI();
+});
+
+evtSource.addEventListener('reading', () => {
+  if (!analyzeStatus.classList.contains('hidden')) {
+    clearTimeout(analyzeTimeoutId);
+    analyzeStatusText.textContent = 'Card detected -- reading...';
+    analyzeCancelBtn.classList.add('hidden');
+  }
+});
+
+evtSource.addEventListener('analyze-result', (e) => {
+  const data = JSON.parse(e.data);
+  resetAnalyzeUI();
+
+  const supportBadge = data.supported
+    ? '<span class="lock-badge lock-no">✅ Supported -- this tool\'s password lock works on this card</span>'
+    : '<span class="lock-badge lock-yes">❌ NOT supported -- do not attempt to lock/unlock this card, it will fail</span>';
+
+  const details = [
+    `Chip type: <b>${escapeHtml(data.chipType)}</b>`,
+    data.totalPages ? `Total pages: ${data.totalPages}` : null,
+    data.uid ? `UID: ${escapeHtml(data.uid)}` : null,
+  ].filter(Boolean).join('<br>');
+
+  analyzeResult.className = 'read-result read-ok';
+  analyzeResult.innerHTML = `<div>${details}</div><div class="lock-badge-row">${supportBadge}</div>`;
+  analyzeResult.classList.remove('hidden');
+});
+
+evtSource.addEventListener('analyze-error', (e) => {
+  const data = JSON.parse(e.data);
+  resetAnalyzeUI();
+  analyzeResult.className = 'read-result read-error';
+  analyzeResult.textContent = `❌ ${data.message || 'Could not identify this card'}`;
+  analyzeResult.classList.remove('hidden');
 });
 
 // ---------------------------------------------------------------------

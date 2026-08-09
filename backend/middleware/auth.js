@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const Client = require('../models/Client');
+const Admin = require('../models/Admin');
 
 function getToken(req) {
   const header = req.headers.authorization || '';
@@ -43,25 +44,53 @@ async function requireAuth(req, res, next) {
   }
 }
 
-// Same idea, for admin-only routes -- most importantly, the "mark client
-// as paid" endpoint and (indirectly, via the encode tool's login gate)
-// the ability to write to a physical NFC card at all.
-function requireAdmin(req, res, next) {
+// Shared by requireAdmin/requireEncodeAccess below -- verifies the JWT,
+// then re-fetches the admin's CURRENT role from the DB rather than
+// trusting the token's baked-in claim, so a promotion/demotion/removal
+// (see Admin.js's role comment -- Admin Prime is a singleton that alone
+// manages the roster) takes effect on the very next request instead of
+// waiting out the token's remaining lifetime. Same principle requireAuth
+// above already applies to a client's blocked status.
+async function loadAdmin(req) {
   const token = getToken(req);
-  if (!token) {
-    return res.status(401).json({ error: 'Missing or malformed Authorization header' });
-  }
+  if (!token) return { error: 401, message: 'Missing or malformed Authorization header' };
 
+  let payload;
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    if (payload.type !== 'admin') {
-      return res.status(403).json({ error: 'This endpoint requires an admin login' });
-    }
-    req.admin = payload; // { type: 'admin', adminId, email, iat, exp }
-    next();
-  } catch (err) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    payload = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    return { error: 401, message: 'Invalid or expired token' };
   }
+  if (payload.type !== 'admin') return { error: 403, message: 'This endpoint requires an admin login' };
+
+  const admin = await Admin.findById(payload.adminId).select('role');
+  if (!admin) return { error: 401, message: 'This admin account no longer exists' };
+
+  return { admin: { ...payload, role: admin.role } }; // live role, not the token's stale claim
+}
+
+// Admin routes in general -- 'employee' accounts are scoped to ONLY the
+// encode tool (see requireEncodeAccess below) and are rejected here, so
+// every other admin route is automatically off-limits to them with no
+// further per-route change needed.
+async function requireAdmin(req, res, next) {
+  const result = await loadAdmin(req);
+  if (result.error) return res.status(result.error).json({ error: result.message });
+  if (result.admin.role === 'employee') {
+    return res.status(403).json({ error: 'Employee accounts can only use the Encode Tool, not this dashboard.' });
+  }
+  req.admin = result.admin;
+  next();
+}
+
+// Same as requireAdmin, but also allows 'employee' through -- used only
+// by the specific routes the encode tool itself calls (see the "Per-card
+// records" section of routes/admin.js).
+async function requireEncodeAccess(req, res, next) {
+  const result = await loadAdmin(req);
+  if (result.error) return res.status(result.error).json({ error: result.message });
+  req.admin = result.admin;
+  next();
 }
 
 // Same as requireAdmin, but also rejects role === 'subadmin'. Only used
@@ -78,4 +107,17 @@ function requireSeniorAdmin(req, res, next) {
   });
 }
 
-module.exports = { requireAuth, requireAdmin, requireSeniorAdmin };
+// Only the single Admin Prime account -- see models/Admin.js's role
+// comment for the full list of what this singleton alone controls
+// (roster management, revenue visibility, blank-card inventory, the
+// encode-tool installer upload).
+function requireAdminPrime(req, res, next) {
+  requireAdmin(req, res, () => {
+    if (req.admin?.role !== 'primeadmin') {
+      return res.status(403).json({ error: 'This action requires the Admin Prime account.' });
+    }
+    next();
+  });
+}
+
+module.exports = { requireAuth, requireAdmin, requireSeniorAdmin, requireEncodeAccess, requireAdminPrime };

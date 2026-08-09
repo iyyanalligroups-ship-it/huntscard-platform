@@ -2,8 +2,30 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, API_URL } from '../api.js';
 
+// One row for an admin-defined extra field (see AttributeDefinition) --
+// same visual as the fixed contact/social rows, but 'text'-type fields
+// have no href (nothing to link to), so this renders a plain div instead
+// of an <a> in that case. Mirrors PublicProfile.jsx's own CustomRow --
+// this preview is meant to match the real public page exactly.
+function CustomRow({ row }) {
+  const content = (
+    <>
+      <span className="pv-icon">{row.icon}</span>
+      <span className="pv-contact-label">{row.label}</span>
+    </>
+  );
+  return row.href ? (
+    <a className="pv-contact-row" href={row.href} target="_blank" rel="noopener noreferrer">
+      {content}
+    </a>
+  ) : (
+    <div className="pv-contact-row">{content}</div>
+  );
+}
+
 export default function Dashboard() {
   const [profile, setProfile] = useState(null);
+  const [attributes, setAttributes] = useState([]); // admin-defined extra fields, see AttributeDefinition
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
@@ -23,6 +45,12 @@ export default function Dashboard() {
       .then(setProfile)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+    // Separate from the critical profile fetch above -- these are cosmetic
+    // extra fields, a failure here shouldn't block the rest of the page.
+    api
+      .getAttributeDefinitions()
+      .then(setAttributes)
+      .catch(() => {});
   }, []);
 
   const shareUrl = profile?.clientId ? `${window.location.origin}/c/${profile.clientId}` : '';
@@ -68,16 +96,53 @@ export default function Dashboard() {
     },
   ].filter(Boolean);
 
+  // Admin-defined extra fields (see AttributeDefinition) that this client
+  // actually filled in -- rendered the same row style as the fixed fields
+  // above, appended within whichever tab they belong to. Mirrors
+  // PublicProfile.jsx's own customRowsFor exactly.
+  function customRowsFor(section) {
+    return attributes
+      .filter((a) => a.section === section)
+      .map((a) => {
+        const value = profile?.customAttributes?.[a.key];
+        if (!value) return null;
+        const href =
+          a.fieldType === 'phone' ? `tel:${value}` : a.fieldType === 'email' ? `mailto:${value}` : a.fieldType === 'url' ? value : undefined;
+        return { key: a.key, icon: a.label.slice(0, 2).toUpperCase(), label: `${a.label}: ${value}`, href };
+      })
+      .filter(Boolean);
+  }
+  const contactCustomRows = customRowsFor('contact');
+  const portfolioCustomRows = customRowsFor('portfolio');
+  const socialCustomRows = customRowsFor('social');
+  const huntsworldCustomRows = customRowsFor('huntsworld');
+
   // Only show tabs for sections that actually have content -- matches the
   // real public tap page's behaviour exactly, since this IS a preview of it.
   const tabs = [];
   if (profile?.bio) tabs.push({ label: 'My Bio', key: 'bio' });
-  if (contactRows.length) tabs.push({ label: 'Contact', key: 'contact' });
-  if (profile?.portfolioUrl) tabs.push({ label: 'Portfolio', key: 'portfolio' });
-  if (socialRows.length) tabs.push({ label: 'Social', key: 'social' });
+  if (contactRows.length || contactCustomRows.length) tabs.push({ label: 'Contact', key: 'contact' });
+  if (profile?.portfolioUrl || portfolioCustomRows.length) tabs.push({ label: 'Portfolio', key: 'portfolio' });
+  if (socialRows.length || socialCustomRows.length) tabs.push({ label: 'Social', key: 'social' });
   // Huntsworld is a business listing platform -- featured in its own tab,
   // mirroring backend/public-tap/index.html exactly.
-  if (profile?.huntsworldUrl) tabs.push({ label: 'Huntsworld', key: 'huntsworld' });
+  if (profile?.huntsworldUrl || huntsworldCustomRows.length) tabs.push({ label: 'Huntsworld', key: 'huntsworld' });
+
+  // Sections an admin added beyond the original four (see the admin
+  // Attributes page) -- no hardcoded fields of their own, just whatever
+  // custom rows this client filled in for that section. Includes AR-
+  // flagged attributes' own sections (e.g. "Map"), same as PublicProfile.jsx.
+  const BUILTIN_SECTION_KEYS = new Set(['contact', 'portfolio', 'social', 'huntsworld']);
+  const customSectionRows = {};
+  for (const section of new Set(attributes.map((a) => a.section))) {
+    if (BUILTIN_SECTION_KEYS.has(section)) continue;
+    const rows = customRowsFor(section);
+    if (!rows.length) continue;
+    customSectionRows[section] = rows;
+    const label = attributes.find((a) => a.section === section)?.sectionLabel || section;
+    tabs.push({ label, key: section });
+  }
+
   if (tabs.length === 0) tabs.push({ label: 'Info', key: 'empty' });
 
   const clampedTab = Math.min(activeTab, tabs.length - 1);
@@ -269,49 +334,78 @@ export default function Dashboard() {
         <div className="pv-panel" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           {currentKey === 'bio' && <p className="pv-bio">{profile.bio}</p>}
 
-          {currentKey === 'contact' &&
-            contactRows.map((row) => (
-              <a className="pv-contact-row" key={row.label} href={row.href} target="_blank" rel="noopener noreferrer">
-                <span className="pv-icon">{row.icon}</span>
-                <span className="pv-contact-label">{row.label}</span>
-              </a>
-            ))}
-
-          {currentKey === 'portfolio' && (
-            <a
-              className="pv-contact-row"
-              href={profile.portfolioUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <span className="pv-icon">◆</span>
-              <span className="pv-contact-label">{profile.portfolioUrl.replace(/^https?:\/\//, '')}</span>
-            </a>
+          {currentKey === 'contact' && (
+            <>
+              {contactRows.map((row) => (
+                <a className="pv-contact-row" key={row.label} href={row.href} target="_blank" rel="noopener noreferrer">
+                  <span className="pv-icon">{row.icon}</span>
+                  <span className="pv-contact-label">{row.label}</span>
+                </a>
+              ))}
+              {contactCustomRows.map((row) => (
+                <CustomRow key={row.key} row={row} />
+              ))}
+            </>
           )}
 
-          {currentKey === 'social' &&
-            socialRows.map((row) => (
-              <a className="pv-contact-row" key={row.label} href={row.href} target="_blank" rel="noopener noreferrer">
-                <span className="pv-icon">{row.icon}</span>
-                <span className="pv-contact-label">{row.label}</span>
-              </a>
-            ))}
+          {currentKey === 'portfolio' && (
+            <>
+              {profile.portfolioUrl && (
+                <a className="pv-contact-row" href={profile.portfolioUrl} target="_blank" rel="noopener noreferrer">
+                  <span className="pv-icon">◆</span>
+                  <span className="pv-contact-label">{profile.portfolioUrl.replace(/^https?:\/\//, '')}</span>
+                </a>
+              )}
+              {portfolioCustomRows.map((row) => (
+                <CustomRow key={row.key} row={row} />
+              ))}
+            </>
+          )}
+
+          {currentKey === 'social' && (
+            <>
+              {socialRows.map((row) => (
+                <a className="pv-contact-row" key={row.label} href={row.href} target="_blank" rel="noopener noreferrer">
+                  <span className="pv-icon">{row.icon}</span>
+                  <span className="pv-contact-label">{row.label}</span>
+                </a>
+              ))}
+              {socialCustomRows.map((row) => (
+                <CustomRow key={row.key} row={row} />
+              ))}
+            </>
+          )}
 
           {currentKey === 'huntsworld' && (
             <>
-              <div className="pv-section-label">Business listing</div>
-              <div className="pv-hw-block">
-                <div className="pv-hw-head">
-                  <span className="pv-hw-badge">H</span>
-                  <div>
-                    <div className="pv-hw-title">Huntsworld</div>
-                    <div className="pv-hw-sub">{profile.huntsworldUrl.replace(/^https?:\/\//, '')}</div>
+              {profile.huntsworldUrl && (
+                <>
+                  <div className="pv-section-label">Business listing</div>
+                  <div className="pv-hw-block">
+                    <div className="pv-hw-head">
+                      <span className="pv-hw-badge">H</span>
+                      <div>
+                        <div className="pv-hw-title">Huntsworld</div>
+                        <div className="pv-hw-sub">{profile.huntsworldUrl.replace(/^https?:\/\//, '')}</div>
+                      </div>
+                    </div>
+                    <a className="pv-hw-btn" href={profile.huntsworldUrl} target="_blank" rel="noopener noreferrer">
+                      View listing on Huntsworld
+                    </a>
                   </div>
-                </div>
-                <a className="pv-hw-btn" href={profile.huntsworldUrl} target="_blank" rel="noopener noreferrer">
-                  View listing on Huntsworld
-                </a>
-              </div>
+                </>
+              )}
+              {huntsworldCustomRows.map((row) => (
+                <CustomRow key={row.key} row={row} />
+              ))}
+            </>
+          )}
+
+          {currentKey && customSectionRows[currentKey] && (
+            <>
+              {customSectionRows[currentKey].map((row) => (
+                <CustomRow key={row.key} row={row} />
+              ))}
             </>
           )}
 

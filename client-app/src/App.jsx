@@ -1,3 +1,4 @@
+import { Component, lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { isLoggedIn } from './api.js';
 import PublicLayout from './components/PublicLayout.jsx';
@@ -20,6 +21,42 @@ import ArLayout from './pages/ArLayout.jsx';
 import Contacts from './pages/Contacts.jsx';
 import Appointments from './pages/Appointments.jsx';
 import PublicProfile from './pages/PublicProfile.jsx';
+
+// Lazy-loaded ("Mark 1" experiment) -- pulls in mind-ar/@tensorflow/tfjs,
+// a heavy and still-unproven dependency. Loading it eagerly like every
+// other page above would put it in the SAME shared bundle everything else
+// depends on, so a problem in it could break every route in the app, not
+// just this one -- lazy-loading keeps it fully isolated to the moment
+// someone actually visits this specific page, matching the "fully
+// isolated, delete-able" intent this experiment was built with.
+const HuntsEngineTest = lazy(() => import('./pages/HuntsEngineTest.jsx'));
+
+// Debugging aid for the Mark 1 experiment only -- a crash inside
+// HuntsEngineTest (or its mind-ar/tfjs imports) would otherwise unmount
+// the whole app with a silent blank page and no way to see why, since
+// there's no error boundary anywhere else in this app either. Shows the
+// actual error message + stack on screen instead, so it doesn't require
+// digging through DevTools (especially awkward when testing over a
+// phone). Delete-able along with the rest of Mark 1.
+class HuntsEngineTestErrorBoundary extends Component {
+  state = { error: null };
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="error-banner" style={{ whiteSpace: 'pre-wrap' }}>
+          HuntsEngine Test crashed:{'\n'}
+          {this.state.error.message}
+          {'\n\n'}
+          {this.state.error.stack}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function RequireAuth({ children }) {
   if (!isLoggedIn()) return <Navigate to="/login" replace />;
@@ -66,6 +103,16 @@ export default function App() {
         }
       >
         <Route index element={<DashboardHome />} />
+        <Route
+          path="huntsengine-test"
+          element={
+            <HuntsEngineTestErrorBoundary>
+              <Suspense fallback={<p className="subtitle">Loading…</p>}>
+                <HuntsEngineTest />
+              </Suspense>
+            </HuntsEngineTestErrorBoundary>
+          }
+        />
         <Route path="appointments" element={<Appointments />} />
         <Route path="profile" element={<Dashboard />} />
         <Route path="settings" element={<Profile />} />

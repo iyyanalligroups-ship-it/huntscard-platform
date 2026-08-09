@@ -9,6 +9,10 @@
 
 const crypto = require('crypto');
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // ---------------------------------------------------------------------
 // NDEF construction (Type 2 Tag: TLV-wrapped NDEF URI record)
 // ---------------------------------------------------------------------
@@ -120,6 +124,102 @@ async function nativeReadPages(reader, page) {
   return nativeTransmit(reader, command, 18); // 16 data bytes + 2-byte status word
 }
 
+// Real hardware testing showed the raw native read above can come back
+// with only a 2-byte status word (no data at all) for these config
+// pages -- not a timing issue a delay fixes, but the raw Direct Transmit
+// escape command itself being rejected/mishandled by this reader for
+// this specific address on some attempts. Retries the native path a
+// couple of times (cheap, and it does sometimes succeed), then falls
+// back to the reader's own standard translated Read Binary command --
+// the exact same call verifyWrite()/readNdefUri() already use reliably
+// for ordinary pages elsewhere in this file. That's a different command
+// path through the reader's firmware than the raw escape above, so a
+// firmware quirk affecting one doesn't necessarily affect the other.
+// Either way, whatever bytes come back are still independently checked
+// by the caller against the exact value that was written -- this only
+// changes how the bytes are fetched, not what counts as verified.
+async function readConfigPageVerified(reader, page) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await delay(attempt === 0 ? 150 : 350);
+    try {
+      const raw = await nativeReadPages(reader, page);
+      if (raw && raw.length >= 4) return raw;
+    } catch {
+      // fall through to the next attempt / the reader.read() fallback below
+    }
+  }
+  return reader.read(page, 4, 4);
+}
+
+// GET_VERSION (command 0x60) -- an NTAG21x-family command that returns a
+// fixed 8-byte version string uniquely identifying the exact chip,
+// including its real storage size. Unlike nativeReadPages/nativeWritePage
+// above, this never addresses a specific page number, so it works
+// identically regardless of chip size -- it's the reliable way to find
+// OUT that size before assuming anything about it.
+async function nativeGetVersion(reader) {
+  const command = Buffer.from([0x60]);
+  return nativeTransmit(reader, command, 10); // 8 data bytes + 2-byte status word
+}
+
+// Byte 6 of the GET_VERSION response is the storage-size code, which
+// distinguishes the three NTAG21x family members -- this table is the
+// ROOT of everything CFG0_PAGE/RECOVER_CFG0_PAGE/etc. assume elsewhere in
+// this file. A real-world mixup discovered during this tool's use: some
+// physical cards handed out as "NTAG216" were actually NTAG213 (45 pages
+// total, vs. NTAG216's 231) -- writing this tool's hardcoded page 227
+// config address to a 45-page chip doesn't address anything real on that
+// chip, which is what caused those cards' lock/unlock verification to
+// fail with a garbled short response no amount of retrying could fix.
+const NTAG_TYPES = {
+  0x0f: { name: 'NTAG213', totalPages: 45, userMemoryPages: 36 },
+  0x11: { name: 'NTAG215', totalPages: 135, userMemoryPages: 126 },
+  0x13: { name: 'NTAG216', totalPages: 231, userMemoryPages: 222 },
+};
+
+// Identifies whatever card is currently on the reader -- its UID (already
+// known to nfc-pcsc from card detection, no extra command needed) plus
+// its real chip type via GET_VERSION. Read-only, makes no assumption
+// about what SHOULD be on the reader, so this is safe to run on any card
+// at any time, including ones this tool doesn't support writing to.
+async function identifyCard(reader, uid) {
+  let version;
+  try {
+    version = await nativeGetVersion(reader);
+  } catch (err) {
+    throw new Error(`Could not read this card's version info (${err.message}). It may not be an NTAG21x chip, or the reader lost contact with it -- try tapping it again.`);
+  }
+  if (!version || version.length < 8) {
+    throw new Error(`This card returned an unexpectedly short response (${version ? version.length : 0} bytes) to the version query -- it may not be an NTAG21x chip, or contact was lost mid-read.`);
+  }
+
+  const storageSizeByte = version[6];
+  const known = NTAG_TYPES[storageSizeByte];
+
+  return {
+    uid: uid || null,
+    chipType: known ? known.name : `Unknown chip (storage code 0x${storageSizeByte.toString(16).padStart(2, '0')})`,
+    supported: Boolean(known) && known.name === 'NTAG216',
+    totalPages: known ? known.totalPages : null,
+    userMemoryPages: known ? known.userMemoryPages : null,
+  };
+}
+
+// Guards every function below that writes to this tool's hardcoded
+// NTAG216 config-page addresses (227-230) -- throws BEFORE touching any
+// config page if the card on the reader isn't actually an NTAG216. See
+// identifyCard()'s comment for the real-world mixup this exists to catch
+// permanently, instead of relying on a garbled read-back to notice it
+// deep into a write sequence.
+async function assertNtag216(reader, uid) {
+  const info = await identifyCard(reader, uid);
+  if (!info.supported) {
+    throw new Error(
+      `This card is ${info.chipType}, not NTAG216 -- this tool's password lock only supports NTAG216 (231 pages). Use "Card type analyser" to check a card before writing to it. Do not attempt to lock or unlock this card.`
+    );
+  }
+}
+
 // Performs a real PWD_AUTH against the tag and returns the 2-byte PACK
 // the chip sends back, or throws if the tag rejects the password. This
 // is the ONE thing that can't lie about whether a password is actually
@@ -143,6 +243,12 @@ async function nativeAuth(reader, pwdBytes) {
 }
 
 async function lockCard(reader, pwdBytes, packBytes) {
+  // Confirm this is actually an NTAG216 BEFORE touching any config page --
+  // see assertNtag216()'s comment for the real-world mixup (some "NTAG216"
+  // cards turned out to be NTAG213) this exists to catch immediately
+  // instead of via a garbled read-back deep into the write sequence.
+  await assertNtag216(reader);
+
   // NTAG216 configuration pages (fixed addresses per datasheet):
   //   227 = CFG0 [MIRROR, RFUI, MIRROR_PAGE, AUTH0]
   //   228 = CFG1 [ACCESS, RFUI, RFUI, VCTID]
@@ -174,9 +280,17 @@ async function lockCard(reader, pwdBytes, packBytes) {
   const cfg0 = Buffer.from([0x00, 0x00, 0x00, AUTH0_VALUE]);
   await nativeWritePage(reader, CFG0_PAGE, cfg0);
 
-  // Verify AUTH0 actually took, using the SAME native read path -- don't
-  // just trust that the write above didn't throw.
-  const readBack = await nativeReadPages(reader, CFG0_PAGE);
+  // Verify AUTH0 actually took -- don't just trust that the write above
+  // didn't throw. See readConfigPageVerified()'s comment for why this
+  // isn't a single raw read anymore.
+  let readBack;
+  try {
+    readBack = await readConfigPageVerified(reader, CFG0_PAGE);
+  } catch (err) {
+    throw new Error(
+      `Lock verification failed: could not read back the protection flag after several attempts (${err.message}). Treat this card as NOT successfully locked.`
+    );
+  }
   if (!readBack || readBack.length < 4) {
     throw new Error(
       `Lock verification failed: the reader returned an unexpectedly short response (${readBack ? readBack.length : 0} bytes) reading back the protection flag. Treat this card as NOT successfully locked.`
@@ -385,21 +499,17 @@ const RECOVER_CFG0_PAGE = 227;
 // wiping through page 19 clears it with margin to spare.
 const RECOVER_BLANK_PAGE_COUNT = 16;
 
-async function unlockAndBlankCard(reader, pwdHex) {
-  const pwdBytes = Buffer.from(pwdHex, 'hex');
-  if (pwdBytes.length !== 4) {
-    throw new Error('Password must be exactly 8 hex characters (4 bytes) -- e.g. 9C9707C8');
-  }
-
-  // Authenticate FIRST -- this is what actually grants write access to
-  // the protected pages for the remainder of this tag session. If the
-  // password is wrong, this throws and nothing below ever runs, so a
-  // wrong password can't partially wipe a card.
-  try {
-    await nativeAuth(reader, pwdBytes);
-  } catch (err) {
-    throw new Error(`Password rejected -- this is not the correct password for this card. (${err.message})`);
-  }
+// Shared by unlockAndBlankCard (password-protected cards) and
+// blankUnprotectedCard (cards with no password at all) -- wipes the NDEF
+// content and ensures AUTH0=0xFF (no protection), with the same
+// defensive read-back verification lockCard() uses for its own
+// config-page writes. Assumes the caller has already done whatever
+// authentication (if any) is needed to get write access to these pages.
+async function wipeContentAndDisableProtection(reader) {
+  // Same NTAG216-only guard lockCard() uses -- see assertNtag216()'s
+  // comment. Wiping/unprotecting also writes to the hardcoded config-page
+  // addresses, so this needs the exact same check before touching them.
+  await assertNtag216(reader);
 
   // Wipe the NDEF content back to all-zero pages, using the SAME
   // reader.write() path writeNdef() uses -- that path is proven reliable
@@ -417,10 +527,17 @@ async function unlockAndBlankCard(reader, pwdHex) {
   const cfg0 = Buffer.from([0x00, 0x00, 0x00, 0xff]);
   await nativeWritePage(reader, RECOVER_CFG0_PAGE, cfg0);
 
-  // Verify with the same native read path used to set it -- don't just
-  // trust the write above didn't throw (see lockCard()'s comment on why
-  // reader.write()-style trust isn't good enough for these config pages).
-  const readBack = await nativeReadPages(reader, RECOVER_CFG0_PAGE);
+  // Verify with the same read-with-fallback path lockCard() uses -- don't
+  // just trust the write above didn't throw (see readConfigPageVerified()'s
+  // comment for why this isn't a single raw read).
+  let readBack;
+  try {
+    readBack = await readConfigPageVerified(reader, RECOVER_CFG0_PAGE);
+  } catch (err) {
+    throw new Error(
+      `Unlock verification failed: could not read back the protection flag after several attempts (${err.message}). The card may still be protected -- do not treat this as successfully unlocked.`
+    );
+  }
   if (!readBack || readBack.length < 4) {
     throw new Error(
       `Unlock verification failed: the reader returned an unexpectedly short response (${readBack ? readBack.length : 0} bytes) reading back the protection flag. The card may still be protected -- do not treat this as successfully unlocked.`
@@ -434,8 +551,38 @@ async function unlockAndBlankCard(reader, pwdHex) {
   }
 }
 
+async function unlockAndBlankCard(reader, pwdHex) {
+  const pwdBytes = Buffer.from(pwdHex, 'hex');
+  if (pwdBytes.length !== 4) {
+    throw new Error('Password must be exactly 8 hex characters (4 bytes) -- e.g. 9C9707C8');
+  }
+
+  // Authenticate FIRST -- this is what actually grants write access to
+  // the protected pages for the remainder of this tag session. If the
+  // password is wrong, this throws and nothing below ever runs, so a
+  // wrong password can't partially wipe a card.
+  try {
+    await nativeAuth(reader, pwdBytes);
+  } catch (err) {
+    throw new Error(`Password rejected -- this is not the correct password for this card. (${err.message})`);
+  }
+
+  await wipeContentAndDisableProtection(reader);
+}
+
+// For a card that was NEVER password-locked (or a lock attempt failed
+// partway through and left it unclear, see the "unexpectedly short
+// response" error case) -- no PWD_AUTH step at all, since there's no
+// password to authenticate with. If the card actually IS protected, the
+// write below will simply fail/throw (a protected page rejects an
+// unauthenticated write) rather than silently corrupting anything -- that
+// failure is the signal to use "Unlock & wipe" with the password instead.
+async function blankUnprotectedCard(reader) {
+  await wipeContentAndDisableProtection(reader);
+}
+
 module.exports = {
   writeNdef, verifyWrite, lockCard, hashPassword, readNdefUri, checkLockStatus, attemptPasswordAuth, attemptRewriteTest,
-  unlockAndBlankCard,
+  unlockAndBlankCard, blankUnprotectedCard, identifyCard,
   USER_MEMORY_START_PAGE,
 };

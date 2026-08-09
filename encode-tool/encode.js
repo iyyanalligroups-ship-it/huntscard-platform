@@ -1,32 +1,41 @@
 /**
- * HuntsTAG NFC encode tool
+ * HuntsTAG NFC encode tool -- terminal version
  * -----------------------------------------------------------------------
  * Runs LOCALLY on the machine with the ACR1252U plugged in -- this is NOT
  * a web app, because browsers cannot talk to PC/SC smart-card readers
- * directly. It connects to the SAME MongoDB database as the website
- * backend, but only ever touches admin/system fields (paid, chipEncoded,
- * chipPasswordHash, encodedAt) -- never profile content.
+ * directly. Talks to the backend over the SAME authenticated admin API
+ * gui-server.js uses (no direct MongoDB connection -- an earlier version
+ * of this file connected straight to Mongo with its own connection
+ * string, which meant anyone who ever extracted that string from this
+ * tool, once packaged and installed on multiple employees' machines,
+ * could read/write the whole clients collection with no login at all).
  *
  * Flow per card:
- *   1. List paid clients who aren't encoded yet, let you pick one
- *   2. Generate a random 4-byte (32-bit) write password -- this matches
+ *   1. List paid clients who've never had a first card, let you pick one
+ *   2. Reserve a new card slot from the backend (a client can have
+ *      several cards now, see backend/models/Card.js) -- this hands back
+ *      a cardNumber that gets written into the chip's own URL, so this
+ *      specific physical card can later be individually deactivated
+ *   3. Generate a random 4-byte (32-bit) write password -- this matches
  *      the NTAG216 hardware spec exactly: the PWD register is 4 bytes,
  *      full stop. (Note: the original report described this as a
  *      "12-character password" -- that's a fine human-facing label for
  *      the hex representation, but the actual chip field the hardware
  *      exposes is 4 bytes / 8 hex characters. Worth knowing so the
  *      number doesn't look "wrong" when you see it printed.)
- *   3. Write the NDEF URI record (https://huntstag.com/c/{clientId}) to the
- *      chip's user memory
- *   4. Read it back and confirm it matches, BEFORE locking -- catches a
+ *   4. Write the NDEF URI record (https://huntstag.com/c/{clientId}?card={N})
+ *      to the chip's user memory
+ *   5. Read it back and confirm it matches, BEFORE locking -- catches a
  *      bad write while it's still cheap to fix (unlocked cards can just
  *      be rewritten; locked ones can't without the password)
- *   5. Set the password lock: write-protect user memory from page 4
+ *   6. Set the password lock: write-protect user memory from page 4
  *      onward (read stays open to everyone, per the design we agreed on)
- *   6. Update the client's DB record: chipEncoded, chipPasswordHash,
- *      encodedAt, encodedBy (which admin did this, for audit)
+ *   7. POST the RAW password to the backend, which encrypts it at rest
+ *      (see backend/utils/crypto.js) so an admin can look it up later --
+ *      unlike the old one-way-hashed model, where it was gone for good
+ *      the moment this step ran
  *
- * IMPORTANT: the exact low-level page-write behaviour (steps 3-4) is
+ * IMPORTANT: the exact low-level page-write behaviour (steps 4-5) is
  * written against the NTAG216 datasheet and nfc-pcsc's documented API,
  * but reader/firmware quirks are common in this space. Test the full
  * write -> lock -> tap-on-a-real-phone -> attempt-unauthorized-rewrite
@@ -43,39 +52,32 @@
  */
 
 require('dotenv').config();
-const { MongoClient } = require('mongodb');
 const { NFC } = require('nfc-pcsc');
 const readline = require('readline');
 const crypto = require('crypto');
-const { writeNdef, verifyWrite, lockCard, hashPassword } = require('./lib');
+const { writeNdef, verifyWrite, lockCard } = require('./lib');
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const ask = (q) => new Promise((resolve) => rl.question(q, resolve));
 
-// Every exit path must close BOTH the readline interface and the Mongo
-// connection, then let Node exit ON ITS OWN once the event loop has
-// nothing left to do -- NOT call process.exit() directly. Forcing an
-// exit while OS-level handles (console I/O, TCP sockets) are still being
-// torn down is what triggers the libuv "UV_HANDLE_CLOSING" assertion on
-// Windows. Setting exitCode and returning avoids that entirely.
-async function cleanExit(code, mongo) {
+// No Mongo connection to close anymore (see header comment) -- just the
+// readline interface. NOT calling process.exit() directly: forcing an
+// exit while OS-level handles (console I/O) are still being torn down is
+// what triggers the libuv "UV_HANDLE_CLOSING" assertion on Windows.
+// Setting exitCode and returning avoids that entirely.
+function cleanExit(code) {
   process.exitCode = code;
   rl.close();
-  if (mongo) await mongo.close().catch(() => {});
-  // No process.exit() here -- once callers return, Node has nothing left
-  // to keep it alive and exits naturally with the exitCode set above.
 }
 
-// NDEF construction, write/verify/lock, and password hashing all live in
-// ./lib.js now -- shared with gui-server.js so the two never drift.
+// NDEF construction and write/verify/lock live in ./lib.js now -- shared
+// with gui-server.js so the two never drift.
 
 // ---------------------------------------------------------------------
 // Admin login gate -- nothing below this runs until it succeeds
 // ---------------------------------------------------------------------
 
-async function requireAdminLogin() {
-  const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000';
-
+async function requireAdminLogin(backendUrl) {
   console.log('=== Admin login required to write to any card ===');
   const email = await ask('Admin email: ');
   // Node's readline doesn't mask input out of the box; fine for a local
@@ -116,36 +118,47 @@ async function requireAdminLogin() {
 // ---------------------------------------------------------------------
 
 async function main() {
-  const { adminEmail } = await requireAdminLogin();
+  const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000';
+  const { token } = await requireAdminLogin(backendUrl);
+  const authHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
-  const mongo = new MongoClient(process.env.MONGODB_URI);
-  await mongo.connect();
-  const clients = mongo.db().collection('clients');
-
-  const pending = await clients.find({ paid: true, chipEncoded: false }).toArray();
+  const pendingRes = await fetch(`${backendUrl}/api/admin/encode/pending`, { headers: authHeaders });
+  const pending = await pendingRes.json().catch(() => []);
+  if (!pendingRes.ok) throw new Error(pending.error || 'Could not load pending clients');
   if (pending.length === 0) {
-    console.log('No paid, unencoded clients found.');
-    await cleanExit(0, mongo);
+    console.log('No paid clients awaiting a first card found.');
+    cleanExit(0);
     return; // unreachable -- cleanExit always exits; keeps linters happy
   }
 
-  console.log('\nPaid clients awaiting encoding:');
+  console.log('\nPaid clients awaiting a first card:');
   pending.forEach((c, i) => console.log(`  ${i + 1}. ${c.fullName}  (${c.clientId})  [${c.cardType || 'no plan set'}]`));
   const choice = await ask('\nSelect a client number: ');
   const client = pending[parseInt(choice, 10) - 1];
   if (!client) {
     console.log('Invalid selection.');
-    await cleanExit(1, mongo);
+    cleanExit(1);
     return;
   }
 
-  const url = `${process.env.PUBLIC_BASE_URL}/c/${client.clientId}`;
+  // Reserve a new card slot BEFORE writing, so the chip's own URL can
+  // carry the resulting cardNumber (see header comment).
+  const cardRes = await fetch(`${backendUrl}/api/admin/clients/${client.clientId}/cards`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ cardType: client.cardType }),
+  });
+  const cardBody = await cardRes.json().catch(() => ({}));
+  if (!cardRes.ok) throw new Error(cardBody.error || 'Could not reserve a card slot');
+  const { cardId, cardNumber } = cardBody;
+
+  const url = `${process.env.PUBLIC_BASE_URL}/c/${client.clientId}?card=${cardNumber}`;
   const pwdBytes = crypto.randomBytes(4);
   const packBytes = crypto.randomBytes(2);
 
-  console.log(`\nWill write: ${url}`);
+  console.log(`\nCard #${cardNumber} for ${client.fullName}. Will write: ${url}`);
   console.log(`Generated chip password: ${pwdBytes.toString('hex').toUpperCase()}`);
-  console.log('⚠️  Write this down / screenshot it now. If it is lost after locking, the tag cannot be recovered.\n');
+  console.log('(Also saved encrypted in the database -- an admin can look it up later if needed.)\n');
 
   // nfc-pcsc watches the OS's PC/SC service and fires 'reader' the moment
   // it sees a compatible device -- this is the auto-detect behavior you
@@ -173,24 +186,24 @@ async function main() {
         console.log('Setting password lock...');
         await lockCard(reader, pwdBytes, packBytes);
 
-        await clients.updateOne(
-          { clientId: client.clientId },
-          {
-            $set: {
-              chipEncoded: true,
-              chipPasswordHash: hashPassword(pwdBytes),
-              encodedAt: new Date(),
-              encodedBy: adminEmail,
-            },
-          }
-        );
+        const markRes = await fetch(`${backendUrl}/api/admin/cards/${cardId}/mark-encoded`, {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify({ chipPassword: pwdBytes.toString('hex').toUpperCase() }),
+        });
+        if (!markRes.ok) {
+          const markBody = await markRes.json().catch(() => ({}));
+          throw new Error(
+            `Card was written and locked successfully, but saving that to the database failed: ${markBody.error || markRes.status}. The physical card is fine -- this needs fixing on the admin side.`
+          );
+        }
 
         console.log('✅ Done. Card encoded and database updated.');
         console.log('Next: tap this card on a real Android phone AND an iPhone 7+ to confirm the profile page opens before shipping it.');
-        await cleanExit(0, mongo);
+        cleanExit(0);
       } catch (err) {
         console.error('❌ Encoding failed:', err.message);
-        await cleanExit(1, mongo);
+        cleanExit(1);
       }
     });
 
@@ -203,5 +216,5 @@ async function main() {
 main().catch((err) => {
   console.error('Fatal error:', err.message);
   process.exitCode = 1;
-  rl.close(); // mongo may not exist yet at this point (e.g. login itself failed) -- rl always does
+  rl.close();
 });

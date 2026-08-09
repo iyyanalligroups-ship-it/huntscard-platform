@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { clearSession, isLoggedIn } from '../api.js';
 import AuthModal from './AuthModal.jsx';
+import NotificationBell from './NotificationBell.jsx';
 
 export default function PublicLayout() {
   const loggedIn = isLoggedIn();
@@ -140,6 +141,7 @@ export default function PublicLayout() {
               ))}
             </nav>
             <div className="nav-actions">
+              {loggedIn && <NotificationBell />}
               <span className="status-indicator">
                 <span className="status-dot" />
                 ONLINE

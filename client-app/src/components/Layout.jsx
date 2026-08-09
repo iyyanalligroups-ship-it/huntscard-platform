@@ -16,6 +16,9 @@ const ICONS = {
   arLayout: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg>
   ),
+  huntsEngine: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 18v3"/><circle cx="12" cy="11" r="3"/><path d="M7 7.5h.01M17 7.5h.01"/></svg>
+  ),
   shop: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 7h12l1 13H5L6 7Z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/></svg>
   ),
@@ -44,6 +47,10 @@ const ICONS = {
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', end: true },
+  // HuntsEngine Test intentionally hidden from the nav (2026-08-09) --
+  // internal testing tool, not something a client should stumble into.
+  // The route itself is untouched (App.jsx) -- still reachable directly
+  // at /dashboard/huntsengine-test if needed for further testing.
   { to: '/dashboard/appointments', label: 'Appointment Requests', icon: 'appointments' },
   { to: '/dashboard/profile', label: 'Profile', icon: 'profile' },
   { to: '/dashboard/settings', label: 'Profile Settings', icon: 'profileSettings' },
@@ -70,7 +77,14 @@ export default function Layout() {
   // like a real (landscape) business card, and needs the full width next
   // to the sidebar (not just a wider cap) to be comfortable to use.
   const isOverview = location.pathname === '/dashboard';
-  const isArLayout = location.pathname === '/dashboard/ar-layout';
+  // Appointments' calendar (mini month + week grid side by side) needs
+  // the same full-width treatment for the same reason AR Layout does --
+  // a narrow centered column forces the week grid to horizontal-scroll
+  // to show all 7 days instead of just laying out naturally.
+  const isArLayout =
+    location.pathname === '/dashboard/ar-layout' ||
+    location.pathname === '/dashboard/huntsengine-test' ||
+    location.pathname === '/dashboard/appointments';
 
   return (
     <div className="dash-shell">

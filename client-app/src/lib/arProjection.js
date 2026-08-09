@@ -32,6 +32,40 @@ export const ASSUMED_FOV_DEG = 62; // typical phone rear-camera vertical FOV -- 
 // phone photography of a card-sized object.
 export const ASSUMED_PREVIEW_DISTANCE = 18;
 
+// Elements aren't confined to the printed card -- in AR they can float in
+// the space around it too, so drag ranges extend well past the card's own
+// 0-100 edges. Must match POSITION_MIN/MAX in the backend's ArLayout model
+// (validation would otherwise reject an off-card save). Shared here so the
+// flat 2D editor and the 3D-preview drag (ArScanPreview.jsx) can't drift
+// apart on what counts as a valid position.
+export const POSITION_MIN = -60;
+export const POSITION_MAX = 160;
+export function clampPercent(v) {
+  return Math.max(POSITION_MIN, Math.min(POSITION_MAX, v));
+}
+
+// How far an element can float off the card's own surface (toward the
+// viewer) -- 0 is flat on the card, 100 is roughly one card-height's
+// worth of lift. Must match HEIGHT_MIN/MAX in the backend's ArLayout
+// model. Only the 3D model and AR Video/Photo panel expose a control for
+// this today (see ArLayout.jsx's Raise/Lower buttons).
+export const HEIGHT_MIN = 0;
+export const HEIGHT_MAX = 100;
+export function clampHeight(v) {
+  return Math.max(HEIGHT_MIN, Math.min(HEIGHT_MAX, v));
+}
+// Converts a saved height (0-100) into the same local units as
+// toLocalOffset's (lx, ly) -- CARD_H_UNITS is an arbitrary but already-
+// shared reference scale, so every consumer's "how tall is 100" agrees.
+export function heightToLocalZ(z) {
+  return ((z ?? 0) / 100) * CARD_H_UNITS;
+}
+// The inverse: given a local z (e.g. from a live pose or a 3D scene),
+// recovers the saved height it was derived from.
+export function localZToHeight(lz) {
+  return clampHeight((lz / CARD_H_UNITS) * 100);
+}
+
 // Converts a saved (x%, y%) into a local offset (in the same QR-plane
 // units as MODEL_SIZE) relative to the QR's OWN saved position -- not a
 // fixed 50/50 center. The QR's own detected (or, for a static preview,
@@ -39,6 +73,16 @@ export const ASSUMED_PREVIEW_DISTANCE = 18;
 // "how far is this element from wherever the QR itself is."
 export function toLocalOffset(pos, qrPos) {
   return [((pos.x - qrPos.x) / 100) * CARD_W_UNITS, -((pos.y - qrPos.y) / 100) * CARD_H_UNITS];
+}
+
+// The exact inverse of toLocalOffset -- given a local (lx, ly) point (e.g.
+// from raycasting a 3D scene against the card's own plane, see
+// ArScanPreview.jsx), recovers the (x%, y%) it was derived from.
+export function fromLocalOffset(lx, ly, qrPos) {
+  return {
+    x: qrPos.x + (lx / CARD_W_UNITS) * 100,
+    y: qrPos.y - (ly / CARD_H_UNITS) * 100,
+  };
 }
 
 // Projects a point on the marker plane (in the same MODEL_SIZE units,
@@ -67,14 +111,3 @@ export function focalPxFor(canvasHeightPx) {
   return canvasHeightPx / (2 * Math.tan(fovRad / 2));
 }
 
-// A fixed, non-tracked pose looking straight at the card from
-// ASSUMED_PREVIEW_DISTANCE -- identity rotation, translation pushed back
-// along +Z. Used wherever there's no live camera to track (see above).
-export const STATIC_PREVIEW_POSE = {
-  rotation: [
-    [1, 0, 0],
-    [0, 1, 0],
-    [0, 0, 1],
-  ],
-  translation: [0, 0, ASSUMED_PREVIEW_DISTANCE],
-};

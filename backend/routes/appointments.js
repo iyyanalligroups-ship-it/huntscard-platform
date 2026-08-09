@@ -202,6 +202,26 @@ router.patch('/appointments/:id', requireAuth, async (req, res) => {
   }
 });
 
+// DELETE /api/profile/appointments/:id -- either side of the request
+// (sender or recipient) can remove it from their own list. This is a
+// single shared document, not per-side copies, so a delete removes it
+// for both -- same "one shared record" reality PATCH (accept/decline)
+// already has, just with fromClientId also allowed here since a sender
+// might reasonably want to clear a declined/stale request they sent.
+router.delete('/appointments/:id', requireAuth, async (req, res) => {
+  try {
+    const request = await AppointmentRequest.findOneAndDelete({
+      _id: req.params.id,
+      $or: [{ fromClientId: req.user.clientId }, { toClientId: req.user.clientId }],
+    });
+    if (!request) return res.status(404).json({ error: 'Appointment request not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[appointments DELETE]', err);
+    res.status(500).json({ error: 'Failed to delete appointment request' });
+  }
+});
+
 module.exports = router;
 module.exports.claimAppointmentRequests = claimAppointmentRequests;
 module.exports.normalizePhone = normalizePhone;

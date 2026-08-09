@@ -15,6 +15,7 @@
   --holo-violet: #a78bfa;
   --holo-magenta: #f472b6;
   --danger: #f4746a;
+  --warning: #e8b559;
 
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-display: "Space Grotesk", var(--font-ui);
@@ -32,6 +33,11 @@
 body {
   margin: 0;
   min-height: 100vh;
+  /* Safety net against any element (like the hero's decorative rings)
+     pushing page width past the viewport on mobile -- nothing on this
+     site relies on horizontal page scroll, only scoped containers do
+     (e.g. wide tables), which set their own overflow-x separately. */
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 15% -10%, rgba(94, 234, 212, 0.12), transparent 40%),
     radial-gradient(circle at 90% 0%, rgba(167, 139, 250, 0.10), transparent 45%),
@@ -1180,6 +1186,13 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   align-items: center;
   justify-content: center;
   perspective: 900px;
+  /* The rings/pulses below are sized in fixed px (up to 420px) and
+     centered absolutely -- on any viewport narrower than that they'd
+     otherwise push the whole page wider than the screen. Clipping here
+     (rather than relying on the body-level safety net alone) keeps the
+     effect looking intentional -- rings fade past the edge -- instead of
+     visibly snapping off. */
+  overflow: hidden;
 }
 /* Two slow-rotating rings behind the card -- a soft halo/frame, kept dim
    so the card stays the brightest thing in the hero. */
@@ -1929,6 +1942,29 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 }
 @media (max-width: 900px) { .dash-two-col { grid-template-columns: 1fr; } }
 
+/* Appointments page: mini calendar sidebar + week grid. Fixed 260px
+   sidebar width works fine on desktop, but needs to actually stack
+   (not just be allowed to wrap) below the same breakpoint the rest of
+   the dashboard shell switches to mobile at -- an inline flexWrap alone
+   left the sidebar squeezed instead of properly stacking on a phone. */
+.appt-layout {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.appt-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+}
+.appt-main {
+  flex: 1 1 480px;
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .appt-sidebar { width: 100%; }
+}
+
 .dash-panel {
   background: var(--panel);
   border: 1px solid var(--panel-border);
@@ -1955,6 +1991,28 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   text-decoration: none;
 }
 .legend-cta:hover { text-decoration: underline; }
+
+.dp-panel { margin-top: 16px; }
+.dp-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.dp-score { font-size: 12.5px; font-weight: 700; color: var(--text-dim); }
+.dp-sub { font-size: 13px; color: var(--text-dim); margin: 6px 0 18px; line-height: 1.5; }
+.dp-loading { font-size: 13px; color: var(--text-dim); }
+
+.dp-list { display: flex; flex-direction: column; gap: 10px; }
+.dp-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 14px;
+}
+.dp-row svg { flex-shrink: 0; margin-top: 1px; }
+.dp-row-body { flex: 1; min-width: 0; }
+.dp-row-label { font-size: 14px; font-weight: 700; color: var(--text); }
+.dp-row-detail { font-size: 12.5px; color: var(--text-dim); margin-top: 3px; }
+.dp-row-explain { font-size: 12px; color: var(--text-dim); opacity: 0.85; margin-top: 6px; line-height: 1.5; }
 
 .mini-steps { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 14px; }
 .mini-steps li { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--text-dim); }

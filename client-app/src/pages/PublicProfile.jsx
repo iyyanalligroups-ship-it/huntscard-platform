@@ -1,7 +1,40 @@
-import { useEffect, useRef, useState } from 'react';
+import { Component, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api, API_URL } from '../api.js';
 import ArView from './ArView.jsx';
+
+// Opt-in alternative tracking engine (mind-ar, whole-card tracking instead
+// of QR-corner POSIT) -- reached ONLY via `?ar=1&engine=mindar` together.
+// Lazy-loaded since it pulls in mind-ar + TensorFlow.js, a genuinely heavy
+// dependency that every normal `?ar=1` (the default, unchanged) visitor
+// shouldn't have to download. See ArViewMindAR.jsx's own file comment for
+// the full context -- this is the validated "Mark 1" experiment, now
+// live behind a flag for real-traffic testing, not yet the default.
+const ArViewMindAR = lazy(() => import('./ArViewMindAR.jsx'));
+
+// If the new engine crashes, fall back to the link home instead of a
+// blank white screen -- this route is public and unauthenticated, so
+// there's no dashboard/devtools access to diagnose from if something
+// goes wrong for a real visitor.
+class ArEngineErrorBoundary extends Component {
+  state = { error: null };
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ position: 'fixed', inset: 0, background: '#000', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24, textAlign: 'center' }}>
+          <p style={{ maxWidth: 320 }}>Something went wrong loading AR.</p>
+          <a href={`/c/${this.props.clientId}`} style={{ color: 'var(--holo-cyan, #5eead4)' }}>
+            View the normal profile instead
+          </a>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // One row for an admin-defined extra field (see AttributeDefinition) --
 // same visual as the fixed contact/social rows, but 'text'-type fields
@@ -41,13 +74,32 @@ export default function PublicProfile() {
   const toastTimeoutRef = useRef(null);
   const touchStartX = useRef(null);
   const isArMode = searchParams.get('ar') === '1';
+  // Opt-in only -- see the ArViewMindAR import comment above. Every
+  // existing tap/scan link (bare `?ar=1`) is completely unaffected.
+  const useMindAR = isArMode && searchParams.get('engine') === 'mindar';
+  // Which specific physical card this is, if its own URL encoded one (see
+  // models/Card.js) -- absent for cards written before this existed, in
+  // which case only the whole-profile pause applies (see backend).
+  const cardNumber = searchParams.get('card') || undefined;
+
+  // "Exchange Contact" -- the reverse direction of saveContact() below.
+  // Combined into one action (see the button itself, ~line 229) rather
+  // than a separate opt-in button, since most visitors won't bother
+  // clicking a second, skippable ask.
+  const [showExchange, setShowExchange] = useState(false);
+  const [leadName, setLeadName] = useState('');
+  const [leadPhone, setLeadPhone] = useState('');
+  const [leadEmail, setLeadEmail] = useState('');
+  const [leadOrg, setLeadOrg] = useState('');
+  const [leadSubmitting, setLeadSubmitting] = useState(false);
+  const [leadError, setLeadError] = useState('');
 
   useEffect(() => {
     // ArView fetches its own profile/layout data -- skip the plain-profile
     // fetch entirely in AR mode instead of doing it and throwing it away.
     if (isArMode) return;
     api
-      .getPublicProfile(clientId)
+      .getPublicProfile(clientId, cardNumber)
       .then(setProfile)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -57,10 +109,20 @@ export default function PublicProfile() {
       .getAttributeDefinitions()
       .then(setAttributes)
       .catch(() => {});
-  }, [clientId, isArMode]);
+  }, [clientId, isArMode, cardNumber]);
+
+  if (useMindAR) {
+    return (
+      <ArEngineErrorBoundary clientId={clientId}>
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: '#000' }} />}>
+          <ArViewMindAR clientId={clientId} cardNumber={cardNumber} />
+        </Suspense>
+      </ArEngineErrorBoundary>
+    );
+  }
 
   if (isArMode) {
-    return <ArView clientId={clientId} />;
+    return <ArView clientId={clientId} cardNumber={cardNumber} />;
   }
 
   function showToast(msg, duration = 1800) {
@@ -76,7 +138,7 @@ export default function PublicProfile() {
   // instead of relying on the browser's own download UI.
   async function saveContact() {
     try {
-      const res = await fetch(`${API_URL}/api/public/vcard/${clientId}`);
+      const res = await fetch(`${API_URL}/api/public/vcard/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`);
       if (!res.ok) throw new Error('vcard fetch failed');
       const blob = await res.blob();
       const disposition = res.headers.get('Content-Disposition') || '';
@@ -99,6 +161,38 @@ export default function PublicProfile() {
       showToast('Downloaded — open it to add to your contacts', 3200);
     } catch {
       showToast('Could not save contact');
+    }
+  }
+
+  // The combined "Exchange Contact" action -- downloads the owner's vCard
+  // (unchanged) and then opens the leave-your-info form, so a single tap
+  // covers both directions instead of requiring a second, separate ask.
+  function handleExchangeClick() {
+    saveContact();
+    setLeadError('');
+    setShowExchange(true);
+  }
+
+  async function handleLeadSubmit(e) {
+    e.preventDefault();
+    if (!leadName.trim() || !leadPhone.trim()) {
+      setLeadError('Name and phone number are required');
+      return;
+    }
+    setLeadSubmitting(true);
+    setLeadError('');
+    try {
+      await api.submitLead(clientId, { name: leadName, phone: leadPhone, email: leadEmail, org: leadOrg }, cardNumber);
+      setShowExchange(false);
+      setLeadName('');
+      setLeadPhone('');
+      setLeadEmail('');
+      setLeadOrg('');
+      showToast(`Thanks! ${profile.fullName || 'They'}'ll be in touch.`, 2600);
+    } catch (err) {
+      setLeadError(err.message || 'Could not share your contact');
+    } finally {
+      setLeadSubmitting(false);
     }
   }
 
@@ -129,6 +223,17 @@ export default function PublicProfile() {
   }
 
   if (loading) return <div className="pv-page"><p className="pv-state-msg">Loading card…</p></div>;
+  // Deliberately distinct wording from "Card not found" below -- this
+  // card genuinely exists, its owner just turned it off (see
+  // Settings.jsx's "Card status"), which reads very differently to
+  // someone debugging their own link.
+  if (profile?.paused) {
+    return (
+      <div className="pv-page">
+        <p className="pv-state-msg">This card has been deactivated by its owner.</p>
+      </div>
+    );
+  }
   if (error || !profile) {
     return (
       <div className="pv-page">
@@ -226,7 +331,7 @@ export default function PublicProfile() {
           {profile.jobTitle && <div className="pv-title">{profile.jobTitle}</div>}
 
           <div className="pv-actions">
-            <button className="pv-btn pv-btn-primary" onClick={saveContact}>Save Contact</button>
+            <button className="pv-btn pv-btn-primary" onClick={handleExchangeClick}>Exchange Contact</button>
             <button className="pv-btn pv-btn-secondary" onClick={handleShare}>Share</button>
           </div>
         </div>
@@ -331,6 +436,42 @@ export default function PublicProfile() {
       </div>
 
       <div className={`pv-toast${toast ? ' show' : ''}`}>{toast}</div>
+
+      {showExchange && (
+        <div className="auth-modal-backdrop" onClick={(e) => e.target === e.currentTarget && setShowExchange(false)}>
+          <div className="auth-modal-card">
+            <button className="auth-modal-close" onClick={() => setShowExchange(false)} aria-label="Close">
+              ×
+            </button>
+            <h1 style={{ fontSize: 20 }}>Leave your contact</h1>
+            <p className="subtitle" style={{ marginBottom: 20 }}>
+              {profile.fullName || 'They'}'ll get your info so they can follow up with you.
+            </p>
+            {leadError && <div className="error-banner">{leadError}</div>}
+            <form onSubmit={handleLeadSubmit}>
+              <div className="field">
+                <label htmlFor="leadName">Name</label>
+                <input id="leadName" type="text" value={leadName} onChange={(e) => setLeadName(e.target.value)} required />
+              </div>
+              <div className="field">
+                <label htmlFor="leadPhone">Phone number</label>
+                <input id="leadPhone" type="tel" autoComplete="tel" value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} required />
+              </div>
+              <div className="field">
+                <label htmlFor="leadEmail">Email (optional)</label>
+                <input id="leadEmail" type="email" value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)} />
+              </div>
+              <div className="field">
+                <label htmlFor="leadOrg">Company (optional)</label>
+                <input id="leadOrg" type="text" value={leadOrg} onChange={(e) => setLeadOrg(e.target.value)} />
+              </div>
+              <button type="submit" disabled={leadSubmitting}>
+                {leadSubmitting ? 'Sharing…' : 'Share my contact'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   MODEL_IMAGE_BASE_W,
   ASSUMED_FOV_DEG,
   toLocalOffset,
+  heightToLocalZ,
   projectLocalPoint,
   focalPxFor,
 } from '../lib/arProjection.js';
@@ -177,7 +178,7 @@ function drawCover(ctx, video, cw, ch) {
   ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
 }
 
-export default function ArView({ clientId }) {
+export default function ArView({ clientId, cardNumber }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const rafRef = useRef(null);
@@ -206,7 +207,7 @@ export default function ArView({ clientId }) {
   const [modelError, setModelError] = useState(''); // surfaced on-screen -- a silent console.error here was impossible to diagnose on a phone with no devtools attached
 
   useEffect(() => {
-    Promise.all([api.getPublicProfile(clientId), api.getPublicArLayout(clientId)])
+    Promise.all([api.getPublicProfile(clientId, cardNumber), api.getPublicArLayout(clientId, cardNumber)])
       .then(([p, l]) => {
         setProfile(p);
         setLayout(l);
@@ -220,12 +221,14 @@ export default function ArView({ clientId }) {
       .then(setIcons)
       .catch(() => setIcons({}));
     // Same "cosmetic nice-to-have, don't block the view" reasoning as
-    // the icons fetch above.
+    // the icons fetch above. ArComponentDefinition was folded into
+    // AttributeDefinition's `arComponent` flag -- filter client-side the
+    // same way ArLayout.jsx does.
     api
-      .getArComponentDefinitions()
-      .then(setArComponents)
+      .getAttributeDefinitions()
+      .then((all) => setArComponents(all.filter((a) => a.arComponent)))
       .catch(() => {});
-  }, [clientId]);
+  }, [clientId, cardNumber]);
 
   useEffect(() => {
     layoutRef.current = layout;
@@ -523,7 +526,10 @@ export default function ArView({ clientId }) {
       const qrPos = layoutRef.current?.qr || { x: 50, y: 50 };
       const modelPos = layoutRef.current?.model || { x: 50, y: 35 };
       const [lx, ly] = toLocalOffset(modelPos, qrPos);
-      const move = [0, 1, 2].map((j) => translation[j] + rotation[j][0] * lx + rotation[j][1] * ly);
+      const lz = heightToLocalZ(modelPos.z);
+      const move = [0, 1, 2].map(
+        (j) => translation[j] + rotation[j][0] * lx + rotation[j][1] * ly + rotation[j][2] * lz
+      );
       // Three.js's default camera looks down -Z; POSIT's +Z is "in front
       // of the camera" -- negate depth to reconcile the two conventions.
       three.modelGroup.position.set(move[0], move[1], -move[2]);
@@ -539,7 +545,10 @@ export default function ArView({ clientId }) {
       const qrPos = layoutRef.current?.qr || { x: 50, y: 50 };
       const videoPos = layoutRef.current?.video || { x: 50, y: 20 };
       const [lx, ly] = toLocalOffset(videoPos, qrPos);
-      const move = [0, 1, 2].map((j) => translation[j] + rotation[j][0] * lx + rotation[j][1] * ly);
+      const lz = heightToLocalZ(videoPos.z);
+      const move = [0, 1, 2].map(
+        (j) => translation[j] + rotation[j][0] * lx + rotation[j][1] * ly + rotation[j][2] * lz
+      );
       three.videoGroup.position.set(move[0], move[1], -move[2]);
     }
 
@@ -811,8 +820,8 @@ export default function ArView({ clientId }) {
                 style={
                   iconUrl
                     ? {
-                        width: 56,
-                        height: 56,
+                        width: 80,
+                        height: 80,
                         borderRadius: '50%',
                         background: el.color,
                         display: 'flex',
@@ -823,9 +832,9 @@ export default function ArView({ clientId }) {
                     : {
                         background: el.color,
                         color: '#fff',
-                        padding: '8px 12px',
+                        padding: '12px 18px',
                         borderRadius: 999,
-                        fontSize: 12,
+                        fontSize: 14,
                         fontWeight: 700,
                         whiteSpace: 'nowrap',
                         boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
@@ -851,7 +860,11 @@ export default function ArView({ clientId }) {
                   // This was the actual cause of the flat panels visibly
                   // shaking more than the 3D model/video card, even though
                   // both consume the exact same smoothed pose data.
-                  transform: `translate3d(${proj.x}px, ${proj.y}px, 0) translate(-50%, -50%) scale(${proj.scale})`,
+                  // Floored (never below 0.75) so pills stay legible at a
+                  // normal scanning distance -- unlike the 3D model/video
+                  // card, these are meant to read as fixed-size UI, not
+                  // realistic receding-with-distance geometry.
+                  transform: `translate3d(${proj.x}px, ${proj.y}px, 0) translate(-50%, -50%) scale(${Math.max(proj.scale, 0.75)})`,
                   willChange: 'transform',
                 }}
               >
@@ -941,8 +954,8 @@ export default function ArView({ clientId }) {
                 style={
                   iconUrl
                     ? {
-                        width: 56,
-                        height: 56,
+                        width: 80,
+                        height: 80,
                         borderRadius: '50%',
                         background: '#22d3ee',
                         display: 'flex',
@@ -953,9 +966,9 @@ export default function ArView({ clientId }) {
                     : {
                         background: '#22d3ee',
                         color: '#fff',
-                        padding: '8px 12px',
+                        padding: '12px 18px',
                         borderRadius: 999,
-                        fontSize: 12,
+                        fontSize: 14,
                         fontWeight: 700,
                         whiteSpace: 'nowrap',
                         boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
@@ -973,7 +986,7 @@ export default function ArView({ clientId }) {
                   position: 'fixed',
                   left: 0,
                   top: 0,
-                  transform: `translate3d(${proj.x}px, ${proj.y}px, 0) translate(-50%, -50%) scale(${proj.scale})`,
+                  transform: `translate3d(${proj.x}px, ${proj.y}px, 0) translate(-50%, -50%) scale(${Math.max(proj.scale, 0.75)})`,
                   willChange: 'transform',
                 }}
               >

@@ -5,18 +5,21 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
-const { requireAdmin, requireSeniorAdmin } = require('../middleware/auth');
+const { requireAdmin, requireSeniorAdmin, requireEncodeAccess, requireAdminPrime } = require('../middleware/auth');
 const Client = require('../models/Client');
 const Admin = require('../models/Admin');
 const CardPlan = require('../models/CardPlan');
 const ArLayout = require('../models/ArLayout');
 const ArIcon = require('../models/ArIcon');
 const AttributeDefinition = require('../models/AttributeDefinition');
-const ArComponentDefinition = require('../models/ArComponentDefinition');
 const CardRequest = require('../models/CardRequest');
 const ContactMessage = require('../models/ContactMessage');
 const Contact = require('../models/Contact');
 const CatalogVideo = require('../models/CatalogVideo');
+const Card = require('../models/Card');
+const CardInventory = require('../models/CardInventory');
+const cardCrypto = require('../utils/crypto'); // named apart from the built-in `crypto` above (line 4)
+const { getChargeAmount } = require('../utils/pricing');
 
 const router = express.Router();
 
@@ -76,14 +79,17 @@ const uploadCatalogVideo = multer({
 // colored text pill in HuntsAR World once uploaded. Same singleton-doc
 // pattern as the AR Layout default template above.
 // ---------------------------------------------------------------------
-// Not a fixed list anymore -- the four built-ins are always valid, and any
+// Not a fixed list anymore -- the four built-ins are always valid, any
 // section an admin has created via the Attributes page becomes valid too
 // the moment an attribute exists in it (same discovery the Attributes page
-// itself uses).
+// itself uses), and any individual attribute flagged arComponent gets its
+// OWN icon slot too (a section groups multiple tab fields together, but
+// an AR panel component is its own single draggable element, so it needs
+// a per-attribute-key slot, not just a per-section one).
 async function getValidArIconKeys() {
   const customSections = await AttributeDefinition.distinct('section');
-  const customArComponents = await ArComponentDefinition.distinct('key', { active: true });
-  return new Set(['video', 'contact', 'portfolio', 'social', 'huntsworld', ...customSections, ...customArComponents]);
+  const arComponentKeys = await AttributeDefinition.distinct('key', { active: true, arComponent: true });
+  return new Set(['video', 'contact', 'portfolio', 'social', 'huntsworld', ...customSections, ...arComponentKeys]);
 }
 
 // Every upload writes into sectionIcons now (works for any key); the five
@@ -188,7 +194,8 @@ router.get('/stats', requireAdmin, async (req, res) => {
   }));
 
   // Attach plan display names to the raw key-based aggregation.
-  const allPlans = await CardPlan.find({}).select('key name');
+  const allPlans = await CardPlan.find({}).select('key name price priceAmount');
+  const planByKey = Object.fromEntries(allPlans.map((p) => [p.key, p]));
   const planNameByKey = Object.fromEntries(allPlans.map((p) => [p.key, p.name]));
   const cardsByPlan = cardsByPlanAgg.map((c) => ({
     key: c._id,
@@ -196,7 +203,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
     count: c.count,
   }));
 
-  res.json({
+  const stats = {
     totalClients,
     paid,
     unpaid: totalClients - paid,
@@ -211,7 +218,21 @@ router.get('/stats', requireAdmin, async (req, res) => {
     recentClients,
     unclaimedOrders,
     unreadMessages,
-  });
+  };
+
+  // Revenue -- Admin Prime only (see models/Admin.js's role comment).
+  // Computed from real sales data (cardsByPlanAgg counts x each plan's
+  // actual charge amount), not a placeholder -- everyone else's response
+  // is unchanged from before this field existed.
+  if (req.admin.role === 'primeadmin') {
+    stats.revenue = cardsByPlanAgg.reduce((sum, c) => {
+      const plan = planByKey[c._id];
+      const amount = plan ? getChargeAmount(plan) : null;
+      return sum + (amount || 0) * c.count;
+    }, 0);
+  }
+
+  res.json(stats);
 });
 
 // -----------------------------------------------------------------------
@@ -723,18 +744,21 @@ router.get('/team', requireAdmin, async (req, res) => {
 });
 
 // POST /api/admin/team
-// Invites a new admin/support account. Role determines fulfillment
-// pipeline permissions (see requireSeniorAdmin) -- everything else stays
-// full-parity for both roles, per the original decision. Returns the
-// temp password once, same handoff pattern as client creation.
-router.post('/team', requireAdmin, async (req, res) => {
+// Invites a new admin/subadmin/employee account -- Admin Prime only (see
+// models/Admin.js's role comment). Role determines fulfillment pipeline
+// permissions for admin/subadmin (see requireSeniorAdmin); 'employee' is
+// scoped to the encode tool only (see requireEncodeAccess). 'primeadmin'
+// is deliberately NOT an accepted value here -- it's a singleton, never
+// created via ordinary invite, only via POST /team/:id/promote-to-prime.
+// Returns the temp password once, same handoff pattern as client creation.
+router.post('/team', requireAdminPrime, async (req, res) => {
   try {
     const { name, email, role } = req.body;
     if (!name || !email) {
       return res.status(400).json({ error: 'name and email are required' });
     }
-    if (role && !['admin', 'subadmin'].includes(role)) {
-      return res.status(400).json({ error: "role must be 'admin' or 'subadmin'" });
+    if (role && !['admin', 'subadmin', 'employee'].includes(role)) {
+      return res.status(400).json({ error: "role must be 'admin', 'subadmin', or 'employee'" });
     }
 
     const existing = await Admin.findOne({ email: email.toLowerCase() });
@@ -760,14 +784,21 @@ router.post('/team', requireAdmin, async (req, res) => {
   }
 });
 
-// DELETE /api/admin/team/:id
-// Two guardrails: an admin can't delete their own account (avoids
-// accidentally locking themselves out mid-session), and the last
-// remaining admin account can't be deleted at all (avoids locking
-// EVERYONE out with no way back in short of touching the database
-// directly).
-router.delete('/team/:id', requireAdmin, async (req, res) => {
+// DELETE /api/admin/team/:id -- Admin Prime only. Guardrails: the Admin
+// Prime account itself can NEVER be deleted by anyone, including itself
+// (only requireAdminPrime can even reach this route, so this specifically
+// blocks Prime from deleting their own account); an admin can't delete
+// their own account otherwise (avoids accidentally locking themselves out
+// mid-session); and the last remaining admin account can't be deleted at
+// all (avoids locking EVERYONE out with no way back in short of touching
+// the database directly).
+router.delete('/team/:id', requireAdminPrime, async (req, res) => {
   try {
+    const target = await Admin.findById(req.params.id).select('role');
+    if (!target) return res.status(404).json({ error: 'Admin not found' });
+    if (target.role === 'primeadmin') {
+      return res.status(400).json({ error: "The Admin Prime account can't be deleted." });
+    }
     if (req.params.id === req.admin.adminId) {
       return res.status(400).json({ error: "You can't delete your own account while logged in as it." });
     }
@@ -777,13 +808,93 @@ router.delete('/team/:id', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Cannot delete the last remaining admin account.' });
     }
 
-    const deleted = await Admin.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ error: 'Admin not found' });
-
+    await Admin.findByIdAndDelete(req.params.id);
     res.json({ ok: true });
   } catch (err) {
     console.error('[admin/team DELETE]', err);
     res.status(500).json({ error: 'Failed to delete team account' });
+  }
+});
+
+// PATCH /api/admin/team/:id -- edit a team member's name/email/role.
+// Admin Prime only. Role can be changed freely between
+// 'admin'/'subadmin'/'employee', but this route will never set OR change
+// AWAY FROM 'primeadmin' -- that's exclusively handled by the dedicated
+// promote-to-prime transfer above, which also guarantees the singleton.
+router.patch('/team/:id', requireAdminPrime, async (req, res) => {
+  try {
+    const target = await Admin.findById(req.params.id).select('role');
+    if (!target) return res.status(404).json({ error: 'Admin not found' });
+
+    const { name, email, role } = req.body || {};
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (email !== undefined) updates.email = email.toLowerCase();
+    if (role !== undefined) {
+      if (target.role === 'primeadmin') {
+        return res.status(400).json({ error: "Use the Promote to Prime action to change who holds Admin Prime, not this." });
+      }
+      if (!['admin', 'subadmin', 'employee'].includes(role)) {
+        return res.status(400).json({ error: "role must be 'admin', 'subadmin', or 'employee'" });
+      }
+      updates.role = role;
+    }
+
+    if (updates.email) {
+      const existing = await Admin.findOne({ email: updates.email, _id: { $ne: req.params.id } });
+      if (existing) return res.status(409).json({ error: 'An admin with this email already exists' });
+    }
+
+    const updated = await Admin.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true }).select('email name role createdAt');
+    res.json(updated);
+  } catch (err) {
+    console.error('[admin/team PATCH]', err);
+    res.status(500).json({ error: 'Failed to update team account' });
+  }
+});
+
+// POST /api/admin/team/:id/reset-password -- Admin Prime only. Generates
+// a new temp password and sets mustChangePassword, same handoff pattern
+// as inviting a new account (POST /team) -- shown once in the response,
+// never stored/logged in plaintext.
+router.post('/team/:id/reset-password', requireAdminPrime, async (req, res) => {
+  try {
+    const target = await Admin.findById(req.params.id).select('email name');
+    if (!target) return res.status(404).json({ error: 'Admin not found' });
+
+    const tempPassword = generateTempPassword();
+    const passwordHash = await bcrypt.hash(tempPassword, 12);
+    await Admin.updateOne({ _id: req.params.id }, { $set: { passwordHash, mustChangePassword: true } });
+
+    res.json({ email: target.email, name: target.name, tempPassword });
+  } catch (err) {
+    console.error('[admin/team reset-password POST]', err);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// POST /api/admin/team/:id/promote-to-prime -- Admin Prime only. A
+// TRANSFER, not a duplication: atomically promotes the target and demotes
+// the current Prime (the requester) to 'admin' in the same operation, so
+// there is never more than one Admin Prime at a time by construction.
+router.post('/team/:id/promote-to-prime', requireAdminPrime, async (req, res) => {
+  try {
+    const target = await Admin.findById(req.params.id).select('role email');
+    if (!target) return res.status(404).json({ error: 'Admin not found' });
+    if (target.role === 'employee') {
+      return res.status(400).json({ error: 'An employee account must be promoted to admin first, not directly to Admin Prime.' });
+    }
+    if (String(target._id) === req.admin.adminId) {
+      return res.status(400).json({ error: 'You are already Admin Prime.' });
+    }
+
+    await Admin.updateOne({ _id: req.admin.adminId }, { $set: { role: 'admin' } });
+    await Admin.updateOne({ _id: target._id }, { $set: { role: 'primeadmin' } });
+
+    res.json({ ok: true, newPrime: target.email });
+  } catch (err) {
+    console.error('[admin/team promote-to-prime POST]', err);
+    res.status(500).json({ error: 'Failed to transfer Admin Prime' });
   }
 });
 
@@ -937,9 +1048,9 @@ router.put('/ar-layout', requireAdmin, async (req, res) => {
     if (videoRotationZ !== undefined) updates.videoRotationZ = videoRotationZ;
     if (videoScaleX !== undefined) updates.videoScaleX = videoScaleX;
     if (videoScaleY !== undefined) updates.videoScaleY = videoScaleY;
-    // Custom AR component positions (see ArComponentDefinition) -- a
-    // whole-map replace, same as every other field here being "whatever
-    // the editor actually sent," not a per-key merge.
+    // Positions for AR-flagged attributes (see AttributeDefinition.arComponent)
+    // -- a whole-map replace, same as every other field here being
+    // "whatever the editor actually sent," not a per-key merge.
     if (customElements && typeof customElements === 'object') updates.customElements = customElements;
 
     const layout = await ArLayout.findOneAndUpdate(
@@ -1068,7 +1179,7 @@ router.get('/attributes', requireAdmin, async (req, res) => {
 
 router.post('/attributes', requireAdmin, async (req, res) => {
   try {
-    const { label, section, fieldType, order } = req.body || {};
+    const { label, section, fieldType, order, arComponent } = req.body || {};
     if (!label || !String(label).trim()) return res.status(400).json({ error: 'Label is required' });
     const resolved = await resolveSection(section);
     if (!resolved) return res.status(400).json({ error: 'Section is required' });
@@ -1090,6 +1201,7 @@ router.post('/attributes', requireAdmin, async (req, res) => {
       sectionLabel: resolved.sectionLabel,
       fieldType: ['text', 'phone', 'url', 'email'].includes(fieldType) ? fieldType : 'text',
       order: Number.isFinite(order) ? order : 0,
+      arComponent: Boolean(arComponent),
     });
     res.status(201).json(attribute);
   } catch (err) {
@@ -1099,7 +1211,7 @@ router.post('/attributes', requireAdmin, async (req, res) => {
 
 router.patch('/attributes/:id', requireAdmin, async (req, res) => {
   try {
-    const { label, section, fieldType, order, active } = req.body || {};
+    const { label, section, fieldType, order, active, arComponent } = req.body || {};
     const updates = {};
     if (label !== undefined) updates.label = String(label).trim();
     if (section !== undefined) {
@@ -1116,6 +1228,7 @@ router.patch('/attributes/:id', requireAdmin, async (req, res) => {
     }
     if (order !== undefined) updates.order = order;
     if (active !== undefined) updates.active = Boolean(active);
+    if (arComponent !== undefined) updates.arComponent = Boolean(arComponent);
 
     const attribute = await AttributeDefinition.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
     if (!attribute) return res.status(404).json({ error: 'Attribute not found' });
@@ -1138,84 +1251,6 @@ router.delete('/attributes/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// ---------------------------------------------------------------------
-// AR component definitions -- admin-defined extra AR Layout panel
-// elements (see models/ArComponentDefinition.js for the full picture).
-// Same CRUD shape as /attributes above, minus the "section" concept
-// (each one IS its own draggable panel element, not grouped into a tab).
-// ---------------------------------------------------------------------
-
-// Fixed field names on the ArLayout schema/ELEMENTS arrays -- a custom
-// component's key can never collide with one of these, or it'd silently
-// overwrite a real built-in panel's saved position instead of getting
-// its own slot in ArLayout.customElements.
-const RESERVED_AR_COMPONENT_KEYS = ['qr', 'video', 'contact', 'portfolio', 'social', 'huntsworld', 'model'];
-
-router.get('/ar-components', requireAdmin, async (req, res) => {
-  try {
-    const components = await ArComponentDefinition.find().sort({ order: 1, createdAt: 1 });
-    res.json(components);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/ar-components', requireAdmin, async (req, res) => {
-  try {
-    const { label, order } = req.body || {};
-    if (!label || !String(label).trim()) return res.status(400).json({ error: 'Label is required' });
-
-    const baseKey = slugifyAttributeKey(label);
-    if (!baseKey) return res.status(400).json({ error: 'Label must contain at least one letter or number' });
-    if (RESERVED_AR_COMPONENT_KEYS.includes(baseKey)) {
-      return res.status(400).json({ error: `"${label}" is a reserved name -- pick a different label.` });
-    }
-    // Slug collisions get a numeric suffix rather than rejecting the
-    // create outright, same as /attributes above.
-    let key = baseKey;
-    let suffix = 2;
-    while (await ArComponentDefinition.exists({ key })) {
-      key = `${baseKey}_${suffix++}`;
-    }
-
-    const component = await ArComponentDefinition.create({
-      key,
-      label: String(label).trim(),
-      order: Number.isFinite(order) ? order : 0,
-    });
-    res.status(201).json(component);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.patch('/ar-components/:id', requireAdmin, async (req, res) => {
-  try {
-    const { label, order, active } = req.body || {};
-    const updates = {};
-    if (label !== undefined) updates.label = String(label).trim();
-    if (order !== undefined) updates.order = order;
-    if (active !== undefined) updates.active = Boolean(active);
-
-    const component = await ArComponentDefinition.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
-    if (!component) return res.status(404).json({ error: 'Component not found' });
-    res.json(component);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.delete('/ar-components/:id', requireAdmin, async (req, res) => {
-  try {
-    const component = await ArComponentDefinition.findByIdAndDelete(req.params.id);
-    if (!component) return res.status(404).json({ error: 'Component not found' });
-    // Clients' saved values/positions for this key are left in place
-    // (harmless, unused Map entries) -- same reasoning as /attributes above.
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // ---------------------------------------------------------------------
 // Catalog -- admin picks a card type and uploads the showcase video
@@ -1294,8 +1329,10 @@ router.delete('/catalog/:cardType', requireAdmin, async (req, res) => {
 // GET /api/admin/encode/client/:clientId -- full profile lookup, used by
 // the encode tool's "Write" panel to find and display any client (no
 // paid/chipEncoded filter -- the point there is fixing up a specific
-// person's details, not listing who's ready for a card).
-router.get('/encode/client/:clientId', requireAdmin, async (req, res) => {
+// person's details, not listing who's ready for a card). Also returns
+// this client's existing Card records, so the tool can show "N cards
+// already encoded -- write another?" instead of assuming at most one.
+router.get('/encode/client/:clientId', requireEncodeAccess, async (req, res) => {
   try {
     const rawId = (req.params.clientId || '').trim();
     if (!rawId) return res.status(400).json({ error: 'Client ID required' });
@@ -1312,15 +1349,23 @@ router.get('/encode/client/:clientId', requireAdmin, async (req, res) => {
     }
 
     if (!client) return res.status(404).json({ error: `No client found with ID "${req.params.clientId}"` });
-    res.json(client);
+
+    const cards = await Card.find({ clientId: client.clientId }).select('-passwordEncrypted').sort({ cardNumber: 1 });
+    const clientObj = client.toObject();
+    clientObj.cards = cards;
+    res.json(clientObj);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // GET /api/admin/encode/pending -- paid clients who don't have a card
-// encoded yet, for the "Create a card" list.
-router.get('/encode/pending', requireAdmin, async (req, res) => {
+// encoded yet, for the "Create a card" list. Kept as chipEncoded-based
+// (legacy single-card flag) since it's specifically "never had a first
+// card" -- a client with existing Card records but wanting an extra one
+// goes through the picker + "Encode a new card" action instead, not this
+// list.
+router.get('/encode/pending', requireEncodeAccess, async (req, res) => {
   try {
     const pending = await Client.find({ paid: true, chipEncoded: false }).select(
       'clientId fullName cardType phone loginEmail'
@@ -1331,30 +1376,225 @@ router.get('/encode/pending', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/admin/encode/mark-encoded/:clientId -- called right after a
-// real hardware write+lock succeeds, to flip chipEncoded and store the
-// password hash. encodedBy comes from the admin's own verified token,
-// never from the request body, so this can't be spoofed as someone else.
-router.post('/encode/mark-encoded/:clientId', requireAdmin, async (req, res) => {
+// ---------------------------------------------------------------------
+// Per-card records (see models/Card.js) -- one profile can have several
+// physical cards now, each independently tracked/encoded/deactivated.
+// ---------------------------------------------------------------------
+
+// GET /api/admin/clients/:clientId/cards -- list, NEVER includes the
+// password (see the dedicated reveal route below for that).
+router.get('/clients/:clientId/cards', requireAdmin, async (req, res) => {
   try {
-    const { chipPasswordHash } = req.body || {};
-    if (!chipPasswordHash) return res.status(400).json({ error: 'chipPasswordHash required' });
-    const client = await Client.findOneAndUpdate(
-      { clientId: req.params.clientId },
-      {
-        $set: {
-          chipEncoded: true,
-          chipPasswordHash,
-          encodedAt: new Date(),
-          encodedBy: req.admin.email,
-        },
-      },
-      { new: true }
-    );
+    const cards = await Card.find({ clientId: req.params.clientId }).select('-passwordEncrypted').sort({ cardNumber: 1 });
+    res.json(cards);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/clients/:clientId/cards -- reserves a new card slot
+// BEFORE the physical write happens, so the encode tool knows what
+// ?card=N to put in the chip's own URL. cardNumber is sequential per
+// client, not a global ID.
+router.post('/clients/:clientId/cards', requireEncodeAccess, async (req, res) => {
+  try {
+    const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId');
     if (!client) return res.status(404).json({ error: 'Client not found' });
+
+    const last = await Card.findOne({ clientId: client.clientId }).sort({ cardNumber: -1 }).select('cardNumber');
+    const cardNumber = (last?.cardNumber || 0) + 1;
+    const { cardType, cardVariantId } = req.body || {};
+    const card = await Card.create({
+      clientId: client.clientId,
+      cardNumber,
+      cardType: cardType || client.cardType || null,
+      cardVariantId: cardVariantId || null,
+    });
+    res.status(201).json({ cardId: card._id, cardNumber: card.cardNumber });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/cards/:cardId/password -- a separate, explicit-action
+// route rather than part of the list response above, so the decrypted
+// password isn't casually exposed every time the card list loads.
+router.get('/cards/:cardId/password', requireAdmin, async (req, res) => {
+  try {
+    const card = await Card.findById(req.params.cardId).select('passwordEncrypted');
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+    if (!card.passwordEncrypted) {
+      // Either never encoded yet, or migrated from the old single-card
+      // model where only a one-way hash existed -- the original raw
+      // password genuinely can't be recovered in that case.
+      return res.json({ password: null });
+    }
+    res.json({ password: cardCrypto.decrypt(card.passwordEncrypted) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/admin/cards/:cardId -- active/cardType/cardVariantId only;
+// password/encoded status change exclusively via mark-encoded below.
+router.patch('/cards/:cardId', requireAdmin, async (req, res) => {
+  try {
+    const updates = {};
+    for (const field of ['active', 'cardType', 'cardVariantId']) {
+      if (field in req.body) updates[field] = req.body[field];
+    }
+    const card = await Card.findByIdAndUpdate(req.params.cardId, { $set: updates }, { new: true, runValidators: true }).select(
+      '-passwordEncrypted'
+    );
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+    res.json(card);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/cards/:cardId
+router.delete('/cards/:cardId', requireAdmin, async (req, res) => {
+  try {
+    const result = await Card.deleteOne({ _id: req.params.cardId });
+    if (result.deletedCount === 0) return res.status(404).json({ error: 'Card not found' });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+// POST /api/admin/cards/:cardId/mark-encoded -- called right after a real
+// hardware write+lock succeeds. Takes the RAW chip password (not a hash
+// -- see the Context note in the plan: encode-tool already has this value
+// in memory right after lockCard() succeeds, it's just discarded after
+// hashing today) and encrypts it at rest via utils/crypto.js, so it can
+// later be shown back to an admin. encodedBy comes from the admin's own
+// verified token, never the request body, so this can't be spoofed as
+// someone else.
+router.post('/cards/:cardId/mark-encoded', requireEncodeAccess, async (req, res) => {
+  try {
+    const { chipPassword } = req.body || {};
+    if (!chipPassword) return res.status(400).json({ error: 'chipPassword required' });
+    const card = await Card.findByIdAndUpdate(
+      req.params.cardId,
+      {
+        $set: {
+          encoded: true,
+          passwordEncrypted: cardCrypto.encrypt(chipPassword),
+          encodedAt: new Date(),
+          encodedBy: req.admin.email,
+        },
+      },
+      { new: true }
+    ).select('-passwordEncrypted');
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+
+    // Keep the legacy single-card fields on Client in sync for card #1
+    // specifically -- everything that still reads Client.chipEncoded
+    // directly (e.g. the /encode/pending list above, dispatch gating
+    // elsewhere in this file) keeps working for a client's first card
+    // without needing to be migrated in this same pass.
+    if (card.cardNumber === 1) {
+      await Client.updateOne(
+        { clientId: card.clientId },
+        { $set: { chipEncoded: true, encodedAt: card.encodedAt, encodedBy: card.encodedBy } }
+      );
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------
+// Encode-tool installer upload -- Admin Prime only. Replaces the manual
+// `npm run dist` + copy-the-file-by-hand step: always overwrites the same
+// fixed filename (same path client-app/admin's "Download Encode Tool"
+// link already serves via the static /uploads route), so that link never
+// needs to change as the tool gets updated.
+// ---------------------------------------------------------------------
+const ENCODE_TOOL_DIR = path.join(__dirname, '..', 'uploads', 'encode-tool');
+fs.mkdirSync(ENCODE_TOOL_DIR, { recursive: true });
+const encodeToolStorage = multer.diskStorage({
+  destination: ENCODE_TOOL_DIR,
+  filename: (req, file, cb) => cb(null, 'HuntsTAG-Encode-Tool-Setup.exe'),
+});
+const uploadEncodeTool = multer({
+  storage: encodeToolStorage,
+  limits: { fileSize: 300 * 1024 * 1024 }, // generous -- Electron installers commonly run 80-150MB+
+  fileFilter: (req, file, cb) => {
+    // Browsers report wildly inconsistent mimetypes for .exe depending on
+    // OS/browser -- the file extension is the reliable signal here, not
+    // content-type sniffing, same trade-off any installer-hosting service
+    // has to make.
+    if (path.extname(file.originalname).toLowerCase() !== '.exe') {
+      return cb(new Error('Only a .exe installer is allowed'));
+    }
+    cb(null, true);
+  },
+});
+
+// POST /api/admin/encode-tool/upload
+router.post('/encode-tool/upload', requireAdminPrime, uploadEncodeTool.single('installer'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file received' });
+  res.json({ ok: true, size: req.file.size });
+});
+
+// ---------------------------------------------------------------------
+// Blank-card inventory (see models/CardInventory.js) -- physical stock on
+// hand before it's ever assigned to a client, distinct from the per-
+// client Card model above. Admin Prime only.
+// ---------------------------------------------------------------------
+
+// GET /api/admin/inventory
+router.get('/inventory', requireAdminPrime, async (req, res) => {
+  const items = await CardInventory.find({}).sort({ color: 1 });
+  res.json(items);
+});
+
+// POST /api/admin/inventory -- add a new color bucket.
+router.post('/inventory', requireAdminPrime, async (req, res) => {
+  try {
+    const { color, quantity } = req.body || {};
+    const trimmedColor = (color || '').toString().trim().toLowerCase();
+    if (!trimmedColor) return res.status(400).json({ error: 'color is required' });
+
+    const existing = await CardInventory.findOne({ color: trimmedColor });
+    if (existing) return res.status(409).json({ error: 'This color already has an inventory entry -- edit it instead.' });
+
+    const item = await CardInventory.create({ color: trimmedColor, quantity: Number(quantity) || 0 });
+    res.status(201).json(item);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/admin/inventory/:id -- set a new quantity.
+router.patch('/inventory/:id', requireAdminPrime, async (req, res) => {
+  try {
+    const { quantity } = req.body || {};
+    if (quantity === undefined || Number(quantity) < 0) {
+      return res.status(400).json({ error: 'quantity must be a non-negative number' });
+    }
+    const item = await CardInventory.findByIdAndUpdate(req.params.id, { $set: { quantity: Number(quantity) } }, { new: true });
+    if (!item) return res.status(404).json({ error: 'Inventory entry not found' });
+    res.json(item);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/inventory/:id
+router.delete('/inventory/:id', requireAdminPrime, async (req, res) => {
+  try {
+    const result = await CardInventory.deleteOne({ _id: req.params.id });
+    if (result.deletedCount === 0) return res.status(404).json({ error: 'Inventory entry not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

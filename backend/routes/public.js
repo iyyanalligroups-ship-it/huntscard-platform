@@ -10,10 +10,13 @@ const Client = require('../models/Client');
 const CardPlan = require('../models/CardPlan');
 const CardRequest = require('../models/CardRequest');
 const ContactMessage = require('../models/ContactMessage');
+const Contact = require('../models/Contact');
+const Notification = require('../models/Notification');
+const Card = require('../models/Card');
+const { sendPushToClient } = require('../utils/push');
 const ArLayout = require('../models/ArLayout');
 const ArIcon = require('../models/ArIcon');
 const AttributeDefinition = require('../models/AttributeDefinition');
-const ArComponentDefinition = require('../models/ArComponentDefinition');
 const CatalogVideo = require('../models/CatalogVideo');
 const { getChargeAmount } = require('../utils/pricing');
 
@@ -29,6 +32,21 @@ function generateTempPassword() {
   return Array.from(crypto.randomFillSync(new Uint8Array(12)))
     .map((b) => alphabet[b % alphabet.length])
     .join('');
+}
+
+// Two independent gates: the whole-profile pause (Client.cardActive, see
+// Settings.jsx's "Card status") is always checked -- the overall kill
+// switch. The optional ?card=N query param additionally targets ONE
+// specific physical card (see models/Card.js), since every card for a
+// client used to encode the identical URL with no way to tell them apart
+// -- cards written before this feature has no ?card= and so can't be
+// individually blocked, only the whole-profile switch applies to them.
+// Used by every public route below that exposes real client data.
+async function isCardBlocked(clientId, cardNumberParam) {
+  const cardNumber = Number(cardNumberParam);
+  if (!cardNumberParam || !Number.isFinite(cardNumber)) return false;
+  const card = await Card.findOne({ clientId, cardNumber }).select('active');
+  return Boolean(card && !card.active);
 }
 
 // GET /api/public/plans
@@ -63,6 +81,7 @@ router.get('/catalog', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // GET /api/public/themes removed -- Card Designs feature retired.
 
@@ -273,14 +292,21 @@ router.post('/contact', async (req, res) => {
 router.get('/profile/:clientId', async (req, res) => {
   const client = await Client.findOneAndUpdate(
     { clientId: req.params.clientId },
-    { $inc: { tapCount: 1 } }, // simple tap analytics, per the report's spec
+    { $inc: { tapCount: 1 } }, // simple tap analytics, per the report's spec -- kept even while paused, harmless
     { new: true }
   ).select(
-    'fullName jobTitle bio photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes arComponentValues cardType clientId'
+    'fullName jobTitle bio photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType clientId cardActive'
   );
 
   if (!client) {
     return res.status(404).json({ error: 'Profile not found' });
+  }
+
+  // Paused by the owner (see POST /api/profile/pause-card) -- a distinct
+  // signal, not a 404, since the card genuinely exists and the owner may
+  // be debugging their own link. No profile fields are sent at all.
+  if (!client.cardActive || (await isCardBlocked(client.clientId, req.query.card))) {
+    return res.json({ paused: true });
   }
 
   // Whether this client's plan includes the AR feature -- decides
@@ -294,7 +320,6 @@ router.get('/profile/:clientId', async (req, res) => {
   // silently serialize as {} below, since a plain Map instance nested in a
   // plain object has no JSON.stringify-visible keys.
   clientObj.customAttributes = Object.fromEntries(client.customAttributes || []);
-  clientObj.arComponentValues = Object.fromEntries(client.arComponentValues || []);
 
   res.json(clientObj);
 });
@@ -306,6 +331,9 @@ router.get('/vcard/:clientId', async (req, res) => {
   const client = await Client.findOne({ clientId: req.params.clientId });
   if (!client) {
     return res.status(404).json({ error: 'Profile not found' });
+  }
+  if (!client.cardActive || (await isCardBlocked(client.clientId, req.query.card))) {
+    return res.status(403).json({ error: 'This card has been deactivated' });
   }
 
   const vcard = [
@@ -325,6 +353,64 @@ router.get('/vcard/:clientId', async (req, res) => {
   res.setHeader('Content-Type', 'text/vcard');
   res.setHeader('Content-Disposition', `attachment; filename="${client.fullName || 'contact'}.vcf"`);
   res.send(vcard);
+});
+
+// POST /api/public/leads/:clientId -- the reverse direction of the vCard
+// route above: a visitor leaving THEIR OWN info for the card owner (see
+// PublicProfile.jsx's "Exchange Contact" flow), landing in that owner's
+// existing Contacts list (routes/contacts.js), tagged source: 'tap' so
+// it's distinguishable from contacts the owner added/imported themselves.
+// No auth -- same trust level as every other public tap-page route here.
+router.post('/leads/:clientId', async (req, res) => {
+  try {
+    const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId cardActive');
+    if (!client) return res.status(404).json({ error: 'Profile not found' });
+    if (!client.cardActive || (await isCardBlocked(client.clientId, req.query.card))) {
+      return res.status(403).json({ error: 'This card has been deactivated' });
+    }
+
+    const { name, phone, email, org } = req.body || {};
+    const trimmedName = (name || '').toString().trim();
+    const trimmedPhone = (phone || '').toString().trim();
+    if (!trimmedName) return res.status(400).json({ error: 'Name is required' });
+    if (!trimmedPhone) return res.status(400).json({ error: 'Phone number is required' });
+
+    // Upsert, not create -- a repeat scan by the same visitor (same phone,
+    // same owner) refreshes their info instead of hitting the {clientId,
+    // phone} unique index as a hard conflict the way contacts.js's own
+    // owner-facing create route deliberately does (that's a single
+    // deliberate action; this is a passive, repeatable tap).
+    const contact = await Contact.findOneAndUpdate(
+      { clientId: client.clientId, phone: trimmedPhone },
+      {
+        $set: {
+          name: trimmedName,
+          email: (email || '').toString().trim(),
+          org: (org || '').toString().trim(),
+          source: 'tap',
+        },
+        $setOnInsert: { clientId: client.clientId, phone: trimmedPhone },
+      },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+    );
+
+    // Notify the owner -- in-app bell + mobile push, both best-effort and
+    // fire-and-forget (never block this response on a side-channel alert),
+    // same "don't await" rule appointments.js already follows for its own
+    // email/SMS notifications.
+    const message = `${trimmedName} shared their contact with you`;
+    Notification.create({ clientId: client.clientId, message, contactId: contact._id }).catch((err) =>
+      console.error('[public/leads] notification create failed:', err.message)
+    );
+    sendPushToClient(client.clientId, { title: 'New contact shared', body: message }).catch((err) =>
+      console.error('[public/leads] push send failed:', err.message)
+    );
+
+    res.status(201).json({ ok: true });
+  } catch (err) {
+    console.error('[public/leads POST]', err);
+    res.status(500).json({ error: 'Failed to share contact' });
+  }
 });
 
 // GET /api/public/ar-targets
@@ -357,6 +443,13 @@ router.get('/ar-targets', async (req, res) => {
 // customized their own layout yet, so the AR app never gets a 404 here.
 router.get('/ar-layout/:clientId', async (req, res) => {
   try {
+    const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId cardActive');
+    if (client && (!client.cardActive || (await isCardBlocked(client.clientId, req.query.card)))) {
+      // Surfaces verbatim in ArView.jsx's existing loadError UI (see
+      // Promise.all([getPublicProfile, getPublicArLayout]).catch(...)) --
+      // wording is user-facing as-is, not just a log message.
+      return res.status(403).json({ error: 'This card has been deactivated' });
+    }
     let layout = await ArLayout.findOne({ clientId: req.params.clientId });
     if (!layout) {
       layout = (await ArLayout.findOne({ key: 'global' })) || new ArLayout({ key: 'global' }); // defaults only if truly nothing saved anywhere
@@ -413,20 +506,6 @@ router.get('/attributes', async (req, res) => {
   }
 });
 
-// GET /api/public/ar-components -- admin-defined extra AR Layout panel
-// elements (see ArComponentDefinition), active ones only. Used by both
-// editors (to know which extra draggable elements to render) and by
-// Profile Settings (to know which extra link inputs to render).
-router.get('/ar-components', async (req, res) => {
-  try {
-    const components = await ArComponentDefinition.find({ active: true }).sort({ order: 1, createdAt: 1 });
-    res.set('Cache-Control', 'no-store');
-    res.json(components);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // GET /api/public/qr/:clientId -- generates a QR code PNG on the fly, no
 // auth, no storage needed. Two kinds, chosen with ?type=:
 //   - type=profile (default) -- encodes the plain tap page URL
@@ -458,7 +537,15 @@ router.get('/qr/:clientId', async (req, res) => {
 
     const base = process.env.PUBLIC_BASE_URL || 'http://localhost:4000';
     const type = req.query.type === 'ar' ? 'ar' : 'profile';
-    const url = type === 'ar' ? `${base}/c/${client.clientId}?ar=1` : `${base}/c/${client.clientId}`;
+    // Opt-in only, and only meaningful when type=ar -- lets a caller
+    // (e.g. the mind-ar test pages' own composited target image) bake
+    // `&engine=mindar` into the QR it embeds, without changing what a
+    // real client's own `?type=ar` QR encodes by default. Only 'mindar'
+    // is accepted; anything else is ignored rather than passed through
+    // raw, so this can't be used to inject arbitrary query params into
+    // the encoded URL.
+    const engine = req.query.engine === 'mindar' ? '&engine=mindar' : '';
+    const url = type === 'ar' ? `${base}/c/${client.clientId}?ar=1${engine}` : `${base}/c/${client.clientId}`;
 
     const dark = hexColorParam(req.query.fg, '#000000');
     let light = hexColorParam(req.query.bg, '#ffffff');

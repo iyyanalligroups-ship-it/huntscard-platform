@@ -91,13 +91,10 @@ const ClientSchema = new mongoose.Schema(
     // keyed by AttributeDefinition.key. The fixed fields above stay exactly
     // as they are; this is purely for whatever fields an admin adds later
     // without needing a schema change here.
+    // Also where an AR-flagged attribute's own value lives (see
+    // AttributeDefinition.arComponent) -- e.g. a client's own Google Maps
+    // link for a "Map" AR component, same map, same key, no separate field.
     customAttributes: { type: Map, of: String, default: {} },
-    // Values for admin-defined custom AR Layout components (see
-    // ArComponentDefinition) -- keyed by that doc's `key`, e.g. a
-    // client's own Google Maps link for the "map" component. Same "one
-    // flexible Map, no schema change per new component" shape as
-    // customAttributes above.
-    arComponentValues: { type: Map, of: String, default: {} },
 
     // Set by admin at account-creation time, read-only for the client.
     // References a CardPlan.key (e.g. "basic", "pro", "elite", or any
@@ -184,6 +181,15 @@ const ClientSchema = new mongoose.Schema(
     // Simple counters -- increment these in the public profile / vcard
     // routes later if you want tap/scan analytics.
     tapCount: { type: Number, default: 0 },
+
+    // Client-controlled "pause" -- distinct from `blocked` above (admin-
+    // only, blocks login, explicitly leaves the public page working). ON
+    // by default; toggled OFF from Settings hides the public
+    // profile/vCard/AR experience/lead capture entirely, e.g. the
+    // physical card was lost or stolen. Never affects the owner's own
+    // authenticated dashboard access -- only the public-facing routes
+    // strangers hit.
+    cardActive: { type: Boolean, default: true },
   },
   { timestamps: true } // adds createdAt / updatedAt automatically
 );

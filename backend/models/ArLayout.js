@@ -18,10 +18,18 @@ const mongoose = require('mongoose');
 // 0-100 edges. Must match POSITION_MIN/MAX in both editors' clampPercent().
 const POSITION_MIN = -60;
 const POSITION_MAX = 160;
+// How far an element can float off the card's own surface, toward the
+// viewer -- 0 sits flat on the card (the only value most elements ever
+// use), 100 is roughly one card-height's worth of lift. Only the 3D
+// model and AR Video/Photo panel currently expose a control for this
+// (see ArLayout.jsx); every other element simply stays at the default.
+const HEIGHT_MIN = 0;
+const HEIGHT_MAX = 100;
 const elementPositionSchema = new mongoose.Schema(
   {
     x: { type: Number, min: POSITION_MIN, max: POSITION_MAX, default: 50 },
     y: { type: Number, min: POSITION_MIN, max: POSITION_MAX, default: 50 },
+    z: { type: Number, min: HEIGHT_MIN, max: HEIGHT_MAX, default: 0 },
   },
   { _id: false }
 );

@@ -12,6 +12,7 @@
     "@google/model-viewer": "^4.3.1",
     "js-aruco2": "^2.0.0",
     "jsqr": "^1.4.0",
+    "mind-ar": "^1.2.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-medium-image-zoom": "^5.4.8",

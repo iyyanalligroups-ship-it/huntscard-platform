@@ -13,9 +13,16 @@ const AdminSchema = new mongoose.Schema(
     // fulfillment pipeline. 'subadmin' has the same full access as
     // before (create clients, encode tool, everything) EXCEPT claiming,
     // assigning, or dispatching orders -- they can only complete work
-    // that's already been assigned to them. Deliberately scoped, not a
-    // full permissions rework.
-    role: { type: String, enum: ['admin', 'subadmin'], default: 'admin' },
+    // that's already been assigned to them.
+    // 'primeadmin' is a genuine singleton (never more than one at a
+    // time, see POST /api/admin/team/:id/promote-to-prime) -- alone
+    // controls the admin/employee roster, revenue visibility, the blank-
+    // card inventory, and the encode-tool installer upload. Can't be
+    // deleted by anyone, including itself (see DELETE /team/:id).
+    // 'employee' is scoped to ONLY the encode-tool routes (see
+    // requireEncodeAccess in middleware/auth.js) -- no web admin
+    // dashboard access at all.
+    role: { type: String, enum: ['admin', 'subadmin', 'employee', 'primeadmin'], default: 'admin' },
     // True for team-invited admins until they change their generated
     // temp password on first login -- same pattern as Client. The root
     // admin created via seed-admin.js sets a real password directly, so

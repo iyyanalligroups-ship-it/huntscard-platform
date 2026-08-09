@@ -64,28 +64,50 @@ export const api = {
   resetPassword: (token, newPassword) =>
     request('/api/auth/reset-password', { method: 'POST', body: { token, newPassword }, auth: false }),
   getProfile: () => request('/api/profile/me'),
+  // Deactivate/pause -- hides the public profile/vCard/AR experience from
+  // anyone who taps or scans the card (see Settings.jsx's "Card status").
+  pauseCard: () => request('/api/profile/pause-card', { method: 'POST' }),
+  unpauseCard: () => request('/api/profile/unpause-card', { method: 'POST' }),
+  // Individual physical cards (see models/Card.js) -- number/type/active
+  // only, never a password (that's admin-only).
+  getMyCards: () => request('/api/profile/cards'),
+  pauseMyCard: (cardNumber) => request(`/api/profile/cards/${cardNumber}/pause`, { method: 'POST' }),
+  unpauseMyCard: (cardNumber) => request(`/api/profile/cards/${cardNumber}/unpause`, { method: 'POST' }),
   updateProfile: (updates) => request('/api/profile/me', { method: 'PUT', body: updates }),
 
   listPlans: () => request('/api/public/plans', { auth: false }),
   // The public tap-page profile -- unauthenticated on purpose, this is
   // what a stranger tapping/scanning the physical card sees. See
   // pages/PublicProfile.jsx.
-  getPublicProfile: (clientId) => request(`/api/public/profile/${clientId}`, { auth: false }),
+  // cardNumber is optional -- present when the physical card's own URL
+  // included ?card=N (see models/Card.js), so this specific card can be
+  // individually paused; absent for cards encoded before that existed.
+  getPublicProfile: (clientId, cardNumber) =>
+    request(`/api/public/profile/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`, { auth: false }),
   // The client's saved AR element positions -- unauthenticated, feeds
   // the live camera AR view (pages/ArView.jsx) the same way
   // getMyArLayout feeds the dashboard editor.
-  getPublicArLayout: (clientId) => request(`/api/public/ar-layout/${clientId}`, { auth: false }),
+  getPublicArLayout: (clientId, cardNumber) =>
+    request(`/api/public/ar-layout/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`, { auth: false }),
   getPublicArIcons: () => request('/api/public/ar-icons', { auth: false }),
   // Admin-defined extra profile fields (see AttributeDefinition) -- used
   // by both Profile Settings (to know which extra inputs to render) and
   // the public profile page (to know which extra rows to render).
   getAttributeDefinitions: () => request('/api/public/attributes', { auth: false }),
-  // Admin-defined extra AR Layout panel elements (see
-  // ArComponentDefinition) -- e.g. "Map". Used by Profile Settings (to
-  // know which extra link inputs to render) and both AR Layout editors
-  // (to know which extra draggable elements to render).
-  getArComponentDefinitions: () => request('/api/public/ar-components', { auth: false }),
+  // The reverse direction of getPublicProfile's vCard download -- a
+  // visitor leaving their own info for the card owner (see
+  // PublicProfile.jsx's "Exchange Contact" flow).
+  submitLead: (clientId, payload, cardNumber) =>
+    request(`/api/public/leads/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`, { method: 'POST', body: payload, auth: false }),
   getCatalog: () => request('/api/public/catalog', { auth: false }),
+
+  // Dashboard notification bell + Web Push subscription -- see
+  // components/NotificationBell.jsx.
+  getNotifications: () => request('/api/profile/notifications'),
+  markNotificationRead: (id) => request(`/api/profile/notifications/${id}/read`, { method: 'POST' }),
+  getPushPublicKey: () => request('/api/profile/push/public-key'),
+  subscribePush: (subscription) => request('/api/profile/push/subscribe', { method: 'POST', body: subscription }),
+  unsubscribePush: (endpoint) => request('/api/profile/push/unsubscribe', { method: 'POST', body: { endpoint } }),
   submitRequest: (payload) => request('/api/profile/requests', { method: 'POST', body: payload }),
   listMyRequests: () => request('/api/profile/requests'),
 
@@ -251,6 +273,7 @@ export const api = {
   getReceivedAppointments: () => request('/api/profile/appointments/received'),
   getSentAppointments: () => request('/api/profile/appointments/sent'),
   respondToAppointment: (id, status) => request(`/api/profile/appointments/${id}`, { method: 'PATCH', body: { status } }),
+  deleteAppointment: (id) => request(`/api/profile/appointments/${id}`, { method: 'DELETE' }),
   // Free/busy check before proposing a time -- { matched, busy: [isoString] }.
   // Only ever times, never who-with/notes, same "just enough to avoid a
   // conflict, nothing more" privacy level a calendar's free/busy view uses.

@@ -636,7 +636,25 @@ export default function Contacts() {
                     )}
                   </div>
                   <div className="contact-row-info">
-                    <div className="contact-row-name">{c.name}</div>
+                    <div className="contact-row-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {c.name}
+                      {c.source === 'tap' && (
+                        <span
+                          title="This person left their info by tapping/scanning your card"
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: 'var(--holo-cyan)',
+                            border: '1px solid var(--holo-cyan)',
+                            borderRadius: 999,
+                            padding: '1px 7px',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          From card tap
+                        </span>
+                      )}
+                    </div>
                     <div className="contact-row-meta">
                       {c.phone}
                       {c.email ? ` · ${c.email}` : ''}

@@ -41,6 +41,7 @@
     <button class="tab-btn" data-tab="protectTestCard">Password tester</button>
     <button class="tab-btn" data-tab="recoverCard">Recover a card</button>
     <button class="tab-btn" data-tab="pickerView">Create a card</button>
+    <button class="tab-btn" data-tab="analyzeCard">Card type analyser</button>
   </nav>
 
   <main class="wrap">
@@ -171,6 +172,34 @@
         <button id="recoverCancelBtn" class="link-btn hidden">Cancel</button>
       </div>
       <div id="recoverResult" class="read-result hidden"></div>
+
+      <!-- 2d. Blank a card that was NEVER password-locked -- no password
+           to authenticate with, so this skips that step entirely and
+           just wipes + confirms the card is unprotected. If the card
+           actually turns out to be protected, the wipe simply fails
+           safely (rejected write) -- use "Unlock & wipe" above instead. -->
+      <div class="subsection">
+      <h1 style="margin-top:0;">Blank a card with no password</h1>
+      <p class="muted">
+        For a card that is NOT password-protected (never locked, or a lock attempt failed before it
+        took effect) but still has old data on it. Tap the card below -- this wipes its data back to
+        blank with no password needed. Afterward it behaves like a brand-new card and can go through
+        Write or Create a card again from scratch.
+      </p>
+      <p class="error" style="margin-top:8px;">
+        This is destructive and can't be undone. Only use this on a card you've confirmed (e.g. via
+        Read mode) is genuinely unprotected -- if it's actually password-locked, use "Unlock &amp;
+        wipe this card" above instead.
+      </p>
+      <div class="id-search-row">
+        <button id="blankBtn" class="btn-secondary" style="margin-top:0; width:auto;">Wipe this card</button>
+      </div>
+      <div id="blankStatus" class="reader-banner hidden">
+        <span id="blankStatusText"></span>
+        <button id="blankCancelBtn" class="link-btn hidden">Cancel</button>
+      </div>
+      <div id="blankResult" class="read-result hidden"></div>
+      </div>
     </section>
 
 
@@ -185,10 +214,6 @@
             <button id="giftLookupBtn" class="btn-secondary" style="margin-top:0; width:auto;">Encode this ID</button>
           </div>
           <p id="giftError" class="error hidden"></p>
-          <div id="giftReplaceConfirm" class="hidden" style="margin-top:12px;">
-            <p class="muted">This client already has a card encoded. Writing a new one won't disable the old physical card -- it'll keep working. Only do this if you mean to make a second/replacement card.</p>
-            <button id="giftReplaceBtn" class="btn-secondary" style="margin-top:8px;">Yes, write a replacement card</button>
-          </div>
         </div>
 
         <div class="subsection picker-col-right">
@@ -200,6 +225,30 @@
           <p id="pendingEmpty" class="muted hidden">No paid, unencoded clients found. Complete a purchase in the Shop, then refresh.</p>
         </div>
       </div>
+    </section>
+
+    <!-- Card type analyser -- read-only chip identification. Exists
+         because some physical cards handed out as "NTAG216" turned out
+         to actually be NTAG213, and this tool's password lock only
+         supports NTAG216 -- tapping a fresh batch of cards here first
+         catches a wrong chip type immediately, instead of discovering it
+         via a confusing failure partway through a real write/lock. -->
+    <section id="analyzeCard" class="card hidden">
+      <h1>Card type analyser</h1>
+      <p class="muted">
+        Tap any card to see its real chip type before writing to it. This tool's password lock only
+        works on NTAG216 cards (231 pages) -- some cards sold/labeled as NTAG216 have turned out to
+        actually be NTAG213 (45 pages), which will write and verify fine but fail when it's time to
+        set the password lock. Check a new batch of blank cards here first to catch that up front.
+      </p>
+      <div class="id-search-row">
+        <button id="analyzeBtn" class="btn-secondary" style="margin-top:0; width:auto;">Identify this card</button>
+      </div>
+      <div id="analyzeStatus" class="reader-banner hidden">
+        <span id="analyzeStatusText"></span>
+        <button id="analyzeCancelBtn" class="link-btn hidden">Cancel</button>
+      </div>
+      <div id="analyzeResult" class="read-result hidden"></div>
     </section>
 
 
@@ -217,16 +266,17 @@
       </ol>
 
       <div id="successPanel" class="success-panel hidden">
-        <p>✅ Card encoded and database updated.</p>
-        <p class="chip-password-label">Chip password (save this now -- shown once):</p>
+        <p>✅ Card <span id="successCardNumber"></span> encoded and database updated.</p>
+        <p class="chip-password-label">Chip password:</p>
         <div class="chip-password-row">
           <div class="chip-password" id="chipPassword"></div>
           <button id="copyPasswordBtn" class="link-btn">Copy</button>
         </div>
+        <p class="muted">Also saved encrypted in the database -- an admin can look it up later from this card's page if needed.</p>
         <p class="muted">Next: tap this card on a real Android phone AND an iPhone 7+ to confirm the profile page opens before shipping it.</p>
         <label class="password-confirm-row">
           <input type="checkbox" id="passwordSavedCheck" />
-          I've saved this password somewhere safe -- it will never be shown again
+          I've noted this password
         </label>
         <button id="readAfterWriteBtn" class="btn-secondary" disabled>Read it back now (software check)</button>
         <button id="doneBtn" class="btn-primary" disabled>Encode another card</button>

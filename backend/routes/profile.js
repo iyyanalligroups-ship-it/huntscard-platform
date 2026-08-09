@@ -10,8 +10,8 @@ const { requireAuth } = require('../middleware/auth');
 const Client = require('../models/Client');
 const CardRequest = require('../models/CardRequest');
 const CardPlan = require('../models/CardPlan');
+const Card = require('../models/Card');
 const AttributeDefinition = require('../models/AttributeDefinition');
-const ArComponentDefinition = require('../models/ArComponentDefinition');
 const { getChargeAmount } = require('../utils/pricing');
 
 const router = express.Router();
@@ -175,7 +175,6 @@ async function withPlanFlags(client) {
   clientObj.arEnabled = !!plan?.arEnabled;
   clientObj.zingEnabled = !!plan?.zingEnabled;
   clientObj.customAttributes = Object.fromEntries(client.customAttributes || []);
-  clientObj.arComponentValues = Object.fromEntries(client.arComponentValues || []);
   return clientObj;
 }
 
@@ -472,19 +471,6 @@ router.put('/me', requireAuth, async (req, res) => {
       updates.customAttributes = merged;
     }
 
-    // Same merge-onto-existing-map pattern as customAttributes above, for
-    // admin-defined custom AR Layout components (see ArComponentDefinition)
-    // -- e.g. a client's own Google Maps link for the "map" component.
-    if (req.body.arComponentValues && typeof req.body.arComponentValues === 'object') {
-      const activeKeys = new Set((await ArComponentDefinition.find({ active: true }).select('key')).map((c) => c.key));
-      const current = await Client.findOne({ clientId: req.user.clientId }).select('arComponentValues');
-      const merged = Object.fromEntries(current?.arComponentValues || []);
-      for (const [key, value] of Object.entries(req.body.arComponentValues)) {
-        if (activeKeys.has(key)) merged[key] = value;
-      }
-      updates.arComponentValues = merged;
-    }
-
     const client = await Client.findOneAndUpdate(
       { clientId: req.user.clientId },
       { $set: updates },
@@ -502,6 +488,85 @@ router.put('/me', requireAuth, async (req, res) => {
       return res.status(400).json({ error: err.message });
     }
     res.status(500).json({ error: 'Update failed' });
+  }
+});
+
+// -----------------------------------------------------------------------
+// Deactivate/pause card -- hides the public profile/vCard/AR experience
+// from anyone who taps or scans it (see routes/public.js's cardActive
+// checks), e.g. because the physical card was lost or stolen. Two
+// dedicated routes rather than folding into PUT /me's EDITABLE_FIELDS --
+// a security-sensitive on/off switch is safer as an explicit action than
+// a field a client could flip by sending the wrong boolean.
+// -----------------------------------------------------------------------
+
+router.post('/pause-card', requireAuth, async (req, res) => {
+  try {
+    await Client.updateOne({ clientId: req.user.clientId }, { $set: { cardActive: false } });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[pause-card POST]', err);
+    res.status(500).json({ error: 'Failed to pause card' });
+  }
+});
+
+router.post('/unpause-card', requireAuth, async (req, res) => {
+  try {
+    await Client.updateOne({ clientId: req.user.clientId }, { $set: { cardActive: true } });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[unpause-card POST]', err);
+    res.status(500).json({ error: 'Failed to reactivate card' });
+  }
+});
+
+// -----------------------------------------------------------------------
+// Per-card records (see models/Card.js) -- the whole-profile pause above
+// is the overall kill switch; these let a client see/deactivate their
+// OWN individual physical cards. Never exposes the password (that's
+// admin-only, see routes/admin.js's dedicated reveal route) -- these
+// routes don't even select passwordEncrypted, so it can't leak here.
+// -----------------------------------------------------------------------
+
+router.get('/cards', requireAuth, async (req, res) => {
+  try {
+    const cards = await Card.find({ clientId: req.user.clientId })
+      .select('cardNumber cardType active encoded')
+      .sort({ cardNumber: 1 });
+    res.json(cards);
+  } catch (err) {
+    console.error('[cards GET]', err);
+    res.status(500).json({ error: 'Failed to load cards' });
+  }
+});
+
+router.post('/cards/:cardNumber/pause', requireAuth, async (req, res) => {
+  try {
+    const card = await Card.findOneAndUpdate(
+      { clientId: req.user.clientId, cardNumber: Number(req.params.cardNumber) },
+      { $set: { active: false } },
+      { new: true }
+    ).select('cardNumber cardType active encoded');
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+    res.json(card);
+  } catch (err) {
+    console.error('[card pause POST]', err);
+    res.status(500).json({ error: 'Failed to deactivate card' });
+  }
+});
+
+router.post('/cards/:cardNumber/unpause', requireAuth, async (req, res) => {
+  try {
+    const card = await Card.findOneAndUpdate(
+      { clientId: req.user.clientId, cardNumber: Number(req.params.cardNumber) },
+      { $set: { active: true } },
+      { new: true }
+    ).select('cardNumber cardType active encoded');
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+    res.json(card);
+  } catch (err) {
+    console.error('[card unpause POST]', err);
+    res.status(500).json({ error: 'Failed to reactivate card' });
   }
 });
 
@@ -936,8 +1001,8 @@ router.put('/ar-layout', requireAuth, async (req, res) => {
     if (videoRotationZ !== undefined) updates.videoRotationZ = videoRotationZ;
     if (videoScaleX !== undefined) updates.videoScaleX = videoScaleX;
     if (videoScaleY !== undefined) updates.videoScaleY = videoScaleY;
-    // Custom AR component positions (see ArComponentDefinition) -- a
-    // whole-map replace, same as every other field here.
+    // Positions for AR-flagged attributes (see AttributeDefinition.arComponent)
+    // -- a whole-map replace, same as every other field here.
     if (customElements && typeof customElements === 'object') updates.customElements = customElements;
 
     const layout = await ArLayout.findOneAndUpdate(

@@ -22,7 +22,7 @@ const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 const { NFC } = require('nfc-pcsc');
-const { writeNdef, verifyWrite, lockCard, hashPassword, readNdefUri, checkLockStatus, attemptPasswordAuth, attemptRewriteTest, unlockAndBlankCard } = require('./lib');
+const { writeNdef, verifyWrite, lockCard, readNdefUri, checkLockStatus, attemptPasswordAuth, attemptRewriteTest, unlockAndBlankCard, blankUnprotectedCard, identifyCard } = require('./lib');
 const { readConfig, writeConfig, clearSavedSession } = require('./config-store');
 
 const PORT = process.env.GUI_PORT || 5175;
@@ -55,6 +55,8 @@ let readModeArmed = false; // READ mode -- mutually exclusive with armedJob
 let protectTestArmed = null; // { pwdHex } -- PASSWORD TEST mode -- also mutually exclusive
 let rewriteTestArmed = null; // { testText, pwdHex } -- REWRITE TEST mode -- also mutually exclusive
 let recoverArmed = null; // { pwdHex } -- RECOVER mode (unlock + wipe a locked card) -- also mutually exclusive
+let blankArmed = false; // BLANK mode (wipe a card that was never password-locked) -- also mutually exclusive
+let analyzeArmed = false; // ANALYZE mode (identify a card's real chip type) -- also mutually exclusive
 
 function requireSession(req, res, next) {
   if (!session) return res.status(401).json({ error: 'Not logged in' });
@@ -211,21 +213,41 @@ app.get('/api/pending', requireSession, async (req, res) => {
 // Shared by both /api/arm (paid clients only) and /api/arm-by-id (any
 // client, for gifting a card without payment) -- the actual arming logic
 // is identical either way, only how the client was found differs.
-function doArm(client) {
-  const url = `${PUBLIC_BASE_URL}/c/${client.clientId}`;
+//
+// Multi-card support: a client can now have several independently-tracked
+// physical cards (see backend's Card model), so arming no longer requires
+// "not encoded yet" -- it always reserves a NEW card slot from the
+// backend first (POST /clients/:clientId/cards), which hands back a
+// cardNumber that gets written straight into the chip's own URL
+// (?card=N) so that specific card can later be individually deactivated.
+async function doArm(client) {
+  const cardRes = await fetch(`${BACKEND_URL}/api/admin/clients/${client.clientId}/cards`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+    body: JSON.stringify({ cardType: client.cardType }),
+  });
+  const cardBody = await cardRes.json().catch(() => ({}));
+  if (!cardRes.ok) throw new Error(cardBody.error || 'Could not reserve a card slot');
+  const { cardId, cardNumber } = cardBody;
+
+  const url = `${PUBLIC_BASE_URL}/c/${client.clientId}?card=${cardNumber}`;
   readModeArmed = false; // write and read are mutually exclusive
   protectTestArmed = null;
   rewriteTestArmed = null;
   recoverArmed = null;
+  blankArmed = false;
+  analyzeArmed = false;
   armedJob = {
     clientId: client.clientId,
     fullName: client.fullName,
     url,
+    cardId,
+    cardNumber,
     pwdBytes: crypto.randomBytes(4),
     packBytes: crypto.randomBytes(2),
   };
-  broadcast('armed', { fullName: client.fullName, clientId: client.clientId, url });
-  return { ok: true, url };
+  broadcast('armed', { fullName: client.fullName, clientId: client.clientId, url, cardNumber });
+  return { ok: true, url, cardNumber };
 }
 
 // Arm the tool to write the next card that's placed on the reader for
@@ -240,44 +262,18 @@ app.post('/api/arm', requireSession, async (req, res) => {
       headers: { Authorization: `Bearer ${session.token}` },
     });
     const client = await r.json().catch(() => null);
-    if (!r.ok || !client || !client.paid || client.chipEncoded) {
-      return res.status(404).json({ error: 'Client not found or already encoded' });
+    if (!r.ok || !client || !client.paid) {
+      return res.status(404).json({ error: 'Client not found, or has not paid' });
     }
-    res.json(doArm(client));
+    res.json(await doArm(client));
   } catch (err) {
     res.status(502).json({ error: `Could not reach backend: ${err.message}` });
   }
 });
 
-// Same as /api/arm, but deliberately does NOT require paid:true --
-// for gifting a card to someone (family, close contacts) without them
-// going through checkout. Still refuses an already-encoded card, since
-// this tool has no way to unlock and rewrite a locked chip.
-// Explicit, deliberate action: allows writing a SECOND/REPLACEMENT
-// physical card for a client who already has one encoded (lost original,
-// wants a backup, etc.). This does NOT affect the old physical card --
-// it stays working with its own password. It only clears the database
-// flag so this tool will accept a new write for this client again.
-app.post('/api/allow-new-card', requireSession, async (req, res) => {
-  const { clientId } = req.body || {};
-  if (!clientId) return res.status(400).json({ error: 'clientId required' });
-  try {
-    const r = await fetch(`${BACKEND_URL}/api/admin/clients/${clientId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.token}`,
-      },
-      body: JSON.stringify({ chipEncoded: false }),
-    });
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok) return res.status(r.status).json({ error: body.error || 'Could not reset' });
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(502).json({ error: `Could not reach backend: ${err.message}` });
-  }
-});
-
+// Same as /api/arm, but deliberately does NOT require paid:true -- for
+// gifting a card to someone (family, close contacts) without them going
+// through checkout.
 app.post('/api/arm-by-id', requireSession, async (req, res) => {
   const { clientId } = req.body || {};
   if (!clientId) return res.status(400).json({ error: 'clientId required' });
@@ -287,10 +283,10 @@ app.post('/api/arm-by-id', requireSession, async (req, res) => {
       headers: { Authorization: `Bearer ${session.token}` },
     });
     const client = await r.json().catch(() => null);
-    if (!r.ok || !client || client.chipEncoded) {
-      return res.status(404).json({ error: `No client "${clientId}" found, or it's already encoded` });
+    if (!r.ok || !client) {
+      return res.status(404).json({ error: `No client "${clientId}" found` });
     }
-    res.json(doArm(client));
+    res.json(await doArm(client));
   } catch (err) {
     res.status(502).json({ error: `Could not reach backend: ${err.message}` });
   }
@@ -302,6 +298,8 @@ app.post('/api/disarm', requireSession, (req, res) => {
   protectTestArmed = null;
   rewriteTestArmed = null;
   recoverArmed = null;
+  blankArmed = false;
+  analyzeArmed = false;
   broadcast('disarmed', {});
   res.json({ ok: true });
 });
@@ -324,8 +322,45 @@ app.post('/api/arm-recover', requireSession, (req, res) => {
   readModeArmed = false;
   protectTestArmed = null;
   rewriteTestArmed = null;
+  blankArmed = false;
+  analyzeArmed = false;
   recoverArmed = { pwdHex: password.toUpperCase() };
   broadcast('recover-armed', {});
+  res.json({ ok: true });
+});
+
+// BLANK mode -- wipes a card that was NEVER password-locked (no password
+// to unlock with, unlike RECOVER above). No authentication step at all:
+// if the card placed on the reader actually IS protected, the wipe
+// simply fails/throws (a protected page rejects an unauthenticated
+// write) rather than corrupting anything -- that failure is the signal
+// to use "Unlock & wipe" with the password instead.
+app.post('/api/arm-blank', requireSession, (req, res) => {
+  armedJob = null;
+  readModeArmed = false;
+  protectTestArmed = null;
+  rewriteTestArmed = null;
+  recoverArmed = null;
+  analyzeArmed = false;
+  blankArmed = true;
+  broadcast('blank-armed', {});
+  res.json({ ok: true });
+});
+
+// ANALYZE mode -- identifies the real chip type (NTAG213/215/216) of
+// whatever card gets tapped next, read-only. Exists because some
+// physical cards handed out as "NTAG216" turned out to be NTAG213 --
+// this lets that be caught up front, before writing anything, instead
+// of discovered via a confusing failure deep into a lock attempt.
+app.post('/api/arm-analyze', requireSession, (req, res) => {
+  armedJob = null;
+  readModeArmed = false;
+  protectTestArmed = null;
+  rewriteTestArmed = null;
+  recoverArmed = null;
+  blankArmed = false;
+  analyzeArmed = true;
+  broadcast('analyze-armed', {});
   res.json({ ok: true });
 });
 
@@ -344,6 +379,8 @@ app.post('/api/arm-rewrite-test', requireSession, (req, res) => {
   readModeArmed = false;
   protectTestArmed = null;
   recoverArmed = null;
+  blankArmed = false;
+  analyzeArmed = false;
   rewriteTestArmed = { testText: testText || 'TEST', pwdHex: password ? password.toUpperCase() : null };
   broadcast('rewrite-test-armed', {});
   res.json({ ok: true });
@@ -364,6 +401,8 @@ app.post('/api/arm-protect-test', requireSession, (req, res) => {
   readModeArmed = false;
   rewriteTestArmed = null;
   recoverArmed = null;
+  blankArmed = false;
+  analyzeArmed = false;
   protectTestArmed = { pwdHex: password.toUpperCase() };
   broadcast('protect-test-armed', {});
   res.json({ ok: true });
@@ -379,6 +418,8 @@ app.post('/api/arm-read', requireSession, (req, res) => {
   protectTestArmed = null;
   rewriteTestArmed = null;
   recoverArmed = null;
+  blankArmed = false;
+  analyzeArmed = false;
   readModeArmed = true;
   broadcast('read-armed', {});
   res.json({ ok: true });
@@ -443,7 +484,19 @@ nfc.on('reader', (reader) => {
     broadcast('reader-disconnected', { name: reader.reader.name });
   });
 
-  reader.on('card', async () => {
+  reader.on('card', async (cardInfo) => {
+    if (analyzeArmed) {
+      analyzeArmed = false; // one analysis per arm
+      try {
+        broadcast('reading', {});
+        const result = await identifyCard(reader, cardInfo && cardInfo.uid);
+        broadcast('analyze-result', result);
+      } catch (err) {
+        broadcast('analyze-error', { message: err.message });
+      }
+      return;
+    }
+
     if (rewriteTestArmed) {
       const { testText, pwdHex } = rewriteTestArmed;
       rewriteTestArmed = null; // one test per arm
@@ -479,6 +532,18 @@ nfc.on('reader', (reader) => {
         broadcast('recover-success', {});
       } catch (err) {
         broadcast('recover-error', { message: err.message });
+      }
+      return;
+    }
+
+    if (blankArmed) {
+      blankArmed = false; // one wipe per arm
+      try {
+        broadcast('reading', {});
+        await blankUnprotectedCard(reader);
+        broadcast('blank-success', {});
+      } catch (err) {
+        broadcast('blank-error', { message: err.message });
       }
       return;
     }
@@ -526,14 +591,18 @@ nfc.on('reader', (reader) => {
       broadcast('locking', {});
       await lockCard(reader, job.pwdBytes, job.packBytes);
 
-      const chipPasswordHash = hashPassword(job.pwdBytes);
-      const markRes = await fetch(`${BACKEND_URL}/api/admin/encode/mark-encoded/${job.clientId}`, {
+      // The raw password (not a hash) goes to the backend now -- it gets
+      // encrypted at rest there (see backend/utils/crypto.js) so an admin
+      // can look it up later, unlike the old one-way-hashed model where it
+      // was gone for good the moment this line ran.
+      const chipPasswordHex = job.pwdBytes.toString('hex').toUpperCase();
+      const markRes = await fetch(`${BACKEND_URL}/api/admin/cards/${job.cardId}/mark-encoded`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.token}`,
         },
-        body: JSON.stringify({ chipPasswordHash }),
+        body: JSON.stringify({ chipPassword: chipPasswordHex }),
       });
       if (!markRes.ok) {
         const markBody = await markRes.json().catch(() => ({}));
@@ -545,7 +614,8 @@ nfc.on('reader', (reader) => {
       broadcast('success', {
         fullName: job.fullName,
         clientId: job.clientId,
-        chipPassword: job.pwdBytes.toString('hex').toUpperCase(),
+        cardNumber: job.cardNumber,
+        chipPassword: chipPasswordHex,
       });
     } catch (err) {
       broadcast('error', { fullName: job.fullName, message: err.message });

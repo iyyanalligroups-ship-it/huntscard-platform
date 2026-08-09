@@ -20,6 +20,13 @@ const ContactSchema = new mongoose.Schema(
     address: { type: String, trim: true },
     notes: { type: String, trim: true },
     photoUrl: { type: String },
+    // 'tap' -- the visitor left their own info via the public profile
+    // page's "Exchange Contact" flow (see routes/public.js's POST
+    // /leads/:clientId), a real lead, not something the owner typed in
+    // themselves. Distinguishes those from every other row here, which
+    // are all 'manual' (Contact Picker import, Excel upload, or the
+    // Add/Edit form).
+    source: { type: String, enum: ['manual', 'tap'], default: 'manual' },
   },
   { timestamps: true }
 );

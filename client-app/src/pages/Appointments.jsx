@@ -25,6 +25,35 @@ function startOfWeek(date) {
   return d;
 }
 
+const QUICK_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'today', label: 'Today' },
+  { key: 'yesterday', label: 'Yesterday' },
+  { key: 'week', label: 'This week' },
+  { key: 'month', label: 'This month' },
+];
+
+function matchesQuickFilter(date, filter) {
+  if (filter === 'all') return true;
+  const now = new Date();
+  if (filter === 'today') return dateKey(date) === dateKey(now);
+  if (filter === 'yesterday') {
+    const y = new Date(now);
+    y.setDate(y.getDate() - 1);
+    return dateKey(date) === dateKey(y);
+  }
+  if (filter === 'week') {
+    const ws = startOfWeek(now);
+    const we = new Date(ws);
+    we.setDate(we.getDate() + 7);
+    return date >= ws && date < we;
+  }
+  if (filter === 'month') {
+    return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+  }
+  return true;
+}
+
 function formatTimeLabel(minutesFromMidnight) {
   const h24 = Math.floor(minutesFromMidnight / 60);
   const m = minutesFromMidnight % 60;
@@ -36,6 +65,111 @@ function formatTimeLabel(minutesFromMidnight) {
 const INTERVAL_OPTIONS = [15, 30, 60];
 const DEFAULT_WINDOW_START_HOUR = 9;
 const DEFAULT_WINDOW_END_HOUR = 18;
+const SLOT_ROW_HEIGHT = 32; // px -- fixed so the current-time indicator's position can be computed precisely
+
+// Google-Calendar-style small month grid, browsed independently of the
+// main week view below (its own prev/next month arrows don't move the
+// main grid) -- clicking an actual date jumps both the main week view and
+// the day filter to it, same as clicking a day header in the big grid
+// already does.
+function MiniMonthCalendar({ shownMonth, onShownMonthChange, selectedDay, onSelectDate, appointmentDays }) {
+  const year = shownMonth.getFullYear();
+  const month = shownMonth.getMonth();
+  const gridStart = new Date(year, month, 1);
+  gridStart.setDate(gridStart.getDate() - gridStart.getDay()); // back to Sunday
+  const todayKey = dateKey(new Date());
+
+  const weeks = [];
+  const cursor = new Date(gridStart);
+  for (let w = 0; w < 6; w++) {
+    const row = [];
+    for (let d = 0; d < 7; d++) {
+      row.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    weeks.push(row);
+  }
+
+  return (
+    <div className="card" style={{ padding: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <strong style={{ fontSize: 13 }}>{shownMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</strong>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button
+            type="button"
+            className="secondary"
+            style={{ width: 24, height: 24, padding: 0, fontSize: 11 }}
+            onClick={() => onShownMonthChange(new Date(year, month - 1, 1))}
+            aria-label="Previous month"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            style={{ width: 24, height: 24, padding: 0, fontSize: 11 }}
+            onClick={() => onShownMonthChange(new Date(year, month + 1, 1))}
+            aria-label="Next month"
+          >
+            ›
+          </button>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, fontSize: 10, color: 'var(--text-dim)', textAlign: 'center', marginBottom: 4 }}>
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+          <div key={i}>{d}</div>
+        ))}
+      </div>
+      {weeks.map((row, wi) => (
+        <div key={wi} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 2 }}>
+          {row.map((d) => {
+            const key = dateKey(d);
+            const inMonth = d.getMonth() === month;
+            const isToday = key === todayKey;
+            const isSelected = key === selectedDay;
+            const hasAppt = appointmentDays.has(key);
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => onSelectDate(d)}
+                style={{
+                  position: 'relative',
+                  aspectRatio: '1 / 1',
+                  border: 'none',
+                  borderRadius: '50%',
+                  background: isSelected ? 'var(--holo-gradient)' : 'transparent',
+                  color: isSelected ? '#06120f' : 'var(--text)',
+                  opacity: inMonth ? 1 : 0.35,
+                  fontSize: 11,
+                  fontWeight: isToday ? 800 : 500,
+                  outline: isToday && !isSelected ? '1px solid var(--holo-cyan)' : 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {d.getDate()}
+                {hasAppt && !isSelected && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      bottom: 2,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: 4,
+                      height: 4,
+                      borderRadius: '50%',
+                      background: 'var(--holo-cyan)',
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // A week-view time grid -- time slots down the side, days across the
 // top, each booked slot shown as a colored block -- rather than the
@@ -44,7 +178,7 @@ const DEFAULT_WINDOW_END_HOUR = 18;
 // the time window auto-expands beyond the default 9-6 business hours if
 // an actual appointment in the visible week falls outside it, so nothing
 // this week is ever silently off-grid.
-function WeekScheduleGrid({ weekStart, onWeekChange, appointments, intervalMinutes, onIntervalChange, selectedDay, onSelectDay, onSelectAppointment }) {
+function WeekScheduleGrid({ weekStart, onWeekChange, onToday, appointments, intervalMinutes, onIntervalChange, selectedDay, onSelectDay, onSelectAppointment }) {
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
     d.setDate(d.getDate() + i);
@@ -79,10 +213,23 @@ function WeekScheduleGrid({ weekStart, onWeekChange, appointments, intervalMinut
   const slots = [];
   for (let m = windowStart; m < windowEnd; m += intervalMinutes) slots.push(m);
 
+  // Current-time indicator -- only drawn when today is actually in the
+  // visible week and falls within the (possibly auto-expanded) time
+  // window, positioned using the same fixed SLOT_ROW_HEIGHT every row
+  // above/below it uses, so it lines up exactly regardless of how many
+  // slots are above it.
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const showNowLine = weekKeys.has(todayKey) && nowMinutes >= windowStart && nowMinutes < windowEnd;
+  const nowLineTop = ((nowMinutes - windowStart) / intervalMinutes) * SLOT_ROW_HEIGHT;
+
   return (
     <div className="card" style={{ marginBottom: 20, overflowX: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button type="button" className="secondary" style={{ width: 'auto', padding: '6px 14px', fontSize: 12, fontWeight: 700 }} onClick={onToday}>
+            Today
+          </button>
           <button
             type="button"
             className="secondary"
@@ -106,16 +253,39 @@ function WeekScheduleGrid({ weekStart, onWeekChange, appointments, intervalMinut
             ›
           </button>
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dim)', margin: 0 }}>
-          Interval
-          <select value={intervalMinutes} onChange={(e) => onIntervalChange(Number(e.target.value))} style={{ width: 'auto', padding: '4px 8px' }}>
-            {INTERVAL_OPTIONS.map((m) => (
-              <option key={m} value={m}>
-                {m} min
-              </option>
-            ))}
-          </select>
-        </label>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            padding: 3,
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid var(--panel-border)',
+            borderRadius: 999,
+          }}
+        >
+          {INTERVAL_OPTIONS.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => onIntervalChange(m)}
+              style={{
+                width: 'auto',
+                padding: '5px 12px',
+                fontSize: 12,
+                fontWeight: 700,
+                border: 'none',
+                borderRadius: 999,
+                cursor: 'pointer',
+                background: intervalMinutes === m ? 'var(--holo-gradient)' : 'transparent',
+                color: intervalMinutes === m ? '#06120f' : 'var(--text-dim)',
+                transition: 'background 120ms, color 120ms',
+              }}
+            >
+              {m}m
+            </button>
+          ))}
+        </div>
       </div>
 
       <div style={{ minWidth: 640 }}>
@@ -150,18 +320,34 @@ function WeekScheduleGrid({ weekStart, onWeekChange, appointments, intervalMinut
           })}
         </div>
 
-        <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+        <div style={{ maxHeight: 420, overflowY: 'auto', position: 'relative' }}>
+          {showNowLine && (
+            <div
+              style={{
+                position: 'absolute',
+                top: nowLineTop,
+                left: 64,
+                right: 0,
+                height: 0,
+                borderTop: '2px solid #ea4335',
+                zIndex: 6,
+                pointerEvents: 'none',
+              }}
+            >
+              <span style={{ position: 'absolute', left: -5, top: -4, width: 8, height: 8, borderRadius: '50%', background: '#ea4335' }} />
+            </div>
+          )}
           {slots.map((slotStart) => (
             <div
               key={slotStart}
-              style={{ display: 'grid', gridTemplateColumns: '64px repeat(7, 1fr)', gap: 1, borderTop: '1px solid var(--panel-border)' }}
+              style={{ display: 'grid', gridTemplateColumns: '64px repeat(7, 1fr)', gap: 1, height: SLOT_ROW_HEIGHT, borderTop: '1px solid var(--panel-border)' }}
             >
               <div style={{ fontSize: 10, color: 'var(--text-dim)', padding: '6px 4px', whiteSpace: 'nowrap' }}>{formatTimeLabel(slotStart)}</div>
               {days.map((d) => {
                 const key = dateKey(d);
                 const cellItems = byDaySlot.get(`${key}|${slotStart}`) || [];
                 return (
-                  <div key={key} style={{ minHeight: 32, padding: 2 }}>
+                  <div key={key} style={{ height: SLOT_ROW_HEIGHT, padding: 2, overflow: 'hidden' }}>
                     {cellItems.map((a) => (
                       <button
                         type="button"
@@ -213,9 +399,41 @@ export default function Appointments() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [respondingId, setRespondingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [quickFilter, setQuickFilter] = useState('all'); // 'all' | 'today' | 'yesterday' | 'week' | 'month'
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [intervalMinutes, setIntervalMinutes] = useState(30);
   const [selectedDay, setSelectedDay] = useState(null); // YYYY-MM-DD or null
+  // The mini calendar's own browsed month -- deliberately separate from
+  // weekStart, same as real Google Calendar: paging the mini calendar's
+  // month arrows doesn't move the main week view until an actual date is
+  // clicked.
+  const [miniCalMonth, setMiniCalMonth] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d;
+  });
+
+  function handleToday() {
+    const today = new Date();
+    setWeekStart(startOfWeek(today));
+    setSelectedDay(null);
+    const firstOfMonth = new Date(today);
+    firstOfMonth.setDate(1);
+    setMiniCalMonth(firstOfMonth);
+  }
+
+  function handleSelectMiniCalDate(date) {
+    setWeekStart(startOfWeek(date));
+    setSelectedDay(dateKey(date));
+    setQuickFilter('all');
+    setPage(1);
+    const firstOfMonth = new Date(date);
+    firstOfMonth.setDate(1);
+    setMiniCalMonth(firstOfMonth);
+  }
 
   // Profile preview popup -- opened by clicking a name, only when that
   // side of the request actually has a real Huntstag account attached
@@ -264,6 +482,20 @@ export default function Appointments() {
     }
   }
 
+  async function handleDelete(id) {
+    if (!window.confirm('Delete this appointment request? This removes it for both sides and can\'t be undone.')) return;
+    setDeletingId(id);
+    setError('');
+    try {
+      await api.deleteAppointment(id);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   // Combined for the grid -- "what's on my plate" spans both directions,
   // not scoped to whichever tab is active below. Tagged with __dir so a
   // clicked block knows whether fromClientId or toClientId is the real
@@ -285,9 +517,43 @@ export default function Appointments() {
     }
   }
 
+  // Which days (across both directions) have at least one appointment --
+  // feeds the small dot under a date in the mini calendar.
+  const appointmentDays = useMemo(
+    () => new Set(combinedForGrid.filter((a) => a.proposedAt).map((a) => dateKey(new Date(a.proposedAt)))),
+    [combinedForGrid]
+  );
+
   const pendingCount = received.filter((r) => r.status === 'pending').length;
   const baseList = tab === 'received' ? received : sent;
-  const list = selectedDay ? baseList.filter((r) => r.proposedAt && dateKey(new Date(r.proposedAt)) === selectedDay) : baseList;
+  // A specific calendar-date click and a quick filter both narrow the
+  // same list -- kept mutually exclusive (picking one clears the other,
+  // see handleSelectDayFilter/handleQuickFilter below) rather than
+  // combined, so the filtering logic and its meaning both stay simple.
+  const filteredList = selectedDay
+    ? baseList.filter((r) => r.proposedAt && dateKey(new Date(r.proposedAt)) === selectedDay)
+    : quickFilter !== 'all'
+      ? baseList.filter((r) => r.proposedAt && matchesQuickFilter(new Date(r.proposedAt), quickFilter))
+      : baseList;
+
+  const totalPages = Math.max(1, Math.ceil(filteredList.length / PAGE_SIZE));
+  const clampedPage = Math.min(page, totalPages);
+  const list = filteredList.slice((clampedPage - 1) * PAGE_SIZE, clampedPage * PAGE_SIZE);
+
+  function handleTabChange(next) {
+    setTab(next);
+    setPage(1);
+  }
+  function handleQuickFilter(key) {
+    setQuickFilter(key);
+    setSelectedDay(null);
+    setPage(1);
+  }
+  function handleSelectDayFilter(day) {
+    setSelectedDay(day);
+    setQuickFilter('all');
+    setPage(1);
+  }
 
   return (
     <div>
@@ -297,21 +563,34 @@ export default function Appointments() {
         the ones you've sent out.
       </p>
 
+      <div className="appt-layout">
+        <aside className="appt-sidebar">
+          <MiniMonthCalendar
+            shownMonth={miniCalMonth}
+            onShownMonthChange={setMiniCalMonth}
+            selectedDay={selectedDay}
+            onSelectDate={handleSelectMiniCalDate}
+            appointmentDays={appointmentDays}
+          />
+        </aside>
+
+        <div className="appt-main">
       <WeekScheduleGrid
         weekStart={weekStart}
         onWeekChange={setWeekStart}
+        onToday={handleToday}
         appointments={combinedForGrid}
         intervalMinutes={intervalMinutes}
         onIntervalChange={setIntervalMinutes}
         selectedDay={selectedDay}
-        onSelectDay={setSelectedDay}
+        onSelectDay={handleSelectDayFilter}
         onSelectAppointment={handleSelectAppointment}
       />
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
         <button
           type="button"
-          onClick={() => setTab('received')}
+          onClick={() => handleTabChange('received')}
           className={tab === 'received' ? undefined : 'secondary'}
           style={{ width: 'auto', padding: '8px 16px' }}
         >
@@ -319,12 +598,35 @@ export default function Appointments() {
         </button>
         <button
           type="button"
-          onClick={() => setTab('sent')}
+          onClick={() => handleTabChange('sent')}
           className={tab === 'sent' ? undefined : 'secondary'}
           style={{ width: 'auto', padding: '8px 16px' }}
         >
           Sent
         </button>
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
+        {QUICK_FILTERS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => handleQuickFilter(f.key)}
+            style={{
+              width: 'auto',
+              padding: '5px 12px',
+              fontSize: 12,
+              fontWeight: 700,
+              borderRadius: 999,
+              border: '1px solid var(--panel-border)',
+              cursor: 'pointer',
+              background: quickFilter === f.key && !selectedDay ? 'var(--holo-gradient)' : 'transparent',
+              color: quickFilter === f.key && !selectedDay ? '#06120f' : 'var(--text-dim)',
+            }}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
 
       {error && <div className="error-banner">{error}</div>}
@@ -428,6 +730,8 @@ export default function Appointments() {
           })}
         </div>
       )}
+        </div>
+      </div>
 
       {previewClientId && (
         <div className="auth-modal-backdrop" onClick={(e) => e.target === e.currentTarget && setPreviewClientId(null)}>
