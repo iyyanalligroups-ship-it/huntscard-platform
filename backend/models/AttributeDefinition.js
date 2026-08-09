@@ -33,6 +33,15 @@ const attributeDefinitionSchema = new mongoose.Schema(
     // Lets an admin retire a field without deleting clients' saved values
     // for it -- it just stops being shown anywhere.
     active: { type: Boolean, default: true },
+    // When true, this attribute ALSO becomes a draggable AR Layout panel
+    // element (alongside still showing as a normal profile-tab field) --
+    // e.g. a "Map" attribute the client fills in a Google Maps link for.
+    // Its position in the floating panel lives in ArLayout.customElements
+    // (keyed by this doc's `key`, same as its value lives in
+    // Client.customAttributes). Its icon reuses the same ArIcon store
+    // every other attribute/section icon does -- see getValidArIconKeys()
+    // in routes/admin.js.
+    arComponent: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

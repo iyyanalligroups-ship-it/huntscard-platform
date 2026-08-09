@@ -1,0 +1,53 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Both "normal" protection-level, so no runtime prompt. Needed to
+         read Wi-Fi connection/security state for the Device Protection
+         Check's Wi-Fi security check. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Android 11+ package-visibility. The two <package> entries are the
+         Device Protection Check's known-tool list (DeviceSafetyModule.kt
+         knownTools); add a matching line here for every entry added
+         there, or the lookup silently can't see it. com.android.vending
+         is the Play Store app itself, needed for the Play Protect
+         deep-link fallback. The two <intent> entries are Settings/Play
+         Protect deep links; without declaring them, those can silently
+         fail to resolve on some OEM builds even though the module's own
+         try/catch already falls back gracefully. -->
+    <queries>
+        <package android:name="com.zimperium.zanti" />
+        <package android:name="org.csploit.android" />
+        <package android:name="com.android.vending" />
+        <intent>
+            <action android:name="android.settings.WIFI_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="com.google.android.gms.security.settings.VerifyApps" />
+        </intent>
+    </queries>
+
+    <application
+      android:name=".MainApplication"
+      android:label="@string/app_name"
+      android:icon="@mipmap/ic_launcher"
+      android:roundIcon="@mipmap/ic_launcher_round"
+      android:allowBackup="false"
+      android:theme="@style/AppTheme"
+      android:usesCleartextTraffic="${usesCleartextTraffic}"
+      android:supportsRtl="true">
+      <activity
+        android:name=".MainActivity"
+        android:label="@string/app_name"
+        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+        android:launchMode="singleTask"
+        android:windowSoftInputMode="adjustResize"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+      </activity>
+    </application>
+</manifest>
