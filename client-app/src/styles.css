@@ -161,7 +161,12 @@ input, select {
   border-radius: 9px;
   padding: 12px 13px;
   color: var(--text);
-  font-size: 14px;
+  /* Must stay >= 16px -- iOS Safari (and several Android browsers) auto-
+     zoom the whole page in on focus for any text input under 16px, which
+     visually reads as the page/modal "jumping" toward wherever you
+     tapped. That auto-zoom, not a CSS positioning bug, is what was
+     causing the login modal to appear to drift on mobile. */
+  font-size: 16px;
   font-family: var(--font-ui);
   transition: border-color 0.15s;
 }

@@ -455,7 +455,16 @@ export default function PublicProfile() {
               </div>
               <div className="field">
                 <label htmlFor="leadPhone">Phone number</label>
-                <input id="leadPhone" type="tel" autoComplete="tel" value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} required />
+                <input
+                  id="leadPhone"
+                  type="tel"
+                  autoComplete="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={leadPhone}
+                  onChange={(e) => setLeadPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  required
+                />
               </div>
               <div className="field">
                 <label htmlFor="leadEmail">Email (optional)</label>

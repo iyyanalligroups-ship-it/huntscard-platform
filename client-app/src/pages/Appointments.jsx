@@ -400,9 +400,10 @@ export default function Appointments() {
   const [error, setError] = useState('');
   const [respondingId, setRespondingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [quickFilter, setQuickFilter] = useState('all'); // 'all' | 'today' | 'yesterday' | 'week' | 'month'
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 10;
+  const PAGE_SIZE = 5;
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [intervalMinutes, setIntervalMinutes] = useState(30);
   const [selectedDay, setSelectedDay] = useState(null); // YYYY-MM-DD or null
@@ -483,7 +484,6 @@ export default function Appointments() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm('Delete this appointment request? This removes it for both sides and can\'t be undone.')) return;
     setDeletingId(id);
     setError('');
     try {
@@ -493,6 +493,7 @@ export default function Appointments() {
       setError(err.message);
     } finally {
       setDeletingId(null);
+      setConfirmDeleteId(null);
     }
   }
 
@@ -702,32 +703,80 @@ export default function Appointments() {
                     {r.note && <span style={{ display: 'block', marginTop: 2 }}>"{r.note}"</span>}
                   </div>
                 </div>
-                {tab === 'received' && r.status === 'pending' ? (
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      type="button"
-                      style={{ width: 'auto' }}
-                      disabled={respondingId === r._id}
-                      onClick={() => handleRespond(r._id, 'accepted')}
-                    >
-                      Accept
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary"
-                      style={{ width: 'auto' }}
-                      disabled={respondingId === r._id}
-                      onClick={() => handleRespond(r._id, 'declined')}
-                    >
-                      Decline
-                    </button>
-                  </div>
-                ) : (
-                  <span style={{ fontSize: 12, fontWeight: 700, color: STATUS_COLOR[r.status] }}>{STATUS_LABEL[r.status]}</span>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  {tab === 'received' && r.status === 'pending' ? (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        style={{ width: 'auto' }}
+                        disabled={respondingId === r._id}
+                        onClick={() => handleRespond(r._id, 'accepted')}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        style={{ width: 'auto' }}
+                        disabled={respondingId === r._id}
+                        onClick={() => handleRespond(r._id, 'declined')}
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: 12, fontWeight: 700, color: STATUS_COLOR[r.status] }}>{STATUS_LABEL[r.status]}</span>
+                  )}
+                  <button
+                    type="button"
+                    className="secondary"
+                    title="Delete"
+                    aria-label="Delete appointment request"
+                    disabled={deletingId === r._id}
+                    onClick={() => setConfirmDeleteId(r._id)}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      color: 'var(--danger)',
+                    }}
+                  >
+                    🗑
+                  </button>
+                </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {!loading && totalPages > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 16 }}>
+          <button
+            type="button"
+            className="secondary"
+            style={{ width: 'auto', padding: '6px 14px' }}
+            disabled={clampedPage <= 1}
+            onClick={() => setPage(clampedPage - 1)}
+          >
+            Prev
+          </button>
+          <span className="subtitle" style={{ margin: 0 }}>
+            Page {clampedPage} of {totalPages}
+          </span>
+          <button
+            type="button"
+            className="secondary"
+            style={{ width: 'auto', padding: '6px 14px' }}
+            disabled={clampedPage >= totalPages}
+            onClick={() => setPage(clampedPage + 1)}
+          >
+            Next
+          </button>
         </div>
       )}
         </div>
@@ -791,6 +840,38 @@ export default function Appointments() {
                 </Link>
               </>
             ) : null}
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteId && (
+        <div className="auth-modal-backdrop" onClick={(e) => e.target === e.currentTarget && setConfirmDeleteId(null)}>
+          <div className="auth-modal-card" style={{ maxWidth: 340 }}>
+            <button className="auth-modal-close" onClick={() => setConfirmDeleteId(null)} aria-label="Close">
+              ×
+            </button>
+            <h1 style={{ fontSize: 18 }}>Delete this request?</h1>
+            <p className="subtitle" style={{ marginBottom: 24 }}>
+              This removes it for both sides and can't be undone.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setConfirmDeleteId(null)}
+                disabled={deletingId === confirmDeleteId}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                style={{ background: 'var(--danger)' }}
+                onClick={() => handleDelete(confirmDeleteId)}
+                disabled={deletingId === confirmDeleteId}
+              >
+                {deletingId === confirmDeleteId ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

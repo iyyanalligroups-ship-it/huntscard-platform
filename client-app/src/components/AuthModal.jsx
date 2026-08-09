@@ -48,6 +48,25 @@ export default function AuthModal({ mode: initialMode, onClose }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Lock background scroll while the modal is open. Without this, the page
+  // behind can still scroll on mobile, and browsers repaint fixed +
+  // backdrop-filter elements in the wrong spot mid-scroll -- the modal
+  // visibly drifts from center toward the bottom instead of staying put.
+  useEffect(() => {
+    const scrollY = window.scrollY;
+    const { body } = document;
+    const prev = { position: body.style.position, top: body.style.top, width: body.style.width };
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.width = '100%';
+    return () => {
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.width = prev.width;
+      window.scrollTo(0, scrollY);
+    };
+  }, []);
+
   function handleBackdropClick(e) {
     if (e.target === e.currentTarget) onClose();
   }
