@@ -11,6 +11,7 @@ const Admin = require('../models/Admin');
 const CardPlan = require('../models/CardPlan');
 const ArLayout = require('../models/ArLayout');
 const ArIcon = require('../models/ArIcon');
+const MagicArt = require('../models/MagicArt');
 const AttributeDefinition = require('../models/AttributeDefinition');
 const CardRequest = require('../models/CardRequest');
 const ContactMessage = require('../models/ContactMessage');
@@ -1127,6 +1128,236 @@ router.delete('/ar-icons/:key', requireAdmin, async (req, res) => {
       await icons.save();
     }
     res.json(mergeArIcons(icons));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------
+// Magic Art -- a collection of admin-managed "packs" (target image +
+// overlay video each), see MagicArt.js. Consumed publicly via
+// GET /api/public/magic-art (array, complete packs only) and scanned
+// client-side via mind-ar-js on the client dashboard's Magic Camera page.
+// "Art 1"/"Art 2"/etc. in the admin UI are just list position, not
+// stored -- ordering is createdAt ascending.
+// ---------------------------------------------------------------------
+const MAGIC_ART_DIR = path.join(__dirname, '..', 'uploads', 'magic-art');
+fs.mkdirSync(MAGIC_ART_DIR, { recursive: true });
+const magicArtStorage = multer.diskStorage({
+  destination: MAGIC_ART_DIR,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '';
+    cb(null, `${crypto.randomBytes(8).toString('hex')}${ext}`);
+  },
+});
+const magicArtImageUpload = multer({
+  storage: magicArtStorage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB -- admin's crop tool already resizes before upload, but a real photo can still be large
+  fileFilter: (req, file, cb) => {
+    if (!THEME_MIME_TYPES.includes(file.mimetype)) {
+      return cb(new Error('Only JPEG, PNG, or WEBP images are allowed'));
+    }
+    cb(null, true);
+  },
+});
+// Same video mimetypes/limit as profile.js's arBannerUpload -- always a
+// video here (unlike arBannerUpload's video-OR-image slot), so the filter
+// only accepts video mimetypes, no image fallback.
+const MAGIC_ART_VIDEO_MIME_TYPES = ['video/mp4', 'video/quicktime'];
+const magicArtVideoUpload = multer({
+  storage: magicArtStorage,
+  limits: { fileSize: 80 * 1024 * 1024 }, // 80MB
+  fileFilter: (req, file, cb) => {
+    if (!MAGIC_ART_VIDEO_MIME_TYPES.includes(file.mimetype)) {
+      return cb(new Error('Only MP4 or MOV videos are allowed'));
+    }
+    cb(null, true);
+  },
+});
+
+function serializeMagicArt(doc) {
+  return {
+    _id: doc._id,
+    name: doc.name,
+    description: doc.description,
+    imageUrl: doc.imageUrl,
+    imageWidth: doc.imageWidth,
+    imageHeight: doc.imageHeight,
+    videoUrl: doc.videoUrl,
+    videoCropX: doc.videoCropX,
+    videoCropY: doc.videoCropY,
+    videoCropWidth: doc.videoCropWidth,
+    videoCropHeight: doc.videoCropHeight,
+    active: doc.active,
+    updatedBy: doc.updatedBy,
+  };
+}
+
+// GET /api/admin/magic-art -- every pack, oldest first ("Art 1" = index 0).
+router.get('/magic-art', requireAdmin, async (req, res) => {
+  try {
+    const docs = await MagicArt.find({}).sort({ createdAt: 1 });
+    res.json(docs.map(serializeMagicArt));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/magic-art -- create one new empty pack ("+ Add Art").
+router.post('/magic-art', requireAdmin, async (req, res) => {
+  try {
+    const doc = await MagicArt.create({ updatedBy: req.admin?.email || 'unknown' });
+    res.status(201).json(serializeMagicArt(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/admin/magic-art/:id -- update a pack's name/description.
+router.patch('/magic-art/:id', requireAdmin, async (req, res) => {
+  try {
+    const doc = await MagicArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    if (req.body.name !== undefined) doc.name = req.body.name;
+    if (req.body.description !== undefined) doc.description = req.body.description;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeMagicArt(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/magic-art/:id/activate -- add this pack to the set the
+// client dashboard's Magic Camera scans. NOT exclusive -- several packs
+// can be active at once; Magic Camera auto-detects which one it's
+// pointed at (mind-ar tracks against every registered target by
+// default, see MagicCamera.jsx's own comment for the confirmation).
+router.post('/magic-art/:id/activate', requireAdmin, async (req, res) => {
+  try {
+    const doc = await MagicArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    if (!doc.name?.trim() || !doc.imageUrl || !doc.videoUrl) {
+      return res.status(400).json({ error: 'This pack needs a name, an image, and a video before it can be activated.' });
+    }
+    doc.active = true;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    const docs = await MagicArt.find({}).sort({ createdAt: 1 });
+    res.json(docs.map(serializeMagicArt));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/magic-art/:id/deactivate -- remove this pack from the
+// active set (it stops being scanned, but the pack itself and its files
+// are untouched).
+router.post('/magic-art/:id/deactivate', requireAdmin, async (req, res) => {
+  try {
+    const doc = await MagicArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    doc.active = false;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    const docs = await MagicArt.find({}).sort({ createdAt: 1 });
+    res.json(docs.map(serializeMagicArt));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/magic-art/:id -- remove a whole pack (both files + the doc).
+router.delete('/magic-art/:id', requireAdmin, async (req, res) => {
+  try {
+    const doc = await MagicArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    if (doc.imageUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(doc.imageUrl)), () => {});
+    if (doc.videoUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(doc.videoUrl)), () => {});
+    await doc.deleteOne();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/magic-art/:id/image -- upload/replace one pack's target
+// image. `width`/`height` are the dimensions the admin's crop tool already
+// resized to client-side. Removes the previous file first, if any, so
+// re-uploads don't pile up orphaned files on disk.
+router.post('/magic-art/:id/image', requireAdmin, magicArtImageUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const doc = await MagicArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    const previousUrl = doc.imageUrl;
+    doc.imageUrl = `${process.env.BACKEND_URL}/uploads/magic-art/${req.file.filename}`;
+    doc.imageWidth = Number(req.body.width) || undefined;
+    doc.imageHeight = Number(req.body.height) || undefined;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    if (previousUrl) {
+      fs.unlink(path.join(MAGIC_ART_DIR, path.basename(previousUrl)), () => {});
+    }
+    res.json(serializeMagicArt(doc));
+  } catch (err) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 50MB.' : err.message;
+    res.status(400).json({ error: message });
+  }
+});
+
+// POST /api/admin/magic-art/:id/video -- upload/replace one pack's overlay
+// video. cropX/cropY/cropWidth/cropHeight (fractional 0-1) describe a
+// display-only crop -- the file itself is stored exactly as uploaded.
+router.post('/magic-art/:id/video', requireAdmin, magicArtVideoUpload.single('video'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const doc = await MagicArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    const previousUrl = doc.videoUrl;
+    doc.videoUrl = `${process.env.BACKEND_URL}/uploads/magic-art/${req.file.filename}`;
+    doc.videoCropX = Number(req.body.cropX) || 0;
+    doc.videoCropY = Number(req.body.cropY) || 0;
+    doc.videoCropWidth = Number(req.body.cropWidth) || 1;
+    doc.videoCropHeight = Number(req.body.cropHeight) || 1;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    if (previousUrl) {
+      fs.unlink(path.join(MAGIC_ART_DIR, path.basename(previousUrl)), () => {});
+    }
+    res.json(serializeMagicArt(doc));
+  } catch (err) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 80MB.' : err.message;
+    res.status(400).json({ error: message });
+  }
+});
+
+// DELETE /api/admin/magic-art/:id/:field -- clear just the image or video
+// of one pack (the pack itself, and its other field, stay put).
+router.delete('/magic-art/:id/:field', requireAdmin, async (req, res) => {
+  try {
+    const { field } = req.params;
+    if (field !== 'image' && field !== 'video') {
+      return res.status(400).json({ error: 'Unknown field' });
+    }
+    const doc = await MagicArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    if (field === 'image') {
+      if (doc.imageUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(doc.imageUrl)), () => {});
+      doc.imageUrl = undefined;
+      doc.imageWidth = undefined;
+      doc.imageHeight = undefined;
+    } else {
+      if (doc.videoUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(doc.videoUrl)), () => {});
+      doc.videoUrl = undefined;
+      doc.videoCropX = undefined;
+      doc.videoCropY = undefined;
+      doc.videoCropWidth = undefined;
+      doc.videoCropHeight = undefined;
+    }
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeMagicArt(doc));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

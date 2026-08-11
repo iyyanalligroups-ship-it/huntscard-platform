@@ -13,6 +13,7 @@ const CardPlan = require('../models/CardPlan');
 const Card = require('../models/Card');
 const AttributeDefinition = require('../models/AttributeDefinition');
 const { getChargeAmount } = require('../utils/pricing');
+const { sendEmail } = require('../utils/email');
 
 const router = express.Router();
 
@@ -502,7 +503,18 @@ router.put('/me', requireAuth, async (req, res) => {
 
 router.post('/pause-card', requireAuth, async (req, res) => {
   try {
-    await Client.updateOne({ clientId: req.user.clientId }, { $set: { cardActive: false } });
+    const client = await Client.findOneAndUpdate(
+      { clientId: req.user.clientId },
+      { $set: { cardActive: false } },
+      { new: true }
+    ).select('loginEmail');
+    if (client?.loginEmail) {
+      sendEmail(
+        client.loginEmail,
+        'Your HuntsTAG card has been frozen',
+        "Your card has just been frozen -- nobody can tap or scan it to see your profile until you turn it back on. If this wasn't you, log in and reactivate it from your dashboard right away."
+      ).catch((err) => console.error('[pause-card] confirmation email failed:', err.message));
+    }
     res.json({ ok: true });
   } catch (err) {
     console.error('[pause-card POST]', err);
@@ -512,7 +524,18 @@ router.post('/pause-card', requireAuth, async (req, res) => {
 
 router.post('/unpause-card', requireAuth, async (req, res) => {
   try {
-    await Client.updateOne({ clientId: req.user.clientId }, { $set: { cardActive: true } });
+    const client = await Client.findOneAndUpdate(
+      { clientId: req.user.clientId },
+      { $set: { cardActive: true } },
+      { new: true }
+    ).select('loginEmail');
+    if (client?.loginEmail) {
+      sendEmail(
+        client.loginEmail,
+        'Your HuntsTAG card is active again',
+        'Your card is active again -- tapping or scanning it now shows your live profile as normal.'
+      ).catch((err) => console.error('[unpause-card] confirmation email failed:', err.message));
+    }
     res.json({ ok: true });
   } catch (err) {
     console.error('[unpause-card POST]', err);
@@ -548,6 +571,14 @@ router.post('/cards/:cardNumber/pause', requireAuth, async (req, res) => {
       { new: true }
     ).select('cardNumber cardType active encoded');
     if (!card) return res.status(404).json({ error: 'Card not found' });
+    const client = await Client.findOne({ clientId: req.user.clientId }).select('loginEmail');
+    if (client?.loginEmail) {
+      sendEmail(
+        client.loginEmail,
+        `Card #${card.cardNumber} has been frozen`,
+        `Card #${card.cardNumber} has just been frozen -- nobody can tap or scan THIS specific card until you turn it back on. Your other cards, if any, are unaffected. If this wasn't you, log in and reactivate it from your dashboard right away.`
+      ).catch((err) => console.error('[card pause] confirmation email failed:', err.message));
+    }
     res.json(card);
   } catch (err) {
     console.error('[card pause POST]', err);
@@ -563,6 +594,14 @@ router.post('/cards/:cardNumber/unpause', requireAuth, async (req, res) => {
       { new: true }
     ).select('cardNumber cardType active encoded');
     if (!card) return res.status(404).json({ error: 'Card not found' });
+    const client = await Client.findOne({ clientId: req.user.clientId }).select('loginEmail');
+    if (client?.loginEmail) {
+      sendEmail(
+        client.loginEmail,
+        `Card #${card.cardNumber} is active again`,
+        `Card #${card.cardNumber} is active again -- tapping or scanning it now shows your live profile as normal.`
+      ).catch((err) => console.error('[card unpause] confirmation email failed:', err.message));
+    }
     res.json(card);
   } catch (err) {
     console.error('[card unpause POST]', err);

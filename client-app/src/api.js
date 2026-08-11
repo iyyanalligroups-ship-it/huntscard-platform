@@ -90,6 +90,11 @@ export const api = {
   getPublicArLayout: (clientId, cardNumber) =>
     request(`/api/public/ar-layout/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`, { auth: false }),
   getPublicArIcons: () => request('/api/public/ar-icons', { auth: false }),
+  // Admin-uploaded Magic Art packs (see backend/models/MagicArt.js) --
+  // resolves an array, one entry per complete (image+video) pack. Shown
+  // on the public MagicArt.jsx gallery page and scanned via the
+  // dashboard's MagicCamera.jsx.
+  getPublicMagicArt: () => request('/api/public/magic-art', { auth: false }),
   // Admin-defined extra profile fields (see AttributeDefinition) -- used
   // by both Profile Settings (to know which extra inputs to render) and
   // the public profile page (to know which extra rows to render).

@@ -21,6 +21,7 @@ import ArLayout from './pages/ArLayout.jsx';
 import Contacts from './pages/Contacts.jsx';
 import Appointments from './pages/Appointments.jsx';
 import PublicProfile from './pages/PublicProfile.jsx';
+import MagicArt from './pages/MagicArt.jsx';
 
 // Lazy-loaded ("Mark 1" experiment) -- pulls in mind-ar/@tensorflow/tfjs,
 // a heavy and still-unproven dependency. Loading it eagerly like every
@@ -30,6 +31,12 @@ import PublicProfile from './pages/PublicProfile.jsx';
 // someone actually visits this specific page, matching the "fully
 // isolated, delete-able" intent this experiment was built with.
 const HuntsEngineTest = lazy(() => import('./pages/HuntsEngineTest.jsx'));
+
+// Same reasoning as HuntsEngineTest above -- Magic Camera pulls in the
+// same heavy mind-ar/three.js stack, kept lazy-loaded so it can't affect
+// any other route's bundle.
+const MagicCamera = lazy(() => import('./pages/MagicCamera.jsx'));
+
 
 // Debugging aid for the Mark 1 experiment only -- a crash inside
 // HuntsEngineTest (or its mind-ar/tfjs imports) would otherwise unmount
@@ -58,6 +65,30 @@ class HuntsEngineTestErrorBoundary extends Component {
   }
 }
 
+// Same "show the crash instead of a blank page" reasoning as
+// HuntsEngineTestErrorBoundary above -- own separate boundary, since
+// Magic Camera's mind-ar pipeline is the same still-being-tuned pipeline
+// that spike validated.
+class MagicCameraErrorBoundary extends Component {
+  state = { error: null };
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="error-banner" style={{ whiteSpace: 'pre-wrap' }}>
+          Magic Camera crashed:{'\n'}
+          {this.state.error.message}
+          {'\n\n'}
+          {this.state.error.stack}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function RequireAuth({ children }) {
   if (!isLoggedIn()) return <Navigate to="/login" replace />;
   return children;
@@ -72,6 +103,7 @@ export default function App() {
         <Route path="shop" element={<Shop />} />
         <Route path="catalog" element={<Catalog />} />
         <Route path="contact" element={<ContactUs />} />
+        <Route path="magic-art" element={<MagicArt />} />
       </Route>
 
       {/* Public tap page -- what a stranger sees when they tap the physical
@@ -111,6 +143,16 @@ export default function App() {
                 <HuntsEngineTest />
               </Suspense>
             </HuntsEngineTestErrorBoundary>
+          }
+        />
+        <Route
+          path="magic-camera"
+          element={
+            <MagicCameraErrorBoundary>
+              <Suspense fallback={<p className="subtitle">Loading…</p>}>
+                <MagicCamera />
+              </Suspense>
+            </MagicCameraErrorBoundary>
           }
         />
         <Route path="appointments" element={<Appointments />} />

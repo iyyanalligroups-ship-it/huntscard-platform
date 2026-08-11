@@ -16,6 +16,7 @@ const Card = require('../models/Card');
 const { sendPushToClient } = require('../utils/push');
 const ArLayout = require('../models/ArLayout');
 const ArIcon = require('../models/ArIcon');
+const MagicArt = require('../models/MagicArt');
 const AttributeDefinition = require('../models/AttributeDefinition');
 const CatalogVideo = require('../models/CatalogVideo');
 const { getChargeAmount } = require('../utils/pricing');
@@ -487,6 +488,38 @@ router.get('/ar-icons', async (req, res) => {
     const icons = await ArIcon.findOne({ key: 'global' });
     res.set('Cache-Control', 'no-store');
     res.json(mergeArIcons(icons));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/public/magic-art -- every COMPLETE admin-managed Magic Art
+// pack (see backend/models/MagicArt.js), oldest first. Read-only, no
+// auth. Filtered to packs with both an image and a video set -- an
+// in-progress pack the admin hasn't finished shouldn't be publicly
+// visible or scannable. Returns [] (not a 404) when none exist yet.
+router.get('/magic-art', async (req, res) => {
+  try {
+    const docs = await MagicArt.find({ imageUrl: { $ne: null }, videoUrl: { $ne: null } }).sort({ createdAt: 1 });
+    res.set('Cache-Control', 'no-store');
+    res.json(
+      docs.map((doc) => ({
+        _id: doc._id,
+        name: doc.name,
+        description: doc.description,
+        imageUrl: doc.imageUrl,
+        imageWidth: doc.imageWidth,
+        imageHeight: doc.imageHeight,
+        videoUrl: doc.videoUrl,
+        videoCrop: {
+          x: doc.videoCropX ?? 0,
+          y: doc.videoCropY ?? 0,
+          width: doc.videoCropWidth ?? 1,
+          height: doc.videoCropHeight ?? 1,
+        },
+        active: doc.active,
+      }))
+    );
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

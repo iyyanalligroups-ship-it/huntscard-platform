@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { api, API_URL } from '../api.js';
 
@@ -38,6 +39,11 @@ export default function Dashboard() {
   // actually asked for and works every time, no share-sheet roulette.
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  // Where the speed-dial column anchors -- computed from the trigger
+  // button's own position at open time (it's portaled to document.body,
+  // so it has no ancestor to position itself relative to via CSS alone).
+  const [shareAnchor, setShareAnchor] = useState(null);
+  const shareBtnRef = useRef(null);
 
   useEffect(() => {
     api
@@ -60,6 +66,34 @@ export default function Dashboard() {
     setShareMenuOpen(false);
     setLinkCopied(false);
   }
+
+  function toggleShareMenu() {
+    if (shareMenuOpen) {
+      closeShareMenu();
+      return;
+    }
+    const rect = shareBtnRef.current?.getBoundingClientRect();
+    if (rect) {
+      setShareAnchor({ right: window.innerWidth - rect.right, bottom: window.innerHeight - rect.top + 8 });
+    }
+    setShareMenuOpen(true);
+  }
+
+  // A static anchor (computed once, on open) would drift out from under
+  // the button if the page scrolls or resizes while the dial is open --
+  // simplest fix, matching how native popovers behave, is to just close it.
+  useEffect(() => {
+    if (!shareMenuOpen) return;
+    function handleReflow() {
+      closeShareMenu();
+    }
+    window.addEventListener('scroll', handleReflow, true);
+    window.addEventListener('resize', handleReflow);
+    return () => {
+      window.removeEventListener('scroll', handleReflow, true);
+      window.removeEventListener('resize', handleReflow);
+    };
+  }, [shareMenuOpen]);
 
   async function handleCopyLink() {
     try {
@@ -220,104 +254,113 @@ export default function Dashboard() {
             <Link className="pv-btn pv-btn-secondary" to="/dashboard/settings">
               Edit
             </Link>
-            <div style={{ position: 'relative', flex: '0 0 auto' }}>
-              <button
-                type="button"
-                onClick={() => setShareMenuOpen((v) => !v)}
-                title="Share your profile"
-                aria-label="Share your profile"
-                style={{
-                  width: 44,
-                  padding: 0,
-                  borderRadius: 10,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'var(--pv-surface)',
-                  border: '1px solid var(--pv-border)',
-                  color: 'var(--pv-text)',
-                }}
-              >
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
-                  <path d="M16 6l-4-4-4 4" />
-                  <path d="M12 2v14" />
-                </svg>
-              </button>
-
-              {shareMenuOpen && (
-                <>
-                  {/* Click-outside catcher -- a full-viewport transparent
-                      layer under the popup, same trick the AR Layout
-                      editors use for their own dropdowns. */}
-                  <div style={{ position: 'fixed', inset: 0, zIndex: 9 }} onClick={closeShareMenu} />
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '100%',
-                      right: 0,
-                      marginTop: 8,
-                      background: 'var(--pv-surface)',
-                      border: '1px solid var(--pv-border)',
-                      borderRadius: 12,
-                      boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
-                      minWidth: 190,
-                      overflow: 'hidden',
-                      zIndex: 10,
-                    }}
-                  >
-                    <a
-                      href={`https://wa.me/?text=${encodeURIComponent(shareText)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={closeShareMenu}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', color: 'var(--pv-text)', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}
-                    >
-                      <span style={{ color: '#25D366' }}>●</span> WhatsApp
-                    </a>
-                    <a
-                      href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(`${profile?.fullName || ''} — HuntsTAG`)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={closeShareMenu}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', color: 'var(--pv-text)', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}
-                    >
-                      <span style={{ color: '#29A9EA' }}>●</span> Telegram
-                    </a>
-                    <a
-                      href={`mailto:?subject=${encodeURIComponent(`${profile?.fullName || ''} — HuntsTAG`)}&body=${encodeURIComponent(shareText)}`}
-                      onClick={closeShareMenu}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', color: 'var(--pv-text)', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}
-                    >
-                      <span style={{ color: 'var(--holo-cyan)' }}>●</span> Email
-                    </a>
-                    <button
-                      type="button"
-                      onClick={handleCopyLink}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        width: '100%',
-                        padding: '11px 14px',
-                        background: 'none',
-                        border: 'none',
-                        borderTop: '1px solid var(--pv-border)',
-                        color: 'var(--pv-text)',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <span style={{ color: 'var(--pv-text-dim)' }}>●</span> {linkCopied ? 'Link copied!' : 'Copy link'}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+            <button
+              ref={shareBtnRef}
+              type="button"
+              onClick={toggleShareMenu}
+              title="Share your profile"
+              aria-label="Share your profile"
+              aria-expanded={shareMenuOpen}
+              style={{
+                width: 44,
+                flex: '0 0 auto',
+                padding: 0,
+                borderRadius: 10,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'var(--pv-surface)',
+                border: '1px solid var(--pv-border)',
+                color: 'var(--pv-text)',
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 2 11 13" />
+                <path d="M22 2 15 22l-4-9-9-4 20-7Z" />
+              </svg>
+            </button>
           </div>
         </div>
+
+        {/* Portaled to document.body -- .profile-preview's own
+            overflow:hidden (needed elsewhere for its rounded corners) is
+            exactly what was clipping the old dropdown's lower options
+            behind the tab bar, and a fixed-position column has no ancestor
+            box to escape here anyway. Position comes from shareAnchor,
+            captured off the trigger button at open time (see
+            toggleShareMenu). Icons stack bottom-up in DOM order -- closest
+            to the button (WhatsApp) pops in first, farthest (Copy link)
+            last. */}
+        {shareMenuOpen && shareAnchor && createPortal(
+          <>
+            <div className="share-dial-overlay" onClick={closeShareMenu} />
+            <div className="share-dial-col" style={{ position: 'fixed', right: shareAnchor.right, bottom: shareAnchor.bottom }}>
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="share-dial-item"
+                title={linkCopied ? 'Link copied!' : 'Copy link'}
+                aria-label="Copy link"
+                style={{ color: 'var(--holo-violet)', animationDelay: '210ms' }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {linkCopied ? (
+                    <path d="M5 13l4 4L19 7" />
+                  ) : (
+                    <>
+                      <path d="M9 15 15 9" />
+                      <path d="M10.5 6.5 12 5a3.5 3.5 0 0 1 5 5l-1.5 1.5" />
+                      <path d="M13.5 17.5 12 19a3.5 3.5 0 0 1-5-5l1.5-1.5" />
+                    </>
+                  )}
+                </svg>
+              </button>
+              <a
+                href={`mailto:?subject=${encodeURIComponent(`${profile?.fullName || ''} — HuntsTAG`)}&body=${encodeURIComponent(shareText)}`}
+                onClick={closeShareMenu}
+                className="share-dial-item"
+                title="Share via Email"
+                aria-label="Share via Email"
+                style={{ color: 'var(--holo-cyan)', animationDelay: '140ms' }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <path d="m4 7 8 6 8-6" />
+                </svg>
+              </a>
+              <a
+                href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(`${profile?.fullName || ''} — HuntsTAG`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={closeShareMenu}
+                className="share-dial-item"
+                title="Share via Telegram"
+                aria-label="Share via Telegram"
+                style={{ color: '#29A9EA', animationDelay: '70ms' }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 3 2 10.5l6.5 2.2M22 3 15.5 21l-6-8.3M22 3 8.5 12.7" />
+                </svg>
+              </a>
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(shareText)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={closeShareMenu}
+                className="share-dial-item"
+                title="Share via WhatsApp"
+                aria-label="Share via WhatsApp"
+                style={{ color: '#25D366', animationDelay: '0ms' }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 20l1.4-4.1A7.9 7.9 0 1 1 8.6 19L4 20Z" />
+                  <path d="M9 10.2c0 2.7 2.1 4.8 4.8 4.8" />
+                </svg>
+              </a>
+            </div>
+          </>,
+          document.body
+        )}
 
         <div className="pv-tab-bar">
           {tabs.map((t, i) => (

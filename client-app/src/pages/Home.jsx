@@ -1,6 +1,9 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { api, isLoggedIn } from '../api.js';
+
+const SAMPLE_CARD_NAME = 'Alex Chen';
+const SAMPLE_CARD_ROLE = 'Founder, Studio Nine';
 
 const FEATURES = [
   {
@@ -81,8 +84,9 @@ export default function Home() {
   // The hero card shows whoever is actually logged in -- makes the
   // signature visual feel like your own card, not a stock demo, the
   // moment you're signed in. Logged-out visitors see a sample name.
-  const [cardName, setCardName] = useState('Alex Chen');
-  const [cardRole, setCardRole] = useState('Founder, Studio Nine');
+  const [cardName, setCardName] = useState(SAMPLE_CARD_NAME);
+  const [cardRole, setCardRole] = useState(SAMPLE_CARD_ROLE);
+  const location = useLocation();
   const heroRef = useRef(null);
   const stageRef = useRef(null);
   const cardRef = useRef(null);
@@ -90,16 +94,27 @@ export default function Home() {
   const spotlightRef = useRef(null);
   const orbitContainerRef = useRef(null);
 
+  // Re-runs on every navigation to this page (location.key), not just
+  // first mount -- logging in/out from the modal navigates back to '/'
+  // without remounting Home, so a mount-only effect would leave the card
+  // stuck showing whoever (or the sample) was there before that.
   useEffect(() => {
-    if (!isLoggedIn()) return;
+    if (!isLoggedIn()) {
+      setCardName(SAMPLE_CARD_NAME);
+      setCardRole(SAMPLE_CARD_ROLE);
+      return;
+    }
     api
       .getProfile()
       .then((p) => {
-        if (p.fullName) setCardName(p.fullName);
-        if (p.jobTitle) setCardRole(p.jobTitle);
+        setCardName(p.fullName || SAMPLE_CARD_NAME);
+        setCardRole(p.jobTitle || SAMPLE_CARD_ROLE);
       })
-      .catch(() => {}); // not logged in / expired session -- keep the sample name
-  }, []);
+      .catch(() => {
+        setCardName(SAMPLE_CARD_NAME);
+        setCardRole(SAMPLE_CARD_ROLE);
+      });
+  }, [location.key]);
 
   // Cursor spotlight -- soft glow that follows the mouse across the
   // whole hero, lighting up the circuit-dot grid as it passes.

@@ -142,6 +142,110 @@ h1 {
   position: relative;
 }
 
+/* Magic Art public gallery (MagicArt.jsx) -- richer cards (name, AR
+   badge, Magic Camera link, description, how-it-works steps) instead of
+   a bare thumbnail, feeding a lightgalleryjs.com lightbox. Only the
+   thumbnail image itself (.magic-art-lightbox-trigger) is LightGallery's
+   click target now -- the card has its own real links in it too, and a
+   nested <a> inside another <a> isn't valid HTML, so LightGallery is
+   pointed at just that inner element via its `selector` prop instead of
+   scanning direct children. */
+.magic-art-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+.magic-art-card {
+  padding: 16px;
+  text-align: center;
+}
+.magic-art-card-media {
+  position: relative;
+}
+.magic-art-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  background: var(--holo-gradient);
+  color: #06120f;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.magic-art-lightbox-trigger {
+  display: block;
+  cursor: pointer;
+}
+.magic-art-lightbox-trigger img {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  display: block;
+}
+.magic-art-card-title {
+  margin: 12px 0 0;
+  font-size: 16px;
+}
+.magic-art-card-camera-link {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--holo-cyan);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.magic-art-card-camera-link:hover { text-decoration: underline; }
+.magic-art-card-description {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+.magic-art-card-steps {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--panel-border);
+  text-align: left;
+}
+.magic-art-card-steps-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.magic-art-card-steps ol {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+/* Our global `button` reset below (width:100%, holo-gradient background,
+   padding, border-radius) has no scoping, so it leaks into every
+   third-party button injected into the DOM -- including
+   lightgalleryjs.com's own next/prev arrows and toolbar icons
+   (MagicArt.jsx's lightbox). CSS cascades per-PROPERTY, not per-rule, so
+   LightGallery's own .lg-icon/.lg-next CSS only overrides what it
+   explicitly sets; width/background/padding/border-radius from our
+   unscoped rule still won and turned its small arrow icon into a
+   full-width gradient bar. Hand those specific properties back to
+   LightGallery's own CSS for anything inside its root container. */
+.lg-outer button {
+  width: auto;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+  font-family: inherit;
+}
+
 .field {
   margin-bottom: 16px;
 }
@@ -568,6 +672,34 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 .nav-link.active:hover { color: #06120f; text-shadow: none; }
 @media (prefers-reduced-motion: reduce) {
   .nav-link:hover { text-shadow: none; transform: none; }
+}
+
+/* Non-navigating "coming soon" markers in the header (Magic Art / AR
+   Call, both still being tested on the dashboard) -- deliberately its
+   own class, not .nav-link, so it can't pick up that class's nth-child
+   hover-color rotation or active-route styling; it never navigates. */
+.nav-soon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  opacity: 0.65;
+  cursor: default;
+  white-space: nowrap;
+}
+.nav-soon-tag {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
 }
 
 /* Wraps nav-links + the status/auth block. At desktop it's transparent
@@ -1577,6 +1709,40 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   text-decoration: none;
 }
 .auth-modal-link:hover { text-decoration: underline; }
+
+/* --- share-profile speed dial: vertical column of icon buttons that pop
+   in one at a time off the trigger icon, rendered via a portal (see
+   Dashboard.jsx) so .profile-preview's own overflow:hidden (needed for
+   its rounded corners) never clips it. --- */
+.share-dial-overlay { position: fixed; inset: 0; z-index: 40; }
+.share-dial-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 41;
+}
+.share-dial-item {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-raised);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.4) translateY(8px);
+  animation: shareDialPop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+.share-dial-item svg { width: 19px; height: 19px; }
+@keyframes shareDialPop {
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .share-dial-item { animation: none; opacity: 1; transform: none; }
+}
 
 /* --- order tracking stepper --- */
 .track-stepper {

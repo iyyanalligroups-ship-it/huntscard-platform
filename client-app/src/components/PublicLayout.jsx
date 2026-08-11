@@ -29,7 +29,7 @@ export default function PublicLayout() {
   }, [menuOpen]);
 
   const navItems = [
-    { to: '/', label: 'Home', end: true },
+    { to: '/magic-art', label: 'Magic Art' },
     { to: '/shop', label: 'Shop' },
     { to: '/catalog', label: 'Catalog' },
     { to: '/contact', label: 'Contact Us' },
@@ -128,6 +128,9 @@ export default function PublicLayout() {
 
           <div className={`nav-menu${menuOpen ? ' open' : ''}`}>
             <nav className="nav-links">
+              <NavLink to="/" end onClick={() => setMenuOpen(false)} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+                Home
+              </NavLink>
               {navItems.map((item) => (
                 <NavLink
                   key={item.to}

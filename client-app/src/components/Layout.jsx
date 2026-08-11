@@ -19,6 +19,9 @@ const ICONS = {
   huntsEngine: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 18v3"/><circle cx="12" cy="11" r="3"/><path d="M7 7.5h.01M17 7.5h.01"/></svg>
   ),
+  magicArt: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8 19 13"/><path d="M15 9h0"/><path d="M17.8 6.2 19 5"/><path d="m3 21 9-9"/><path d="M12.2 6.2 13 7"/></svg>
+  ),
   shop: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 7h12l1 13H5L6 7Z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/></svg>
   ),
@@ -55,6 +58,10 @@ const NAV_ITEMS = [
   { to: '/dashboard/profile', label: 'Profile', icon: 'profile' },
   { to: '/dashboard/settings', label: 'Profile Settings', icon: 'profileSettings' },
   { to: '/dashboard/ar-layout', label: 'AR Layout', icon: 'arLayout' },
+  // Scans the admin-uploaded Magic Art image + video (see
+  // MagicCamera.jsx's own file comment) -- clients can scan here but
+  // cannot upload; only the admin app's Magic Art page can.
+  { to: '/dashboard/magic-camera', label: 'Magic Camera', icon: 'magicArt' },
   { to: '/dashboard/upgrade', label: 'Shop', icon: 'shop' },
   { to: '/dashboard/track', label: 'Track', icon: 'track' },
   { to: '/dashboard/account-settings', label: 'Settings', icon: 'settings' },
@@ -84,6 +91,7 @@ export default function Layout() {
   const isArLayout =
     location.pathname === '/dashboard/ar-layout' ||
     location.pathname === '/dashboard/huntsengine-test' ||
+    location.pathname === '/dashboard/magic-camera' ||
     location.pathname === '/dashboard/appointments';
 
   return (
