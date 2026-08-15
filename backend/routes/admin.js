@@ -9,9 +9,11 @@ const { requireAdmin, requireSeniorAdmin, requireEncodeAccess, requireAdminPrime
 const Client = require('../models/Client');
 const Admin = require('../models/Admin');
 const CardPlan = require('../models/CardPlan');
+const CatalogEntry = require('../models/CatalogEntry');
 const ArLayout = require('../models/ArLayout');
 const ArIcon = require('../models/ArIcon');
 const MagicArt = require('../models/MagicArt');
+const MagicBusinessCard = require('../models/MagicBusinessCard');
 const AttributeDefinition = require('../models/AttributeDefinition');
 const CardRequest = require('../models/CardRequest');
 const ContactMessage = require('../models/ContactMessage');
@@ -19,6 +21,7 @@ const Contact = require('../models/Contact');
 const CatalogVideo = require('../models/CatalogVideo');
 const Card = require('../models/Card');
 const CardInventory = require('../models/CardInventory');
+const SiteSetting = require('../models/SiteSetting');
 const cardCrypto = require('../utils/crypto'); // named apart from the built-in `crypto` above (line 4)
 const { getChargeAmount } = require('../utils/pricing');
 
@@ -38,6 +41,32 @@ const planImageStorage = multer.diskStorage({
 });
 const uploadPlanImages = multer({
   storage: planImageStorage,
+  limits: { fileSize: 5 * 1024 * 1024, files: 6 },
+  fileFilter: (req, file, cb) => {
+    if (!THEME_MIME_TYPES.includes(file.mimetype)) {
+      return cb(new Error('Only JPEG, PNG, or WEBP images are allowed'));
+    }
+    cb(null, true);
+  },
+});
+
+// ---------------------------------------------------------------------
+// Catalog entry (card variant) photo upload -- up to 6 images per entry,
+// shown on the public Catalog page (client-app's Catalog.jsx). Same
+// shape as plan images above, own directory since these are a distinct
+// concept from CardPlan (see models/CatalogEntry.js's own comment).
+// ---------------------------------------------------------------------
+const CATALOG_ENTRY_IMAGES_DIR = path.join(__dirname, '..', 'uploads', 'catalog-entries');
+fs.mkdirSync(CATALOG_ENTRY_IMAGES_DIR, { recursive: true });
+const catalogEntryImageStorage = multer.diskStorage({
+  destination: CATALOG_ENTRY_IMAGES_DIR,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `catalog-entry-${crypto.randomBytes(8).toString('hex')}${ext}`);
+  },
+});
+const uploadCatalogEntryImages = multer({
+  storage: catalogEntryImageStorage,
   limits: { fileSize: 5 * 1024 * 1024, files: 6 },
   fileFilter: (req, file, cb) => {
     if (!THEME_MIME_TYPES.includes(file.mimetype)) {
@@ -146,6 +175,40 @@ function slugify(name) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
 }
+
+// -----------------------------------------------------------------------
+// Site settings (currently just the homepage theme toggle)
+// -----------------------------------------------------------------------
+
+// GET /api/admin/site-settings -- so the admin toggle can show which
+// theme is actually live right now, not just optimistically assume.
+router.get('/site-settings', requireAdmin, async (req, res) => {
+  try {
+    const doc = await SiteSetting.findOne({ key: 'global' });
+    res.json({ homeTheme: doc?.homeTheme || 'default' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/admin/site-settings -- upserts the singleton doc, since
+// nobody's touched this setting yet the first time it's ever changed.
+router.patch('/site-settings', requireAdmin, async (req, res) => {
+  const { homeTheme } = req.body;
+  if (!['default', 'orange'].includes(homeTheme)) {
+    return res.status(400).json({ error: 'homeTheme must be "default" or "orange"' });
+  }
+  try {
+    const doc = await SiteSetting.findOneAndUpdate(
+      { key: 'global' },
+      { homeTheme, updatedBy: req.admin?.email || 'unknown' },
+      { upsert: true, new: true }
+    );
+    res.json({ homeTheme: doc.homeTheme });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // -----------------------------------------------------------------------
 // Dashboard stats
@@ -425,6 +488,164 @@ router.delete('/plans/:id/images', requireAdmin, async (req, res) => {
 });
 
 // -----------------------------------------------------------------------
+// Catalog entries (card variant showcase, see models/CatalogEntry.js)
+// -----------------------------------------------------------------------
+
+// GET /api/admin/catalog-entries
+router.get('/catalog-entries', requireAdmin, async (req, res) => {
+  const entries = await CatalogEntry.find().sort({ sortOrder: 1, createdAt: 1 });
+  res.json(entries);
+});
+
+// POST /api/admin/catalog-entries -- multipart/form-data (fields "front"
+// and "back", each a single optional file) + JSON-ish text fields.
+// `features` arrives as a JSON string (same reason CardPlan's `variants`
+// does, see POST /plans above).
+router.post('/catalog-entries', requireAdmin, (req, res) => {
+  uploadCatalogEntryImages.fields([{ name: 'front', maxCount: 1 }, { name: 'back', maxCount: 1 }])(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+
+    try {
+      const { name, price, printingType, material, nfcChipSize, engravedTextColor, durability, colorCount, linkedPlanKey, features, active, sortOrder } = req.body;
+      if (!name) return res.status(400).json({ error: 'name is required' });
+
+      let parsedFeatures = [];
+      if (features) {
+        try {
+          parsedFeatures = JSON.parse(features);
+        } catch {
+          return res.status(400).json({ error: 'features must be valid JSON' });
+        }
+        if (!Array.isArray(parsedFeatures) || parsedFeatures.some((f) => typeof f !== 'string')) {
+          return res.status(400).json({ error: 'features must be an array of strings' });
+        }
+      }
+
+      let key = slugify(name);
+      const existing = await CatalogEntry.findOne({ key });
+      if (existing) key = `${key}-${crypto.randomBytes(2).toString('hex')}`;
+
+      const frontFile = req.files?.front?.[0];
+      const backFile = req.files?.back?.[0];
+
+      const entry = await CatalogEntry.create({
+        key,
+        name,
+        price: price !== undefined && price !== '' ? Number(price) : null,
+        printingType,
+        material,
+        nfcChipSize,
+        engravedTextColor,
+        durability,
+        colorCount: colorCount !== undefined && colorCount !== '' ? Number(colorCount) : null,
+        features: parsedFeatures,
+        frontImageUrl: frontFile ? `${process.env.BACKEND_URL}/uploads/catalog-entries/${frontFile.filename}` : null,
+        backImageUrl: backFile ? `${process.env.BACKEND_URL}/uploads/catalog-entries/${backFile.filename}` : null,
+        linkedPlanKey: linkedPlanKey || null,
+        active: active === 'true' || active === true || active === undefined,
+        sortOrder: sortOrder !== undefined && sortOrder !== '' ? Number(sortOrder) : 0,
+        updatedBy: req.admin?.email || 'unknown',
+      });
+      res.status(201).json(entry);
+    } catch (err2) {
+      console.error('[admin/catalog-entries POST]', err2);
+      res.status(500).json({ error: 'Failed to create catalog entry' });
+    }
+  });
+});
+
+// PATCH /api/admin/catalog-entries/:id -- edit details, no images (see the
+// dedicated images routes below for that).
+router.patch('/catalog-entries/:id', requireAdmin, async (req, res) => {
+  try {
+    const { name, price, printingType, material, nfcChipSize, engravedTextColor, durability, colorCount, linkedPlanKey, features, active, sortOrder } = req.body;
+    const updates = { updatedBy: req.admin?.email || 'unknown' };
+    if (name !== undefined) updates.name = name;
+    if (price !== undefined) updates.price = price === '' ? null : Number(price);
+    if (printingType !== undefined) updates.printingType = printingType;
+    if (material !== undefined) updates.material = material;
+    if (nfcChipSize !== undefined) updates.nfcChipSize = nfcChipSize;
+    if (engravedTextColor !== undefined) updates.engravedTextColor = engravedTextColor;
+    if (durability !== undefined) updates.durability = durability;
+    if (colorCount !== undefined) updates.colorCount = colorCount === '' ? null : Number(colorCount);
+    if (linkedPlanKey !== undefined) updates.linkedPlanKey = linkedPlanKey || null;
+    if (active !== undefined) updates.active = active === 'true' || active === true;
+    if (sortOrder !== undefined) updates.sortOrder = Number(sortOrder) || 0;
+    if (features !== undefined) {
+      if (!Array.isArray(features) || features.some((f) => typeof f !== 'string')) {
+        return res.status(400).json({ error: 'features must be an array of strings' });
+      }
+      updates.features = features;
+    }
+
+    const entry = await CatalogEntry.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
+    if (!entry) return res.status(404).json({ error: 'Catalog entry not found' });
+    res.json(entry);
+  } catch (err) {
+    console.error('[admin/catalog-entries PATCH]', err);
+    res.status(500).json({ error: 'Failed to update catalog entry' });
+  }
+});
+
+// DELETE /api/admin/catalog-entries/:id
+router.delete('/catalog-entries/:id', requireAdmin, async (req, res) => {
+  try {
+    const entry = await CatalogEntry.findByIdAndDelete(req.params.id);
+    if (!entry) return res.status(404).json({ error: 'Catalog entry not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[admin/catalog-entries DELETE]', err);
+    res.status(500).json({ error: 'Failed to delete catalog entry' });
+  }
+});
+
+// Front/back are two fixed, named slots (not a growable list) -- each of
+// these four routes sets or clears exactly one of them, deleting the
+// previous file from disk on replace/clear (same pattern as the Magic
+// Business Card image/video routes above).
+function catalogEntryImageSlotRoutes(slot, field) {
+  router.post(`/catalog-entries/:id/${slot}-image`, requireAdmin, (req, res) => {
+    uploadCatalogEntryImages.single('image')(req, res, async (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      if (!req.file) return res.status(400).json({ error: 'No image file received' });
+
+      try {
+        const entry = await CatalogEntry.findById(req.params.id);
+        if (!entry) return res.status(404).json({ error: 'Catalog entry not found' });
+
+        const previousUrl = entry[field];
+        entry[field] = `${process.env.BACKEND_URL}/uploads/catalog-entries/${req.file.filename}`;
+        entry.updatedBy = req.admin?.email || 'unknown';
+        await entry.save();
+        if (previousUrl) {
+          fs.unlink(path.join(CATALOG_ENTRY_IMAGES_DIR, path.basename(previousUrl)), () => {});
+        }
+        res.status(201).json(entry);
+      } catch (err2) {
+        console.error(`[admin/catalog-entries ${slot}-image POST]`, err2);
+        res.status(500).json({ error: 'Failed to save image' });
+      }
+    });
+  });
+
+  router.delete(`/catalog-entries/:id/${slot}-image`, requireAdmin, async (req, res) => {
+    const entry = await CatalogEntry.findById(req.params.id);
+    if (!entry) return res.status(404).json({ error: 'Catalog entry not found' });
+
+    const previousUrl = entry[field];
+    entry[field] = null;
+    entry.updatedBy = req.admin?.email || 'unknown';
+    await entry.save();
+    if (previousUrl) {
+      fs.unlink(path.join(CATALOG_ENTRY_IMAGES_DIR, path.basename(previousUrl)), () => {});
+    }
+    res.json(entry);
+  });
+}
+catalogEntryImageSlotRoutes('front', 'frontImageUrl');
+catalogEntryImageSlotRoutes('back', 'backImageUrl');
+
+// -----------------------------------------------------------------------
 // Clients
 // -----------------------------------------------------------------------
 // Two ways to become a client now: admin creates the account directly
@@ -504,12 +725,21 @@ router.get('/clients', requireAdmin, async (req, res) => {
 
 // GET /api/admin/clients/:clientId -- one client's full detail, for the
 // admin's per-client detail page (see client-app... err, admin
-// ClientDetail.jsx). Same field whitelist as the list route above.
+// ClientDetail.jsx). Same field whitelist as the list route above, plus
+// bannerUrl/customDesignFrontUrl/cardShape -- needed for the AR tracking
+// target download (see profile.js's withPlanFlags / public.js's own
+// cardShape resolution for the client-facing equivalent of this).
 router.get('/clients/:clientId', requireAdmin, async (req, res) => {
   const client = await Client.findOne({ clientId: req.params.clientId })
-    .select('clientId fullName loginEmail phone gender dateOfBirth cardType logoUrl paid blocked chipEncoded encodedAt encodedBy createdAt');
+    .select(
+      'clientId fullName loginEmail phone gender dateOfBirth cardType logoUrl paid blocked chipEncoded encodedAt encodedBy createdAt bannerUrl customDesignFrontUrl cardVariantId'
+    );
   if (!client) return res.status(404).json({ error: 'Client not found' });
-  res.json(client);
+  const plan = await CardPlan.findOne({ key: client.cardType }).select('variants');
+  const clientObj = client.toObject();
+  const variant = plan?.variants?.find((v) => v._id.toString() === String(client.cardVariantId));
+  clientObj.cardShape = variant?.shape || 'horizontal';
+  res.json(clientObj);
 });
 
 // PATCH /api/admin/clients/:clientId/paid
@@ -1364,6 +1594,217 @@ router.delete('/magic-art/:id/:field', requireAdmin, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------
+// Magic Business Card -- one personal AR image+video pair PER CLIENT
+// (unlike Magic Art's shared gallery above), see MagicBusinessCard.js.
+// Admin-curated: only this route block ever writes it. Consumed by the
+// client themselves via GET /api/profile/magic-card (client-app's
+// MagicBusinessCard.jsx dashboard page, read-only there).
+// ---------------------------------------------------------------------
+const MAGIC_CARD_DIR = path.join(__dirname, '..', 'uploads', 'magic-cards');
+fs.mkdirSync(MAGIC_CARD_DIR, { recursive: true });
+const magicCardStorage = multer.diskStorage({
+  destination: MAGIC_CARD_DIR,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '';
+    cb(null, `${crypto.randomBytes(8).toString('hex')}${ext}`);
+  },
+});
+const magicCardImageUpload = multer({
+  storage: magicCardStorage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!THEME_MIME_TYPES.includes(file.mimetype)) {
+      return cb(new Error('Only JPEG, PNG, or WEBP images are allowed'));
+    }
+    cb(null, true);
+  },
+});
+const magicCardVideoUpload = multer({
+  storage: magicCardStorage,
+  limits: { fileSize: 80 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!MAGIC_ART_VIDEO_MIME_TYPES.includes(file.mimetype)) {
+      return cb(new Error('Only MP4 or MOV videos are allowed'));
+    }
+    cb(null, true);
+  },
+});
+function serializeMagicCard(doc) {
+  return {
+    _id: doc._id,
+    clientId: doc.clientId,
+    cardType: doc.cardType,
+    imageUrl: doc.imageUrl,
+    imageWidth: doc.imageWidth,
+    imageHeight: doc.imageHeight,
+    videoUrl: doc.videoUrl,
+    videoCropX: doc.videoCropX,
+    videoCropY: doc.videoCropY,
+    videoCropWidth: doc.videoCropWidth,
+    videoCropHeight: doc.videoCropHeight,
+    active: doc.active,
+    updatedBy: doc.updatedBy,
+  };
+}
+
+// One doc per client, implicitly created on first touch -- there's no
+// separate "+ Add" step like Magic Art has, since every client gets
+// exactly one (empty until admin uploads into it). Every route below
+// upserts rather than 404ing on a missing doc.
+async function findOrCreateMagicCard(clientId) {
+  return MagicBusinessCard.findOneAndUpdate(
+    { clientId },
+    { $setOnInsert: { clientId } },
+    { upsert: true, new: true }
+  );
+}
+
+// GET /api/admin/clients/:clientId/magic-card
+router.get('/clients/:clientId/magic-card', requireAdmin, async (req, res) => {
+  try {
+    const doc = await findOrCreateMagicCard(req.params.clientId);
+    res.json(serializeMagicCard(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/clients/:clientId/magic-card/card-type -- 'vertical' or
+// 'horizontal' (85x55mm either way, just rotated). Saved independently of
+// the image upload so the choice persists even before an image exists --
+// the admin UI gates image upload on this being set first.
+router.post('/clients/:clientId/magic-card/card-type', requireAdmin, async (req, res) => {
+  try {
+    const { cardType } = req.body;
+    if (cardType !== 'vertical' && cardType !== 'horizontal') {
+      return res.status(400).json({ error: "cardType must be 'vertical' or 'horizontal'" });
+    }
+    const doc = await findOrCreateMagicCard(req.params.clientId);
+    doc.cardType = cardType;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeMagicCard(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/clients/:clientId/magic-card/activate -- requires an
+// image plus EITHER a video or a 3D model (no name field here, unlike
+// Magic Art -- a personal card doesn't need one). Model is optional/
+// additive, not a replacement for video -- see MagicBusinessCard.js.
+router.post('/clients/:clientId/magic-card/activate', requireAdmin, async (req, res) => {
+  try {
+    const doc = await findOrCreateMagicCard(req.params.clientId);
+    if (!doc.imageUrl || !doc.videoUrl) {
+      return res.status(400).json({ error: 'This card needs both an image and a video before it can be activated.' });
+    }
+    doc.active = true;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeMagicCard(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/clients/:clientId/magic-card/deactivate
+router.post('/clients/:clientId/magic-card/deactivate', requireAdmin, async (req, res) => {
+  try {
+    const doc = await findOrCreateMagicCard(req.params.clientId);
+    doc.active = false;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeMagicCard(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/clients/:clientId/magic-card/image
+router.post(
+  '/clients/:clientId/magic-card/image',
+  requireAdmin,
+  magicCardImageUpload.single('image'),
+  async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+      const doc = await findOrCreateMagicCard(req.params.clientId);
+      const previousUrl = doc.imageUrl;
+      doc.imageUrl = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
+      doc.imageWidth = Number(req.body.width) || undefined;
+      doc.imageHeight = Number(req.body.height) || undefined;
+      doc.updatedBy = req.admin?.email || 'unknown';
+      await doc.save();
+      if (previousUrl) {
+        fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(previousUrl)), () => {});
+      }
+      res.json(serializeMagicCard(doc));
+    } catch (err) {
+      const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 50MB.' : err.message;
+      res.status(400).json({ error: message });
+    }
+  }
+);
+
+// POST /api/admin/clients/:clientId/magic-card/video
+router.post(
+  '/clients/:clientId/magic-card/video',
+  requireAdmin,
+  magicCardVideoUpload.single('video'),
+  async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+      const doc = await findOrCreateMagicCard(req.params.clientId);
+      const previousUrl = doc.videoUrl;
+      doc.videoUrl = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
+      doc.videoCropX = Number(req.body.cropX) || 0;
+      doc.videoCropY = Number(req.body.cropY) || 0;
+      doc.videoCropWidth = Number(req.body.cropWidth) || 1;
+      doc.videoCropHeight = Number(req.body.cropHeight) || 1;
+      doc.updatedBy = req.admin?.email || 'unknown';
+      await doc.save();
+      if (previousUrl) {
+        fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(previousUrl)), () => {});
+      }
+      res.json(serializeMagicCard(doc));
+    } catch (err) {
+      const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 80MB.' : err.message;
+      res.status(400).json({ error: message });
+    }
+  }
+);
+
+// DELETE /api/admin/clients/:clientId/magic-card/:field
+router.delete('/clients/:clientId/magic-card/:field', requireAdmin, async (req, res) => {
+  try {
+    const { field } = req.params;
+    if (field !== 'image' && field !== 'video') {
+      return res.status(400).json({ error: 'Unknown field' });
+    }
+    const doc = await findOrCreateMagicCard(req.params.clientId);
+    if (field === 'image') {
+      if (doc.imageUrl) fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(doc.imageUrl)), () => {});
+      doc.imageUrl = undefined;
+      doc.imageWidth = undefined;
+      doc.imageHeight = undefined;
+    } else {
+      if (doc.videoUrl) fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(doc.videoUrl)), () => {});
+      doc.videoUrl = undefined;
+      doc.videoCropX = undefined;
+      doc.videoCropY = undefined;
+      doc.videoCropWidth = undefined;
+      doc.videoCropHeight = undefined;
+    }
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeMagicCard(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------
 // Attributes -- admin-defined extra profile fields (e.g. "Telegram" under
 // Contact). Definitions only; each client's actual value lives in their
 // own Client.customAttributes map (see profile.js's PUT /me route).
@@ -1410,7 +1851,7 @@ router.get('/attributes', requireAdmin, async (req, res) => {
 
 router.post('/attributes', requireAdmin, async (req, res) => {
   try {
-    const { label, section, fieldType, order, arComponent } = req.body || {};
+    const { label, section, fieldType, order, arComponent, magicComponent } = req.body || {};
     if (!label || !String(label).trim()) return res.status(400).json({ error: 'Label is required' });
     const resolved = await resolveSection(section);
     if (!resolved) return res.status(400).json({ error: 'Section is required' });
@@ -1433,6 +1874,7 @@ router.post('/attributes', requireAdmin, async (req, res) => {
       fieldType: ['text', 'phone', 'url', 'email'].includes(fieldType) ? fieldType : 'text',
       order: Number.isFinite(order) ? order : 0,
       arComponent: Boolean(arComponent),
+      magicComponent: Boolean(magicComponent),
     });
     res.status(201).json(attribute);
   } catch (err) {
@@ -1442,7 +1884,7 @@ router.post('/attributes', requireAdmin, async (req, res) => {
 
 router.patch('/attributes/:id', requireAdmin, async (req, res) => {
   try {
-    const { label, section, fieldType, order, active, arComponent } = req.body || {};
+    const { label, section, fieldType, order, active, arComponent, magicComponent } = req.body || {};
     const updates = {};
     if (label !== undefined) updates.label = String(label).trim();
     if (section !== undefined) {
@@ -1460,6 +1902,7 @@ router.patch('/attributes/:id', requireAdmin, async (req, res) => {
     if (order !== undefined) updates.order = order;
     if (active !== undefined) updates.active = Boolean(active);
     if (arComponent !== undefined) updates.arComponent = Boolean(arComponent);
+    if (magicComponent !== undefined) updates.magicComponent = Boolean(magicComponent);
 
     const attribute = await AttributeDefinition.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
     if (!attribute) return res.status(404).json({ error: 'Attribute not found' });

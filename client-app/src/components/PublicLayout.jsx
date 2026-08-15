@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { clearSession, isLoggedIn } from '../api.js';
+import { api, clearSession, isLoggedIn } from '../api.js';
 import AuthModal from './AuthModal.jsx';
 import NotificationBell from './NotificationBell.jsx';
 
@@ -10,9 +10,21 @@ export default function PublicLayout() {
   const location = useLocation();
   const [authMode, setAuthMode] = useState(null); // 'login' | 'register' | null
   const [menuOpen, setMenuOpen] = useState(false);
+  // Same admin-toggled setting HomeSwitch reads for which hero to render
+  // -- here it just adds/removes .theme-orange on the header (see the
+  // "Header theme override" block in styles.css), so the nav's colors
+  // and background effects follow the same switch.
+  const [homeTheme, setHomeTheme] = useState('default');
   const navRef = useRef(null);
   const spotlightRef = useRef(null);
   const circuitSvgRef = useRef(null);
+
+  useEffect(() => {
+    api
+      .getSiteSettings()
+      .then((s) => setHomeTheme(s.homeTheme || 'default'))
+      .catch(() => {});
+  }, []);
 
   // Close the mobile dropdown on navigation (link clicks already do this
   // directly, but this also covers back/forward browser navigation) and on
@@ -111,7 +123,11 @@ export default function PublicLayout() {
 
   return (
     <div className="app-shell">
-      <header className="top-nav" ref={navRef} onMouseMove={handleNavMouseMove}>
+      <header
+        className={`top-nav${homeTheme === 'orange' ? ' theme-orange' : ''}`}
+        ref={navRef}
+        onMouseMove={handleNavMouseMove}
+      >
         <div className="top-nav-grid" aria-hidden="true" />
         <div className="top-nav-power-glow" aria-hidden="true" />
         <svg className="top-nav-circuit-svg" ref={circuitSvgRef} aria-hidden="true" preserveAspectRatio="none" />
@@ -161,7 +177,11 @@ export default function PublicLayout() {
                     </button>
                     <button
                       className="pill-outline"
-                      style={{ background: 'var(--holo-gradient)', color: '#06120f', border: 'none' }}
+                      style={{
+                        background: homeTheme === 'orange' ? 'linear-gradient(120deg, #ffcf5c, #ff8a3d, #ff5e1a)' : 'var(--holo-gradient)',
+                        color: homeTheme === 'orange' ? '#1a0e04' : '#06120f',
+                        border: 'none',
+                      }}
                       onClick={() => setAuthMode('register')}
                     >
                       Register

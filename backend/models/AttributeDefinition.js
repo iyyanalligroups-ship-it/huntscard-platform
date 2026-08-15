@@ -42,6 +42,16 @@ const attributeDefinitionSchema = new mongoose.Schema(
     // every other attribute/section icon does -- see getValidArIconKeys()
     // in routes/admin.js.
     arComponent: { type: Boolean, default: false },
+    // Same idea as arComponent above, but for the SEPARATE Magic Business
+    // Card AR system (see MagicCamera.jsx / MagicBusinessCard.jsx) -- an
+    // attribute can be flagged for either, both, or neither; they're
+    // independent booleans on purpose, since the two AR systems have
+    // their own shapes/positions and don't share an arrangement. Its
+    // position lives in MagicBusinessCard.magicElements (keyed by this
+    // doc's `key`, same "own Map, own system" pattern as arComponent's
+    // ArLayout.customElements), while the VALUE is still the same shared
+    // Client.customAttributes entry either flag reads from.
+    magicComponent: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

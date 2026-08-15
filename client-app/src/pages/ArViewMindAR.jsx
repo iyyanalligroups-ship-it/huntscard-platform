@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, API_URL } from '../api.js';
+import { api } from '../api.js';
 import { Compiler } from 'mind-ar/src/image-target/compiler.js';
 import { Controller } from 'mind-ar/src/image-target/controller.js';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { VIDEO_BASE_FRACTION, MODEL_IMAGE_BASE_FRACTION, cardAspectFor } from '../lib/arProjection.js';
+import { buildArTargetImageEl } from '../lib/arTargetImage.js';
 
 // Real, public-facing alternative to ArView.jsx's QR-corner (POSIT)
 // tracking -- tracks the whole card design (banner + QR composited
@@ -30,55 +33,6 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // Pre-compiling this server-side (or caching it) whenever a banner photo
 // changes is real follow-up work, deliberately deferred until this proves
 // out on real traffic first.
-
-async function buildTargetImage(profile) {
-  const bannerUrl = profile?.bannerUrl || profile?.customDesignFrontUrl || null;
-  // &engine=mindar so scanning this specific printed/on-screen target's QR
-  // (as a REAL QR code, not just as an AR tracking target) lands back on
-  // this same engine -- otherwise it opens the default ArView.jsx, which
-  // is exactly the mix-up that caused confusing "still unstable" reports
-  // earlier while actually testing the wrong page.
-  const qrUrl = `${API_URL}/api/public/qr/${profile.clientId}?type=ar&transparent=1&engine=mindar`;
-
-  function loadImage(src) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error(`Could not load image: ${src}`));
-      img.src = src;
-    });
-  }
-
-  const qrImg = await loadImage(qrUrl);
-  const bannerImg = bannerUrl ? await loadImage(bannerUrl).catch(() => null) : null;
-
-  const W = 800;
-  const H = 500;
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d');
-
-  if (bannerImg) {
-    ctx.drawImage(bannerImg, 0, 0, W, H);
-  } else {
-    ctx.fillStyle = '#f2f2f2';
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  const qrSize = Math.round(H * 0.7);
-  ctx.drawImage(qrImg, W - qrSize - 30, (H - qrSize) / 2, qrSize, qrSize);
-
-  const composited = new Image();
-  composited.src = canvas.toDataURL('image/png');
-  await new Promise((resolve, reject) => {
-    composited.onload = resolve;
-    composited.onerror = () => reject(new Error('Could not finalize the tracking target'));
-  });
-
-  return composited;
-}
 
 function buildPostMatrix(markerWidth, markerHeight) {
   const position = new THREE.Vector3(markerWidth / 2, markerWidth / 2 + (markerHeight - markerWidth) / 2, 0);
@@ -126,6 +80,7 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
   const streamRef = useRef(null);
   const arContentVideoRef = useRef(null);
   const pillLayoutRef = useRef([]);
+  const mixerRef = useRef(null); // AnimationMixer for the loaded model, if it has any clips
   const startedRef = useRef(false); // guards against double-start under StrictMode
 
   useEffect(() => {
@@ -152,6 +107,8 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
 
   function cleanup() {
     cancelAnimationFrame(rafRef.current);
+    mixerRef.current?.stopAllAction();
+    mixerRef.current = null;
     controllerRef.current?.stopProcessVideo();
     controllerRef.current?.dispose?.();
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -190,7 +147,7 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
   }, [profile, layout]);
 
   async function start() {
-    const targetImg = await buildTargetImage(profile);
+    const targetImg = await buildArTargetImageEl(profile, layout);
 
     const compiler = new Compiler();
     await compiler.compileImageTargets([targetImg], () => {});
@@ -237,6 +194,47 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
     anchorGroup.add(modelGroup, videoGroup);
 
     let postMatrix = new THREE.Matrix4();
+    const clock = new THREE.Clock();
+
+    // ---- Pose smoothing --------------------------------------------------
+    // mind-ar's own filterMinCF/filterBeta below already smooth the raw
+    // homography, but what's left over after that (marginal viewing
+    // angles, motion blur, brief partial occlusion of the card) still
+    // showed up as visible shake/"hanging" once turned into a world
+    // matrix and copied straight onto anchorGroup every update, since
+    // there was previously no smoothing at all at that layer.
+    //
+    // ArView.jsx (the older QR-corner/POSIT tracking engine) already
+    // solved exactly this problem for its own tracker: adaptive
+    // blend-in (barely-moved deltas are almost certainly detection
+    // noise and get damped hard; large deltas are real motion and get
+    // tracked quickly), outlier rejection (an implausible one-frame
+    // jump is more likely a bad read than the phone teleporting -- freeze
+    // on the last good pose and give the next frame a chance to confirm),
+    // and a short coast window so a single dropped frame doesn't flicker
+    // content on/off. This ports that same proven strategy onto mind-ar's
+    // decomposed world matrix (position/quaternion/scale) instead of
+    // POSIT's rotation-matrix/translation-vector pair.
+    const COAST_MS = 600; // keep the last-known pose rendered this long after tracking drops out, instead of flickering
+    const POSE_SMOOTHING_MIN = 0.05; // blend-in per update when the pose barely moved (treat as noise, damp hard)
+    const POSE_SMOOTHING_MAX = 0.3; // blend-in per update when the pose moved a lot (treat as real motion, track it)
+    // Both thresholds are in "anchorGroup units", where 1.0 == the
+    // tracked card's own width (see buildPostMatrix/layoutPctToLocal
+    // above) -- NOT the same unit system as ArView.jsx's QR-side-length
+    // thresholds, since this engine tracks the whole card rather than
+    // just the QR corner. Starting points; may need real-device tuning.
+    const JITTER_TRANSLATION_THRESHOLD = 0.01; // below this frame-to-frame move = sub-pixel detection noise
+    const MAX_PLAUSIBLE_JUMP = 0.15; // above this in one update = a bad read (motion blur/occlusion), not real movement
+    const MIN_PLAUSIBLE_ROTATION_SIMILARITY = 0.5; // |quat dot| below this = a >~120 degree flip in one update -- also a bad read
+
+    let smoothedPos = null; // THREE.Vector3 | null -- null means "no confirmed pose yet"
+    let smoothedQuat = null;
+    let smoothedScale = null;
+    let lastSeenAt = 0;
+    const rawMatrix = new THREE.Matrix4();
+    const rawPos = new THREE.Vector3();
+    const rawQuat = new THREE.Quaternion();
+    const rawScale = new THREE.Vector3();
 
     const controller = new Controller({
       inputWidth: video.videoWidth,
@@ -251,23 +249,43 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
       // nothing is actually wrong with the underlying tracking. This is
       // a middle ground between stock and that aggressive tuning --
       // still meaningfully smoother than default, less laggy than
-      // Mark 1's value. May need further real-device tuning either way.
+      // Mark 1's value. The pose-smoothing pass above is the second,
+      // independent layer that further stabilizes whatever noise this
+      // first layer still lets through.
       filterMinCF: 0.0005,
       filterBeta: 300,
       onUpdate: (data) => {
         if (data.type !== 'updateMatrix') return;
         const { worldMatrix } = data;
-        if (worldMatrix !== null) {
-          const m = new THREE.Matrix4();
-          m.fromArray(worldMatrix);
-          m.multiply(postMatrix);
-          anchorGroup.matrix.copy(m);
-          anchorGroup.visible = true;
-          setVisible(true);
+        if (worldMatrix === null) return; // no detection this update -- coast/expire is handled in renderLoop below, don't touch the smoothed pose
+        rawMatrix.fromArray(worldMatrix).multiply(postMatrix);
+        rawMatrix.decompose(rawPos, rawQuat, rawScale);
+
+        if (smoothedPos) {
+          const jumpDist = smoothedPos.distanceTo(rawPos);
+          const rotationSimilarity = Math.abs(smoothedQuat.dot(rawQuat));
+          if (jumpDist > MAX_PLAUSIBLE_JUMP || rotationSimilarity < MIN_PLAUSIBLE_ROTATION_SIMILARITY) {
+            // Implausible one-update jump -- freeze on the last good
+            // pose rather than snap to a probably-bad reading; the next
+            // update gets another chance to confirm before anything moves.
+            lastSeenAt = performance.now();
+            return;
+          }
+          const t = Math.min(1, jumpDist / JITTER_TRANSLATION_THRESHOLD);
+          const alpha = POSE_SMOOTHING_MIN + (POSE_SMOOTHING_MAX - POSE_SMOOTHING_MIN) * t;
+          smoothedPos.lerp(rawPos, alpha);
+          smoothedQuat.slerp(rawQuat, alpha);
+          smoothedScale.lerp(rawScale, alpha);
         } else {
-          anchorGroup.visible = false;
-          setVisible(false);
+          // First confirmed pose (or the first one after a real loss,
+          // see the expiry branch in renderLoop) -- snap straight to it
+          // instead of blending in from nothing.
+          smoothedPos = rawPos.clone();
+          smoothedQuat = rawQuat.clone();
+          smoothedScale = rawScale.clone();
         }
+        anchorGroup.matrix.compose(smoothedPos, smoothedQuat, smoothedScale);
+        lastSeenAt = performance.now();
       },
     });
     controllerRef.current = controller;
@@ -284,7 +302,17 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
     const [vlx, vly, vlz] = layoutPctToLocal(layout.video || { x: 50, y: -42 }, markerWidth, markerHeight);
     videoGroup.position.set(vlx, vly, vlz);
 
-    const MODEL_BASE_W = 0.25;
+    // Fractions of the card's own width -- shared with arProjection.js
+    // (used by ArScanPreview.jsx, the editor's live "Scan preview") so a
+    // saved layout renders at the same relative size here as it did while
+    // editing. This engine tracks the whole card rather than the QR
+    // corner, so it can't reuse that file's position math (layoutPctToLocal
+    // above is the whole-card equivalent), but "how wide is the banner
+    // relative to the card" is true regardless of coordinate frame -- these
+    // used to be separately hardcoded here (at 0.25, vs. the true 0.15 for
+    // the banner), which is exactly why the banner rendered visibly larger
+    // on a real scan than the editor's own preview showed it.
+    const MODEL_BASE_W = MODEL_IMAGE_BASE_FRACTION;
     if (profile.arModelUrl) {
       if (profile.arModelType === 'image') {
         new THREE.TextureLoader().load(
@@ -302,29 +330,38 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
           (err) => setModelError(`Could not load the 3D model image: ${err.message || err}`)
         );
       } else {
-        new GLTFLoader().load(
-          profile.arModelUrl,
-          (gltf) => {
-            const box = new THREE.Box3().setFromObject(gltf.scene);
-            const size = new THREE.Vector3();
-            box.getSize(size);
-            const maxDim = Math.max(size.x, size.y, size.z) || 1;
-            const autoFit = MODEL_BASE_W / maxDim;
-            gltf.scene.scale.setScalar(autoFit * (layout.modelScale ?? 1));
-            applyTransform(gltf.scene, layout.modelRotationX, layout.modelRotationY, layout.modelRotationZ, null);
-            modelGroup.add(gltf.scene);
-          },
-          undefined,
-          (err) => setModelError(`Could not load the 3D model: ${err.message || err}`)
-        );
+        const onModelLoaded = (scene, animations) => {
+          const box = new THREE.Box3().setFromObject(scene);
+          const size = new THREE.Vector3();
+          box.getSize(size);
+          const maxDim = Math.max(size.x, size.y, size.z) || 1;
+          const autoFit = MODEL_BASE_W / maxDim;
+          scene.scale.setScalar(autoFit * (layout.modelScale ?? 1));
+          applyTransform(scene, layout.modelRotationX, layout.modelRotationY, layout.modelRotationZ, null);
+          modelGroup.add(scene);
+          // Play any baked-in animation -- driven every frame from
+          // renderLoop below via the shared clock.
+          if (animations?.length) {
+            const mixer = new THREE.AnimationMixer(scene);
+            mixer.clipAction(animations[0]).play();
+            mixerRef.current = mixer;
+          }
+        };
+        const onModelError = (err) => setModelError(`Could not load the 3D model: ${err.message || err}`);
+
+        if (profile.arModelType === 'fbx') {
+          new FBXLoader().load(profile.arModelUrl, (fbx) => onModelLoaded(fbx, fbx.animations), undefined, onModelError);
+        } else {
+          new GLTFLoader().load(profile.arModelUrl, (gltf) => onModelLoaded(gltf.scene, gltf.animations), undefined, onModelError);
+        }
       }
     }
 
     const bannerUrl = profile.arBannerUrl || profile.arVideoUrl;
     const bannerType = profile.arBannerUrl ? profile.arBannerType : profile.arVideoUrl ? 'video' : profile.photoUrl ? 'image' : null;
     const resolvedBannerUrl = bannerUrl || profile.photoUrl;
-    const VIDEO_BASE_W = 0.25;
-    const VIDEO_BASE_H = VIDEO_BASE_W / (86 / 54);
+    const VIDEO_BASE_W = VIDEO_BASE_FRACTION; // see the MODEL_BASE_W comment above -- shared with arProjection.js, not hardcoded
+    const VIDEO_BASE_H = VIDEO_BASE_W / cardAspectFor(profile.cardShape); // shaped like the client's actual purchased card, not always landscape
     if (resolvedBannerUrl) {
       const addPlane = (texture) => {
         const geometry = new THREE.PlaneGeometry(VIDEO_BASE_W, VIDEO_BASE_H);
@@ -366,6 +403,26 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
 
     const ndcHelper = new THREE.Vector3();
     function renderLoop() {
+      // Coast through brief tracking dropouts (a frame or two of noise/
+      // occlusion) instead of hiding content the instant one update comes
+      // back empty -- same COAST_MS affordance as ArView.jsx's own coast
+      // timer, just driven from the render loop's real clock instead of a
+      // separate setInterval, since this loop already runs continuously.
+      const tracked = Boolean(smoothedPos) && performance.now() - lastSeenAt <= COAST_MS;
+      if (tracked !== anchorGroup.visible) {
+        anchorGroup.visible = tracked;
+        setVisible(tracked);
+      }
+      if (!tracked && smoothedPos) {
+        // Actually lost (past the coast window), not just a brief gap --
+        // drop the smoothed pose too, so re-acquiring later snaps to the
+        // fresh reading instead of slowly blending in from a stale one.
+        smoothedPos = null;
+        smoothedQuat = null;
+        smoothedScale = null;
+      }
+
+      mixerRef.current?.update(clock.getDelta());
       renderer.render(scene, camera);
       if (anchorGroup.visible && pillLayoutRef.current.length) {
         const cw = window.innerWidth;
@@ -455,6 +512,9 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
             const def = arComponents.find((c) => c.key === key);
             if (!def) return null;
             const href = profile?.customAttributes?.[key];
+            // No value filled in for this admin-defined AR link -- don't
+            // show a dead pill for it.
+            if (!href) return null;
             const el = { label: def.label || key, color: '#22d3ee' };
             const content = pillContent(el, icons?.[key]);
             return (
@@ -475,6 +535,9 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
           const iconUrl = icons?.[el.key];
           const isSocial = el.key === 'social';
           const href = el.key === 'contact' ? contactRows[0]?.href : linkFor[el.key] || undefined;
+          // Nothing filled in for this built-in slot -- skip the dead
+          // pill entirely (same rule as the custom: branch above).
+          if (isSocial ? !socialLinks.length : !href) return null;
           const content = pillContent(el, iconUrl);
 
           return (

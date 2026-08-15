@@ -386,7 +386,7 @@ export default function HuntsEngineTest() {
       const bannerType = profile.arBannerUrl ? profile.arBannerType : profile.arVideoUrl ? 'video' : profile.photoUrl ? 'image' : null;
       const resolvedBannerUrl = bannerUrl || profile.photoUrl;
       const VIDEO_BASE_W = 0.25;
-      const VIDEO_BASE_H = VIDEO_BASE_W / (86 / 54); // same ID-1 card aspect ArView.jsx's VIDEO_PLANE_BASE_H uses
+      const VIDEO_BASE_H = VIDEO_BASE_W / (85.6 / 54); // same ID-1 card aspect arProjection.js's CARD_ASPECT uses
       if (resolvedBannerUrl) {
         const addPlane = (texture) => {
           const geometry = new THREE.PlaneGeometry(VIDEO_BASE_W, VIDEO_BASE_H);

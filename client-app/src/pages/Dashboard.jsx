@@ -198,12 +198,11 @@ export default function Dashboard() {
     <div>
       <Link
         to="/dashboard/settings"
+        className="dash-edit-profile-btn"
         style={{
           display: 'block',
           textAlign: 'center',
           textDecoration: 'none',
-          background: 'var(--holo-gradient)',
-          color: '#06120f',
           fontWeight: 700,
           fontSize: 14,
           padding: 13,

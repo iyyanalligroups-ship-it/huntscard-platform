@@ -2,7 +2,7 @@ import { Component, lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { isLoggedIn } from './api.js';
 import PublicLayout from './components/PublicLayout.jsx';
-import Home from './pages/Home.jsx';
+import Home from './pages/HomeSwitch.jsx'; // renders Home.jsx or HomeD1.jsx per the admin-toggled theme setting
 import Shop from './pages/Shop.jsx';
 import Catalog from './pages/Catalog.jsx';
 import ContactUs from './pages/ContactUs.jsx';
@@ -22,6 +22,7 @@ import Contacts from './pages/Contacts.jsx';
 import Appointments from './pages/Appointments.jsx';
 import PublicProfile from './pages/PublicProfile.jsx';
 import MagicArt from './pages/MagicArt.jsx';
+import MagicBusinessCard from './pages/MagicBusinessCard.jsx';
 
 // Lazy-loaded ("Mark 1" experiment) -- pulls in mind-ar/@tensorflow/tfjs,
 // a heavy and still-unproven dependency. Loading it eagerly like every
@@ -111,6 +112,38 @@ export default function App() {
           PublicLayout's marketing-site header). */}
       <Route path="/c/:clientId" element={<PublicProfile />} />
 
+      {/* Magic Camera -- moved here from /dashboard/magic-camera so it's
+          reachable with NO login at all (its data, GET /api/public/magic-art,
+          was already unauthenticated -- only this route was gated). Standalone
+          like /c/:clientId above, not wrapped in PublicLayout's marketing
+          header, since this is a full camera/AR experience. Logged-in users
+          reach the SAME url from the dashboard nav (see Layout.jsx). */}
+      <Route
+        path="/magic-camera"
+        element={
+          <MagicCameraErrorBoundary>
+            <Suspense fallback={<p className="subtitle">Loading…</p>}>
+              <MagicCamera />
+            </Suspense>
+          </MagicCameraErrorBoundary>
+        }
+      />
+      {/* Same page, scoped to one client -- reached from that client's own
+          AR QR via the "choose AR or Magic" screen in PublicProfile.jsx.
+          MagicCamera.jsx reads :clientId itself (useParams) to compile/
+          track just their one Magic Business Card instead of the full
+          gallery the bare /magic-camera route above still scans. */}
+      <Route
+        path="/magic-camera/:clientId"
+        element={
+          <MagicCameraErrorBoundary>
+            <Suspense fallback={<p className="subtitle">Loading…</p>}>
+              <MagicCamera />
+            </Suspense>
+          </MagicCameraErrorBoundary>
+        }
+      />
+
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -145,16 +178,7 @@ export default function App() {
             </HuntsEngineTestErrorBoundary>
           }
         />
-        <Route
-          path="magic-camera"
-          element={
-            <MagicCameraErrorBoundary>
-              <Suspense fallback={<p className="subtitle">Loading…</p>}>
-                <MagicCamera />
-              </Suspense>
-            </MagicCameraErrorBoundary>
-          }
-        />
+        <Route path="magic-business-card" element={<MagicBusinessCard />} />
         <Route path="appointments" element={<Appointments />} />
         <Route path="profile" element={<Dashboard />} />
         <Route path="settings" element={<Profile />} />

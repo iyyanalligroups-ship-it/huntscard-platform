@@ -4,13 +4,15 @@ import jsQR from 'jsqr';
 import { POS } from '../lib/posit.js';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { api } from '../api.js';
 import {
   MODEL_SIZE,
   VIDEO_PLANE_BASE_W,
-  VIDEO_PLANE_BASE_H,
+  videoPlaneBaseHFor,
   MODEL_IMAGE_BASE_W,
   ASSUMED_FOV_DEG,
+  cardAspectFor,
   toLocalOffset,
   heightToLocalZ,
   projectLocalPoint,
@@ -192,8 +194,11 @@ export default function ArView({ clientId, cardNumber }) {
   const loadedModelRef = useRef(null); // the loaded gltf.scene, kept here in case it arrives before threeRef does
   const autoFitScaleRef = useRef(1); // baseline targetSize/maxDim computed once at load -- lets the transform effect below re-apply modelScale without re-deriving it from an already-scaled bounding box
   const videoPlaneRef = useRef(null); // the THREE.Mesh for the AR Video/Photo 3D card, once arVideoUrl/photoUrl exists
+  const mixerRef = useRef(null); // AnimationMixer for the loaded model, if it has any clips
+  const clockRef = useRef(null); // shared THREE.Clock, created once the camera effect starts ticking
   const arContentVideoRef = useRef(null); // off-DOM <video> element feeding the VideoTexture, if arVideoUrl is set (not the camera-feed video -- that's videoRef)
   const layoutRef = useRef(null); // mirrors `layout` state -- needed inside the camera effect's stable closure, see applyCorners
+  const cardAspectRef = useRef(cardAspectFor(undefined)); // mirrors cardAspectFor(profile?.cardShape) -- same reason as layoutRef, see updateModel/updateVideoPlane
 
   const [profile, setProfile] = useState(null);
   const [layout, setLayout] = useState(null);
@@ -233,6 +238,10 @@ export default function ArView({ clientId, cardNumber }) {
   useEffect(() => {
     layoutRef.current = layout;
   }, [layout]);
+
+  useEffect(() => {
+    cardAspectRef.current = cardAspectFor(profile?.cardShape);
+  }, [profile?.cardShape]);
 
   // This view fetches its layout once on mount -- fine for a fresh scan,
   // but a tab left open across an edit-in-another-tab session (very much
@@ -289,6 +298,8 @@ export default function ArView({ clientId, cardNumber }) {
     // exactly like "my new model didn't take" even though it's actually
     // just still loading (or genuinely failed, surfaced below).
     loadedModelRef.current = null;
+    mixerRef.current?.stopAllAction();
+    mixerRef.current = null;
     if (threeRef.current) threeRef.current.modelGroup.clear();
     setModelError('');
     if (!profile?.arModelUrl) return;
@@ -330,35 +341,48 @@ export default function ArView({ clientId, cardNumber }) {
         }
       );
     } else {
-      new GLTFLoader().load(
-        profile.arModelUrl,
-        (gltf) => {
-          if (cancelled) return;
-          // Normalize scale roughly to the card's own unit scale so an
-          // arbitrarily-authored GLB (could be modeled in meters, cm,
-          // anything) shows up at a reasonable size relative to the QR --
-          // not physically accurate, just a sane default. Computed once here
-          // (before any scale is applied) and kept in autoFitScaleRef so the
-          // transform effect below can re-derive scale later without ever
-          // measuring an already-scaled bounding box.
-          const box = new THREE.Box3().setFromObject(gltf.scene);
-          const size = box.getSize(new THREE.Vector3());
-          const maxDim = Math.max(size.x, size.y, size.z) || 1;
-          autoFitScaleRef.current = MODEL_IMAGE_BASE_W / maxDim;
+      // Shared onModelLoaded for both loaders below -- GLTFLoader hands
+      // back gltf.scene, FBXLoader hands back the object3D directly, but
+      // from here on (autofit, applyModelTransform, adding to
+      // modelGroup) they're both just an Object3D and treated identically.
+      const onModelLoaded = (scene, animations) => {
+        if (cancelled) return;
+        // Normalize scale roughly to the card's own unit scale so an
+        // arbitrarily-authored model (could be modeled in meters, cm,
+        // anything) shows up at a reasonable size relative to the QR --
+        // not physically accurate, just a sane default. Computed once here
+        // (before any scale is applied) and kept in autoFitScaleRef so the
+        // transform effect below can re-derive scale later without ever
+        // measuring an already-scaled bounding box.
+        const box = new THREE.Box3().setFromObject(scene);
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        autoFitScaleRef.current = MODEL_IMAGE_BASE_W / maxDim;
 
-          loadedModelRef.current = gltf.scene;
-          applyModelTransform();
-          if (threeRef.current) {
-            threeRef.current.modelGroup.clear();
-            threeRef.current.modelGroup.add(gltf.scene);
-          }
-        },
-        undefined,
-        (err) => {
-          console.error('[ArView] failed to load 3D model', err);
-          if (!cancelled) setModelError('3D model failed to load: ' + (err?.message || 'unknown error'));
+        loadedModelRef.current = scene;
+        applyModelTransform();
+        if (threeRef.current) {
+          threeRef.current.modelGroup.clear();
+          threeRef.current.modelGroup.add(scene);
         }
-      );
+        // Play any baked-in animation -- driven every frame from the
+        // camera/tick effect's render call below, via clockRef.
+        if (animations?.length) {
+          const mixer = new THREE.AnimationMixer(scene);
+          mixer.clipAction(animations[0]).play();
+          mixerRef.current = mixer;
+        }
+      };
+      const onModelError = (err) => {
+        console.error('[ArView] failed to load 3D model', err);
+        if (!cancelled) setModelError('3D model failed to load: ' + (err?.message || 'unknown error'));
+      };
+
+      if (profile?.arModelType === 'fbx') {
+        new FBXLoader().load(profile.arModelUrl, (fbx) => onModelLoaded(fbx, fbx.animations), undefined, onModelError);
+      } else {
+        new GLTFLoader().load(profile.arModelUrl, (gltf) => onModelLoaded(gltf.scene, gltf.animations), undefined, onModelError);
+      }
     }
 
     return () => {
@@ -407,7 +431,7 @@ export default function ArView({ clientId, cardNumber }) {
 
     function addPlane(texture) {
       if (cancelled) return;
-      const geometry = new THREE.PlaneGeometry(VIDEO_PLANE_BASE_W, VIDEO_PLANE_BASE_H);
+      const geometry = new THREE.PlaneGeometry(VIDEO_PLANE_BASE_W, videoPlaneBaseHFor(cardAspectFor(profile?.cardShape)));
       const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide });
       const mesh = new THREE.Mesh(geometry, material);
       videoPlaneRef.current = mesh;
@@ -448,7 +472,7 @@ export default function ArView({ clientId, cardNumber }) {
     return () => {
       cancelled = true;
     };
-  }, [profile?.arBannerUrl, profile?.arBannerType, profile?.arVideoUrl, profile?.photoUrl]);
+  }, [profile?.arBannerUrl, profile?.arBannerType, profile?.arVideoUrl, profile?.photoUrl, profile?.cardShape]);
 
   useEffect(() => {
     let stream;
@@ -486,6 +510,7 @@ export default function ArView({ clientId, cardNumber }) {
             dirLight.position.set(1, 1, 1);
             scene.add(dirLight);
             threeRef.current = { renderer, scene, camera, modelGroup, videoGroup };
+            clockRef.current = new THREE.Clock();
             if (loadedModelRef.current) modelGroup.add(loadedModelRef.current);
             if (videoPlaneRef.current) videoGroup.add(videoPlaneRef.current);
           } catch (err) {
@@ -525,8 +550,8 @@ export default function ArView({ clientId, cardNumber }) {
       if (!three || !three.modelGroup.children.length) return;
       const qrPos = layoutRef.current?.qr || { x: 50, y: 50 };
       const modelPos = layoutRef.current?.model || { x: 50, y: 35 };
-      const [lx, ly] = toLocalOffset(modelPos, qrPos);
-      const lz = heightToLocalZ(modelPos.z);
+      const [lx, ly] = toLocalOffset(modelPos, qrPos, cardAspectRef.current);
+      const lz = heightToLocalZ(modelPos.z, cardAspectRef.current);
       const move = [0, 1, 2].map(
         (j) => translation[j] + rotation[j][0] * lx + rotation[j][1] * ly + rotation[j][2] * lz
       );
@@ -544,8 +569,8 @@ export default function ArView({ clientId, cardNumber }) {
       if (!three || !three.videoGroup.children.length) return;
       const qrPos = layoutRef.current?.qr || { x: 50, y: 50 };
       const videoPos = layoutRef.current?.video || { x: 50, y: 20 };
-      const [lx, ly] = toLocalOffset(videoPos, qrPos);
-      const lz = heightToLocalZ(videoPos.z);
+      const [lx, ly] = toLocalOffset(videoPos, qrPos, cardAspectRef.current);
+      const lz = heightToLocalZ(videoPos.z, cardAspectRef.current);
       const move = [0, 1, 2].map(
         (j) => translation[j] + rotation[j][0] * lx + rotation[j][1] * ly + rotation[j][2] * lz
       );
@@ -643,6 +668,7 @@ export default function ArView({ clientId, cardNumber }) {
       // this only actually draws when at least one of them has content.
       const three = threeRef.current;
       if (three && (three.modelGroup.children.length || three.videoGroup.children.length)) {
+        mixerRef.current?.update(clockRef.current.getDelta());
         three.renderer.render(three.scene, three.camera);
       }
       lastSeenRef.current = performance.now();
@@ -731,6 +757,12 @@ export default function ArView({ clientId, cardNumber }) {
     return () => clearInterval(id);
   }, [visible]);
 
+  // The physical card's actual shape (see arProjection.js's cardAspectFor)
+  // -- needed by the render-time toLocalOffset calls below (updateModel/
+  // updateVideoPlane inside the camera effect use cardAspectRef instead,
+  // since they run in a stable closure that doesn't re-render on its own).
+  const cardAspect = cardAspectFor(profile?.cardShape);
+
   const contactRows = [
     profile?.phone && { icon: '☎', label: profile.phone, href: `tel:${profile.phone}` },
     profile?.publicEmail && { icon: '✉', label: profile.publicEmail, href: `mailto:${profile.publicEmail}` },
@@ -789,7 +821,7 @@ export default function ArView({ clientId, cardNumber }) {
           {ELEMENTS.map((el) => {
             const pos = layout[el.key] || { x: 50, y: 50 };
             const qrPos = layout.qr || { x: 50, y: 50 };
-            const local = [...toLocalOffset(pos, qrPos), 0];
+            const local = [...toLocalOffset(pos, qrPos, cardAspect), 0];
             const canvas = canvasRef.current;
             const proj = projectLocalPoint(pose, focalPxRef.current, canvas.width / 2, canvas.height / 2, local);
             if (!proj) return null;
@@ -808,6 +840,13 @@ export default function ArView({ clientId, cardNumber }) {
             const iconUrl = icons?.[el.key];
             const isSocial = el.key === 'social';
             const href = el.key === 'contact' ? contactRows[0]?.href : linkFor[el.key] || undefined;
+            // Nothing filled in for this slot -- an icon with no real
+            // content behind it isn't useful to a scanner, so skip it
+            // entirely rather than showing a dead pill. 'video' is
+            // covered above (hasBannerMedia false means no media at all).
+            const hasValue =
+              el.key === 'video' ? false : isSocial ? socialLinks.length > 0 : Boolean(href);
+            if (!hasValue) return null;
 
             const pill = iconUrl ? (
               <img src={iconUrl} alt={el.label} style={{ width: '60%', height: '60%', objectFit: 'contain' }} />
@@ -932,16 +971,20 @@ export default function ArView({ clientId, cardNumber }) {
               built-in contact/portfolio/social/huntsworld pills above,
               since that's all a simple "icon + link" component needs.
               The client's own value for each lives in
-              profile.arComponentValues, keyed the same way. */}
+              profile.customAttributes, keyed the same way. */}
           {arComponents.map((c) => {
             const pos = layout.customElements?.[c.key] || { x: 50, y: 50 };
             const qrPos = layout.qr || { x: 50, y: 50 };
-            const local = [...toLocalOffset(pos, qrPos), 0];
+            const local = [...toLocalOffset(pos, qrPos, cardAspect), 0];
             const canvas = canvasRef.current;
             const proj = projectLocalPoint(pose, focalPxRef.current, canvas.width / 2, canvas.height / 2, local);
             if (!proj) return null;
             const iconUrl = icons?.[c.key];
-            const href = profile?.arComponentValues?.[c.key] || undefined;
+            const href = profile?.customAttributes?.[c.key] || undefined;
+            // Same "no value, no pill" rule as the built-in ELEMENTS loop
+            // above -- an admin-defined AR link the client never filled in
+            // shouldn't show up in the scan at all.
+            if (!href) return null;
 
             const pill = iconUrl ? (
               <img src={iconUrl} alt={c.label} style={{ width: '60%', height: '60%', objectFit: 'contain' }} />

@@ -8,6 +8,7 @@ const { nanoid } = require('nanoid');
 const Razorpay = require('razorpay');
 const { requireAuth } = require('../middleware/auth');
 const Client = require('../models/Client');
+const MagicBusinessCard = require('../models/MagicBusinessCard');
 const CardRequest = require('../models/CardRequest');
 const CardPlan = require('../models/CardPlan');
 const Card = require('../models/Card');
@@ -129,24 +130,25 @@ const arBannerUpload = multer({
   fileFilter: arBannerFileFilter,
 });
 
-// "3D Model" slot -- EITHER a real .glb model OR a flat cutout image
+// "3D Model" slot -- a real .glb or .fbx model OR a flat cutout image
 // (arModelType records which, set below from whichever check matched).
-// .glb is gated on file EXTENSION, not mimetype -- unlike images,
+// .glb/.fbx are gated on file EXTENSION, not mimetype -- unlike images,
 // browsers/OSes are inconsistent about what (if any) MIME type they
-// report for .glb, so mimetype sniffing here would reject legitimate
-// files as often as it'd catch bad ones. Images use the normal mimetype
-// check, same as every other image upload in this file.
+// report for 3D model files, so mimetype sniffing here would reject
+// legitimate files as often as it'd catch bad ones. Images use the
+// normal mimetype check, same as every other image upload in this file.
+const MODEL_EXTENSIONS = ['.glb', '.fbx'];
 const glbOrImageFileFilter = (req, file, cb) => {
-  const isGlb = path.extname(file.originalname).toLowerCase() === '.glb';
+  const isModel = MODEL_EXTENSIONS.includes(path.extname(file.originalname).toLowerCase());
   const isImage = ALLOWED_MIME_TYPES.includes(file.mimetype);
-  if (!isGlb && !isImage) {
-    return cb(new Error('Only .glb 3D model files or JPEG/PNG/WEBP images are allowed'));
+  if (!isModel && !isImage) {
+    return cb(new Error('Only .glb/.fbx 3D model files or JPEG/PNG/WEBP images are allowed'));
   }
   cb(null, true);
 };
 const arModelUpload = multer({
   storage: makeStorage(AR_MODELS_DIR),
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB -- GLBs vary a lot with texture complexity
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB -- GLBs/FBXs vary a lot with texture complexity
   fileFilter: glbOrImageFileFilter,
 });
 
@@ -171,10 +173,16 @@ function uploadErrorMessage(err, maxSizeLabel) {
 // /me's own computation exactly, including the customAttributes Map fix
 // (see that route for why).
 async function withPlanFlags(client) {
-  const plan = await CardPlan.findOne({ key: client.cardType }).select('arEnabled zingEnabled');
+  const plan = await CardPlan.findOne({ key: client.cardType }).select('arEnabled zingEnabled variants');
   const clientObj = client.toObject();
   clientObj.arEnabled = !!plan?.arEnabled;
   clientObj.zingEnabled = !!plan?.zingEnabled;
+  // The physical card's actual shape -- picked at purchase time (see
+  // CardPlanVariantSchema.shape) and needed by the AR layout system to
+  // size/orient itself to match instead of always assuming landscape. See
+  // the matching computation in public.js's GET /profile/:clientId.
+  const variant = plan?.variants?.find((v) => v._id.toString() === String(client.cardVariantId));
+  clientObj.cardShape = variant?.shape || 'horizontal';
   clientObj.customAttributes = Object.fromEntries(client.customAttributes || []);
   return clientObj;
 }
@@ -371,7 +379,8 @@ router.post('/ar-model', requireAuth, (req, res) => {
       }
 
       const arModelUrl = `${process.env.BACKEND_URL}/uploads/ar-models/${req.file.filename}`;
-      const arModelType = path.extname(req.file.originalname).toLowerCase() === '.glb' ? 'glb' : 'image';
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      const arModelType = ext === '.glb' ? 'glb' : ext === '.fbx' ? 'fbx' : 'image';
       const client = await Client.findOneAndUpdate(
         { clientId: req.user.clientId },
         { $set: { arModelUrl, arModelType } },
@@ -431,6 +440,255 @@ router.get('/me', requireAuth, async (req, res) => {
   if (!client) return res.status(404).json({ error: 'Client not found' });
 
   res.json(await withPlanFlags(client));
+});
+
+// Magic Business Card -- self-service now (client can edit their own,
+// same as admin's ClientDetail.jsx can -- both operate on the exact same
+// doc/files, scoped here by req.user.clientId instead of an admin-
+// supplied :clientId param). Files land in the SAME uploads/magic-cards/
+// dir admin's routes (backend/routes/admin.js) already use, via the
+// SAME makeStorage() helper this file already uses for photo/banner/etc.
+const MAGIC_CARDS_DIR = path.join(__dirname, '..', 'uploads', 'magic-cards');
+fs.mkdirSync(MAGIC_CARDS_DIR, { recursive: true });
+const magicCardImageUpload = multer({
+  storage: makeStorage(MAGIC_CARDS_DIR),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: imageFileFilter,
+});
+const magicCardVideoUpload = multer({
+  storage: makeStorage(MAGIC_CARDS_DIR),
+  limits: { fileSize: 80 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_VIDEO_MIME_TYPES.includes(file.mimetype)) {
+      return cb(new Error('Only MP4 or MOV videos are allowed'));
+    }
+    cb(null, true);
+  },
+});
+function serializeMyMagicCard(doc) {
+  return {
+    cardType: doc.cardType || null,
+    imageUrl: doc.imageUrl || null,
+    imageWidth: doc.imageWidth,
+    imageHeight: doc.imageHeight,
+    videoUrl: doc.videoUrl || null,
+    videoCrop: {
+      x: doc.videoCropX ?? 0,
+      y: doc.videoCropY ?? 0,
+      width: doc.videoCropWidth ?? 1,
+      height: doc.videoCropHeight ?? 1,
+    },
+    active: Boolean(doc.active),
+    qrPosition: { x: doc.qrX ?? 82, y: doc.qrY ?? 82 },
+    componentPositions: {
+      contact: { x: doc.contactX ?? 20, y: doc.contactY ?? 120, z: doc.contactZ ?? 0, rotation: doc.contactRotation ?? 0 },
+      portfolio: { x: doc.portfolioX ?? 50, y: doc.portfolioY ?? 120, z: doc.portfolioZ ?? 0, rotation: doc.portfolioRotation ?? 0 },
+      social: { x: doc.socialX ?? 80, y: doc.socialY ?? 120, z: doc.socialZ ?? 0, rotation: doc.socialRotation ?? 0 },
+      huntsworld: { x: doc.huntsworldX ?? 50, y: doc.huntsworldY ?? 145, z: doc.huntsworldZ ?? 0, rotation: doc.huntsworldRotation ?? 0 },
+    },
+    // Admin-defined custom components (see AttributeDefinition.magicComponent)
+    // -- flattened from the Map the same way ArLayout.customElements is
+    // for the main AR Layout system.
+    magicElements: Object.fromEntries(doc.magicElements || []),
+  };
+}
+
+async function findOrCreateMyMagicCard(clientId) {
+  return MagicBusinessCard.findOneAndUpdate(
+    { clientId },
+    { $setOnInsert: { clientId } },
+    { upsert: true, new: true }
+  );
+}
+
+// GET /api/profile/magic-card -- the logged-in client's own Magic
+// Business Card (see backend/models/MagicBusinessCard.js). Returns the
+// CURRENT state regardless of active/draft status -- this used to filter
+// to active-only back when only admin could edit (hiding an in-progress
+// admin draft from a client who had no way to affect it), but now the
+// client is an editor of their own card too, so hiding their own draft
+// from themselves makes no sense. `active` in the response drives the
+// dashboard's publish/unpublish control instead.
+router.get('/magic-card', requireAuth, async (req, res) => {
+  const doc = await findOrCreateMyMagicCard(req.user.clientId);
+  res.json(serializeMyMagicCard(doc));
+});
+
+// POST /api/profile/magic-card/card-type -- 'vertical' or 'horizontal'
+// (85x55mm either way, just rotated). Chosen before the image, since it
+// determines the crop aspect ratio the image gets locked to.
+router.post('/magic-card/card-type', requireAuth, async (req, res) => {
+  try {
+    const { cardType } = req.body;
+    if (cardType !== 'vertical' && cardType !== 'horizontal') {
+      return res.status(400).json({ error: "cardType must be 'vertical' or 'horizontal'" });
+    }
+    const doc = await findOrCreateMyMagicCard(req.user.clientId);
+    doc.cardType = cardType;
+    await doc.save();
+    res.json(serializeMyMagicCard(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/profile/magic-card/qr-position -- where the client dragged
+// the AR QR onto their own card design (see MagicBusinessCard.jsx),
+// percentages 0-100 on each axis. Composited into the printable download
+// at this spot, so this can be saved/changed independently of (and more
+// often than) the image/video themselves.
+router.post('/magic-card/qr-position', requireAuth, async (req, res) => {
+  try {
+    const { x, y } = req.body;
+    if (typeof x !== 'number' || typeof y !== 'number' || x < 0 || x > 100 || y < 0 || y > 100) {
+      return res.status(400).json({ error: 'x and y must be numbers between 0 and 100' });
+    }
+    const doc = await findOrCreateMyMagicCard(req.user.clientId);
+    doc.qrX = x;
+    doc.qrY = y;
+    await doc.save();
+    res.json(serializeMyMagicCard(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const MAGIC_CARD_BUILTIN_COMPONENT_KEYS = ['contact', 'portfolio', 'social', 'huntsworld'];
+// POST /api/profile/magic-card/component-position -- where the client
+// placed one AR component relative to their tracked card, in
+// MagicCamera.jsx's own 3D scene -- completely separate from the main AR
+// Layout system's positions (only the underlying link values are shared,
+// see that system's own `layout.contact` etc.). `key` is either one of
+// the 3 built-ins (own dedicated x/y/z fields) or an admin-defined
+// custom component's key (see AttributeDefinition.magicComponent),
+// stored in the magicElements Map instead -- same "built-in fields +
+// dynamic Map for the rest" split the main AR Layout system already uses
+// between its own named fields and ArLayout.customElements.
+router.post('/magic-card/component-position', requireAuth, async (req, res) => {
+  try {
+    const { key, x, y, z, rotation } = req.body;
+    if (typeof x !== 'number' || typeof y !== 'number') {
+      return res.status(400).json({ error: 'x and y must be numbers' });
+    }
+    if (z !== undefined && (typeof z !== 'number' || z < 0 || z > 100)) {
+      return res.status(400).json({ error: 'z must be a number between 0 and 100' });
+    }
+    if (rotation !== undefined && (typeof rotation !== 'number' || rotation < -180 || rotation > 180)) {
+      return res.status(400).json({ error: 'rotation must be a number between -180 and 180' });
+    }
+    const doc = await findOrCreateMyMagicCard(req.user.clientId);
+    if (MAGIC_CARD_BUILTIN_COMPONENT_KEYS.includes(key)) {
+      doc[`${key}X`] = x;
+      doc[`${key}Y`] = y;
+      if (z !== undefined) doc[`${key}Z`] = z;
+      if (rotation !== undefined) doc[`${key}Rotation`] = rotation;
+    } else {
+      const validKey = await AttributeDefinition.exists({ key, active: true, magicComponent: true });
+      if (!validKey) return res.status(400).json({ error: 'Unknown or inactive Magic component key' });
+      if (!doc.magicElements) doc.magicElements = new Map();
+      const existing = doc.magicElements.get(key);
+      doc.magicElements.set(key, {
+        x,
+        y,
+        z: z ?? existing?.z ?? 0,
+        rotation: rotation ?? existing?.rotation ?? 0,
+      });
+    }
+    await doc.save();
+    res.json(serializeMyMagicCard(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/profile/magic-card/activate -- requires both an image and a
+// video (same rule as admin's version of this route).
+router.post('/magic-card/activate', requireAuth, async (req, res) => {
+  try {
+    const doc = await findOrCreateMyMagicCard(req.user.clientId);
+    if (!doc.imageUrl || !doc.videoUrl) {
+      return res.status(400).json({ error: 'Add both an image and a video before activating.' });
+    }
+    doc.active = true;
+    await doc.save();
+    res.json(serializeMyMagicCard(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/magic-card/deactivate', requireAuth, async (req, res) => {
+  try {
+    const doc = await findOrCreateMyMagicCard(req.user.clientId);
+    doc.active = false;
+    await doc.save();
+    res.json(serializeMyMagicCard(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/magic-card/image', requireAuth, magicCardImageUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const doc = await findOrCreateMyMagicCard(req.user.clientId);
+    const previousUrl = doc.imageUrl;
+    doc.imageUrl = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
+    doc.imageWidth = Number(req.body.width) || undefined;
+    doc.imageHeight = Number(req.body.height) || undefined;
+    await doc.save();
+    if (previousUrl) fs.unlink(path.join(MAGIC_CARDS_DIR, path.basename(previousUrl)), () => {});
+    res.json(serializeMyMagicCard(doc));
+  } catch (err) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 50MB.' : err.message;
+    res.status(400).json({ error: message });
+  }
+});
+
+router.post('/magic-card/video', requireAuth, magicCardVideoUpload.single('video'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const doc = await findOrCreateMyMagicCard(req.user.clientId);
+    const previousUrl = doc.videoUrl;
+    doc.videoUrl = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
+    doc.videoCropX = Number(req.body.cropX) || 0;
+    doc.videoCropY = Number(req.body.cropY) || 0;
+    doc.videoCropWidth = Number(req.body.cropWidth) || 1;
+    doc.videoCropHeight = Number(req.body.cropHeight) || 1;
+    await doc.save();
+    if (previousUrl) fs.unlink(path.join(MAGIC_CARDS_DIR, path.basename(previousUrl)), () => {});
+    res.json(serializeMyMagicCard(doc));
+  } catch (err) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 80MB.' : err.message;
+    res.status(400).json({ error: message });
+  }
+});
+
+router.delete('/magic-card/:field', requireAuth, async (req, res) => {
+  try {
+    const { field } = req.params;
+    if (field !== 'image' && field !== 'video') {
+      return res.status(400).json({ error: 'Unknown field' });
+    }
+    const doc = await findOrCreateMyMagicCard(req.user.clientId);
+    if (field === 'image') {
+      if (doc.imageUrl) fs.unlink(path.join(MAGIC_CARDS_DIR, path.basename(doc.imageUrl)), () => {});
+      doc.imageUrl = undefined;
+      doc.imageWidth = undefined;
+      doc.imageHeight = undefined;
+    } else {
+      if (doc.videoUrl) fs.unlink(path.join(MAGIC_CARDS_DIR, path.basename(doc.videoUrl)), () => {});
+      doc.videoUrl = undefined;
+      doc.videoCropX = undefined;
+      doc.videoCropY = undefined;
+      doc.videoCropWidth = undefined;
+      doc.videoCropHeight = undefined;
+    }
+    await doc.save();
+    res.json(serializeMyMagicCard(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // PUT /api/profile/me -- update the logged-in client's own profile.

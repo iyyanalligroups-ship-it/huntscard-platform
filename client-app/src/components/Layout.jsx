@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { clearSession } from '../api.js';
+import { api, clearSession } from '../api.js';
 
 /* Inline SVG icons -- no icon library dependency, keeps the bundle lean. */
 const ICONS = {
@@ -60,8 +60,14 @@ const NAV_ITEMS = [
   { to: '/dashboard/ar-layout', label: 'AR Layout', icon: 'arLayout' },
   // Scans the admin-uploaded Magic Art image + video (see
   // MagicCamera.jsx's own file comment) -- clients can scan here but
-  // cannot upload; only the admin app's Magic Art page can.
-  { to: '/dashboard/magic-camera', label: 'Magic Camera', icon: 'magicArt' },
+  // cannot upload; only the admin app's Magic Art page can. Points OUTSIDE
+  // /dashboard on purpose -- this page is now public (no login required),
+  // same URL a logged-out visitor would reach directly.
+  { to: '/magic-camera', label: 'Magic Camera', icon: 'magicArt' },
+  // Read-only preview of THIS client's own personal AR image+video,
+  // admin-uploaded per client (see MagicBusinessCard.jsx's file comment) --
+  // distinct from the shared gallery Magic Camera above scans.
+  { to: '/dashboard/magic-business-card', label: 'Magic Business Card', icon: 'magicArt' },
   { to: '/dashboard/upgrade', label: 'Shop', icon: 'shop' },
   { to: '/dashboard/track', label: 'Track', icon: 'track' },
   { to: '/dashboard/account-settings', label: 'Settings', icon: 'settings' },
@@ -72,6 +78,30 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  // Same admin-toggled setting PublicLayout.jsx reads -- adds .theme-orange
+  // to the whole dashboard shell (sidebar + every page rendered through
+  // Outlet below) when set, so the logged-in area matches the public
+  // site's theme instead of always staying on the default holo colors.
+  const [homeTheme, setHomeTheme] = useState('default');
+
+  useEffect(() => {
+    api
+      .getSiteSettings()
+      .then((s) => setHomeTheme(s.homeTheme || 'default'))
+      .catch(() => {});
+  }, []);
+
+  // Also toggled on <body> itself, not just .dash-shell -- the sidebar is
+  // position:sticky with a fixed 100vh height, which should always cover
+  // the full viewport regardless of scroll, but in practice the page
+  // background (body's own dark --space) was showing through as a black
+  // strip under the Log out row on some scroll positions/viewport sizes.
+  // Pinning body's own background removes that gap outright instead of
+  // chasing the exact sticky/scroll interaction that caused it.
+  useEffect(() => {
+    document.body.classList.toggle('theme-orange', homeTheme === 'orange');
+    return () => document.body.classList.remove('theme-orange');
+  }, [homeTheme]);
 
   function handleLogout() {
     clearSession();
@@ -91,11 +121,10 @@ export default function Layout() {
   const isArLayout =
     location.pathname === '/dashboard/ar-layout' ||
     location.pathname === '/dashboard/huntsengine-test' ||
-    location.pathname === '/dashboard/magic-camera' ||
     location.pathname === '/dashboard/appointments';
 
   return (
-    <div className="dash-shell">
+    <div className={`dash-shell${homeTheme === 'orange' ? ' theme-orange' : ''}`}>
       <button
         className="dash-menu-btn"
         onClick={() => setMenuOpen((v) => !v)}

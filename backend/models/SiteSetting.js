@@ -1,0 +1,19 @@
+const mongoose = require('mongoose');
+
+// Single-document collection (one row, key: 'global') for site-wide
+// toggles that don't belong to any one client -- currently just which
+// homepage design client-app's App.jsx renders. Modeled as a singleton
+// rather than a plain key-value table since there's only this one
+// setting so far; if more show up later, this is where they'd go.
+const siteSettingSchema = new mongoose.Schema(
+  {
+    key: { type: String, required: true, unique: true, default: 'global' },
+    // 'default' = Home.jsx (original hero), 'orange' = HomeD1.jsx (the
+    // orange-theme redesign) -- see client-app's App.jsx for the switch.
+    homeTheme: { type: String, enum: ['default', 'orange'], default: 'default' },
+    updatedBy: { type: String, trim: true },
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model('SiteSetting', siteSettingSchema);

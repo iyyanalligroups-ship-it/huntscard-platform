@@ -28,6 +28,30 @@
   --radius: 14px;
 }
 
+/* Orange theme override -- see api.getSiteSettings()/the admin topbar
+   toggle. Redefining just the three source colors (not --holo-gradient
+   itself) is enough: CSS custom properties resolve var() references
+   lazily at the point of use, not where they're declared, so every
+   existing `background: var(--holo-gradient)` (and every --holo-cyan/
+   violet/magenta usage) anywhere under an element with this class
+   recomputes automatically -- no need to hunt down and edit every
+   button/badge/card across the whole dashboard individually. Applied on
+   PublicLayout.jsx's <header> (public site) and Layout.jsx's .dash-shell
+   (logged-in dashboard) wherever homeTheme === 'orange'. Same hex trio
+   used everywhere else this theme appears (D1 hero, header nav, etc).
+   Order swapped from the header's own mapping (cyan/violet/magenta ->
+   amber/gold/deep-orange) purely so --holo-gradient's fixed stop order
+   still reads as a warm gradient instead of jumping color reversed. */
+.theme-orange {
+  --holo-cyan: #ff8a3d;
+  --holo-violet: #ffcf5c;
+  --holo-magenta: #ff5e1a;
+  --font-heavy: "Archivo", var(--font-ui);
+  --glow-cyan: 0 0 40px rgba(255, 138, 61, 0.25);
+  --glow-violet: 0 0 50px rgba(255, 207, 92, 0.22);
+  --glow-soft: 0 0 60px rgba(255, 94, 26, 0.14);
+}
+
 * { box-sizing: border-box; }
 
 body {
@@ -59,18 +83,22 @@ body {
   gap: 10px;
   margin-bottom: 32px;
 }
+/* Header only (not the generic .brand used on form pages like
+   Login/Register) -- a bit more breathing room between the logo and
+   "HUNTSTAG" text specifically here. */
+.top-nav .brand { gap: 16px; }
 
 .brand-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
   background-color: transparent;
   background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2306120f' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M6 14a8 8 0 0 1 12 0'/%3E%3Cpath d='M8.5 17a4.5 4.5 0 0 1 7 0'/%3E%3Ccircle cx='12' cy='20' r='1.3' fill='%2306120f' stroke='none'/%3E%3C/svg%3E"),
+    url("/assets/huntstag-wolf-logo.png"),
     var(--holo-gradient);
   background-repeat: no-repeat;
   background-position: center, center;
-  background-size: 16px 16px, cover;
+  background-size: 30px auto, cover;
   flex-shrink: 0;
   position: relative;
 }
@@ -79,8 +107,8 @@ body {
 .brand-mark::before {
   content: '';
   position: absolute;
-  inset: -5px;
-  border-radius: 11px;
+  inset: -6px;
+  border-radius: 13px;
   background: conic-gradient(from 0deg, var(--holo-cyan), var(--holo-violet), var(--holo-magenta), var(--holo-cyan));
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), black calc(100% - 1px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 2px), black calc(100% - 1px));
@@ -103,8 +131,8 @@ body {
 }
 @keyframes brandMarkSpin { to { transform: rotate(360deg); } }
 @keyframes brandMarkOrbit {
-  from { transform: translate(-50%, -50%) rotate(0deg) translateX(19px) rotate(0deg); }
-  to { transform: translate(-50%, -50%) rotate(360deg) translateX(19px) rotate(-360deg); }
+  from { transform: translate(-50%, -50%) rotate(0deg) translateX(25px) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg) translateX(25px) rotate(-360deg); }
 }
 @media (prefers-reduced-motion: reduce) {
   .brand-mark::before, .brand-mark::after { animation: none; opacity: 0.6; }
@@ -144,12 +172,10 @@ h1 {
 
 /* Magic Art public gallery (MagicArt.jsx) -- richer cards (name, AR
    badge, Magic Camera link, description, how-it-works steps) instead of
-   a bare thumbnail, feeding a lightgalleryjs.com lightbox. Only the
-   thumbnail image itself (.magic-art-lightbox-trigger) is LightGallery's
-   click target now -- the card has its own real links in it too, and a
-   nested <a> inside another <a> isn't valid HTML, so LightGallery is
-   pointed at just that inner element via its `selector` prop instead of
-   scanning direct children. */
+   a bare thumbnail. Clicking the thumbnail image
+   (.magic-art-lightbox-trigger, name kept even though it no longer opens
+   a lightgalleryjs.com lightbox -- see MagicArt.jsx's own comment) opens
+   the "scan with Magic Camera" QR popup instead. */
 .magic-art-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -225,25 +251,6 @@ h1 {
   font-size: 12px;
   color: var(--text-dim);
   line-height: 1.6;
-}
-
-/* Our global `button` reset below (width:100%, holo-gradient background,
-   padding, border-radius) has no scoping, so it leaks into every
-   third-party button injected into the DOM -- including
-   lightgalleryjs.com's own next/prev arrows and toolbar icons
-   (MagicArt.jsx's lightbox). CSS cascades per-PROPERTY, not per-rule, so
-   LightGallery's own .lg-icon/.lg-next CSS only overrides what it
-   explicitly sets; width/background/padding/border-radius from our
-   unscoped rule still won and turned its small arrow icon into a
-   full-width gradient bar. Hand those specific properties back to
-   LightGallery's own CSS for anything inside its root container. */
-.lg-outer button {
-  width: auto;
-  background: none;
-  padding: 0;
-  border-radius: 0;
-  color: inherit;
-  font-family: inherit;
 }
 
 .field {
@@ -674,6 +681,69 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   .nav-link:hover { text-shadow: none; transform: none; }
 }
 
+/* ============================================================
+   Header theme override -- "Orange theme" (see the admin topbar
+   toggle / api.getSiteSettings). PublicLayout.jsx adds the
+   .theme-orange class to <header class="top-nav"> when that setting
+   is 'orange'; with no class present (or 'default'), everything above
+   this block applies unchanged. Kept as a single override block
+   scoped by ancestor selector, rather than editing the base rules in
+   place, so both themes stay independently intact and switching is a
+   real runtime toggle, not a find-and-replace. The wolf logo itself
+   (.brand-mark's image + size) is NOT touched here -- that's a
+   permanent branding change, not part of either theme. */
+.top-nav.theme-orange {
+  background: rgba(10, 11, 16, 0.86);
+}
+.top-nav.theme-orange .top-nav-grid,
+.top-nav.theme-orange .top-nav-power-glow,
+.top-nav.theme-orange .top-nav-circuit-svg,
+.top-nav.theme-orange .top-nav-scan-beam,
+.top-nav.theme-orange::after,
+.top-nav.theme-orange .top-nav-scan-particle,
+.top-nav.theme-orange .top-nav-spotlight,
+.top-nav.theme-orange .top-nav-corner {
+  display: none;
+}
+.top-nav.theme-orange .status-indicator { color: rgba(255, 138, 61, 0.85); }
+.top-nav.theme-orange .status-dot { background: #ff8a3d; box-shadow: 0 0 8px #ff8a3d; }
+.top-nav.theme-orange .nav-links::before {
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 207, 92, 0.09) 45%, rgba(255, 94, 26, 0.1) 55%, transparent 70%);
+}
+.top-nav.theme-orange .nav-link:hover,
+.top-nav.theme-orange .nav-link:nth-child(4):hover {
+  color: #ff8a3d;
+  background: rgba(255, 138, 61, 0.09);
+  text-shadow: 0 0 10px rgba(255, 138, 61, 0.7), 0 0 22px rgba(255, 138, 61, 0.35);
+}
+.top-nav.theme-orange .nav-link:nth-child(2):hover {
+  color: #ffcf5c;
+  background: rgba(255, 207, 92, 0.09);
+  text-shadow: 0 0 10px rgba(255, 207, 92, 0.7), 0 0 22px rgba(255, 207, 92, 0.35);
+}
+.top-nav.theme-orange .nav-link:nth-child(3):hover {
+  color: #ff5e1a;
+  background: rgba(255, 94, 26, 0.09);
+  text-shadow: 0 0 10px rgba(255, 94, 26, 0.7), 0 0 22px rgba(255, 94, 26, 0.35);
+}
+.top-nav.theme-orange .nav-link.active {
+  color: #1a0e04;
+  background: linear-gradient(120deg, #ffcf5c, #ff8a3d, #ff5e1a);
+  box-shadow: 0 0 14px rgba(255, 138, 61, 0.45);
+}
+.top-nav.theme-orange .brand-mark {
+  background-image:
+    url("/assets/huntstag-wolf-logo.png"),
+    linear-gradient(120deg, #ffcf5c, #ff8a3d, #ff5e1a);
+}
+.top-nav.theme-orange .brand-mark::before {
+  background: conic-gradient(from 0deg, #ffcf5c, #ff8a3d, #ff5e1a, #ffcf5c);
+}
+.top-nav.theme-orange .brand-mark::after {
+  box-shadow: 0 0 6px 2px #ff8a3d;
+}
+.top-nav.theme-orange .brand-name { color: #fff; }
+
 /* Non-navigating "coming soon" markers in the header (Magic Art / AR
    Call, both still being tested on the dashboard) -- deliberately its
    own class, not .nav-link, so it can't pick up that class's nth-child
@@ -851,6 +921,18 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   box-shadow: var(--glow-cyan);
   overflow: hidden;
 }
+/* Orange theme -- every .pv-* rule already reads through these 5
+   custom properties (see the comment on .pv-page further down),
+   redeclaring them here re-themes the whole card -- background, name,
+   QR box, tab pills -- without touching a single other rule. */
+.theme-orange .profile-preview {
+  --pv-bg: #ffffff;
+  --pv-surface: #fff3e9;
+  --pv-border: #ece6dc;
+  --pv-text: #211a12;
+  --pv-text-dim: #8a8073;
+  border-color: #ece6dc;
+}
 
 /* Small QR code under the client ID -- lets you scan straight from this
    dashboard view instead of opening "Show QR code" on the public page. */
@@ -971,11 +1053,24 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
    using the --pv-* custom properties (built for the .pv-page/public case,
    which never needed anything else) -- scoped overrides for exactly those,
    so only this dashboard preview picks up the dark/holo look. */
+.dash-edit-profile-btn { background: var(--holo-gradient); color: #06120f; }
+
 .profile-preview .pv-banner { background: var(--panel-raised); }
 .profile-preview .pv-btn-primary,
 .profile-preview .pv-hw-btn {
   background: var(--holo-gradient);
   color: #06120f;
+}
+/* Orange theme -- black-to-orange sweep instead of the amber/gold
+   gradient used elsewhere, per direct request ("black and orange shade
+   for keys") rather than reusing the lighter --heat-style gradient. */
+.theme-orange .dash-edit-profile-btn,
+.theme-orange .profile-preview .pv-btn-primary,
+.theme-orange .profile-preview .pv-hw-btn,
+.theme-orange .pv-page .pv-btn-primary,
+.theme-orange .pv-page .pv-hw-btn {
+  background: linear-gradient(120deg, #1a1204, #ff7a1a);
+  color: #fff;
 }
 .profile-preview .pv-icon {
   background: var(--panel);
@@ -983,6 +1078,16 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 }
 .profile-preview .pv-bio { color: var(--text); }
 .profile-preview .pv-tab-btn.active { box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.25) inset; }
+.theme-orange .profile-preview .pv-tab-btn.active { box-shadow: 0 0 0 1px rgba(255, 122, 26, 0.35) inset; }
+/* These two hardcode the APP-level --panel/--text (not the local
+   --pv-* set the white/cream override above redeclares), so without
+   this they'd stay dark-styled (unreadable dark icon bg, near-white
+   text) on the new white card. */
+.theme-orange .profile-preview .pv-icon {
+  background: #fff3e9;
+  color: #ff7a1a;
+}
+.theme-orange .profile-preview .pv-bio { color: #211a12; }
 
 /* --- standalone public tap page (PublicProfile.jsx) -- full-viewport
    version of the same pv-* look above, now dark/holographic to match the
@@ -1308,6 +1413,243 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 }
 .hero-cta-row a:hover, .hero-cta-row button:hover { transform: translateY(-2px); }
 .hero-cta-row .btn-primary { box-shadow: var(--glow-cyan); }
+
+/* ============================================================
+   D1 -- alternate homepage hero (bold stacked-headline layout).
+   Scoped entirely to d1- prefixed classes so it can't bleed into
+   or be affected by the default Home.jsx hero above.
+   ============================================================ */
+.d1-hero {
+  --d1-gradient: linear-gradient(120deg, #ffcf5c, #ff8a3d, #ff5e1a);
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  align-items: center;
+  gap: 32px;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 64px 8px 48px;
+  overflow: hidden;
+}
+.d1-hero-col-text { position: relative; z-index: 1; }
+.d1-corner-mark {
+  position: absolute;
+  top: 28px;
+  right: 28px;
+  z-index: 1;
+  font-size: 26px;
+  color: var(--text-dim);
+  opacity: 0.5;
+  font-family: var(--font-display);
+}
+.d1-headline {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 56px;
+  line-height: 0.98;
+  letter-spacing: -0.01em;
+  margin: 0 0 20px;
+}
+.d1-headline .grad {
+  background: var(--d1-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.d1-headline .outline {
+  color: transparent;
+  -webkit-text-stroke: 2px var(--text);
+}
+.d1-lede {
+  position: relative;
+  z-index: 1;
+  font-size: 16px;
+  color: var(--text-dim);
+  max-width: 440px;
+  margin: 0 0 28px;
+  line-height: 1.6;
+}
+.d1-stats {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 28px;
+  max-width: 320px;
+}
+.d1-stat-card {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  font-family: var(--font-mono);
+}
+.d1-stat-card b { color: #ff8a3d; font-size: 17px; font-weight: 500; white-space: nowrap; }
+.d1-stat-card span { font-size: 11px; color: var(--text-dim); letter-spacing: 0.04em; text-align: right; }
+
+.d1-hero-col-visual { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
+.d1-tagline-label {
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-align: center;
+  color: #ff8a3d;
+}
+.d1-tagline-caption {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: center;
+  max-width: 320px;
+  line-height: 1.6;
+}
+
+/* Scoped size-up of the shared holo-card visual, D1 only -- Home.jsx
+   renders the same .hero-visual/.holo-card/.bg-ring classes at their
+   original (smaller) size, so overriding them here by ancestor selector
+   (rather than editing the base rules) means the D1 revert path stays
+   completely unaffected by this. Bigger because "the card space is
+   small" was the direct piece of feedback that triggered this pass. */
+.d1-hero-col-visual .hero-visual {
+  height: 560px;
+  /* The outer .d1-hero already clips at the full hero width for
+     page-overflow safety -- this inner clip only existed to trim the
+     rings, but it was also cutting the corners off the card itself
+     once it got bigger than the base design's card, so it's off here. */
+  overflow: visible;
+}
+.d1-hero-col-visual .holo-card { width: 440px; height: 276px; }
+.d1-hero-col-visual .bg-ring-a { width: 520px; height: 520px; }
+.d1-hero-col-visual .bg-ring-b { width: 430px; height: 430px; }
+
+@media (max-width: 900px) {
+  .d1-hero { grid-template-columns: 1fr; text-align: center; padding-top: 48px; }
+  .d1-hero-col-text { text-align: center; }
+  .d1-headline { font-size: 42px; }
+  .d1-lede { margin-left: auto; margin-right: auto; }
+  .d1-hero .hero-cta-row { justify-content: center !important; }
+  .d1-stats { margin-left: auto; margin-right: auto; }
+  .d1-corner-mark { display: none; }
+  .d1-hero-col-visual .hero-visual { height: 340px; }
+  .d1-hero-col-visual .holo-card { width: 300px; height: 188px; }
+  .d1-hero-col-visual .bg-ring-a { width: 380px; height: 380px; }
+  .d1-hero-col-visual .bg-ring-b { width: 320px; height: 320px; }
+}
+
+/* D1 -- features + how-it-works sections below the hero. New classes
+   throughout (not edits to .feature-grid/.section-heading/.steps-row),
+   because those are shared with MagicArt/Shop/ContactUs -- restyling
+   them in place would bleed into pages that were never part of this
+   redesign. */
+.d1-eyebrow-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #ff8a3d;
+  margin-bottom: 14px;
+}
+.d1-eyebrow-row::before { content: ''; width: 22px; height: 1px; background: #ff8a3d; opacity: 0.6; }
+
+.d1-section-headline {
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 38px;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+}
+.d1-section-headline .grad {
+  background: linear-gradient(120deg, #ffcf5c, #ff8a3d, #ff5e1a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.d1-features-panel {
+  border: 1px solid var(--panel-border);
+  border-radius: 24px;
+  padding: 40px 36px;
+  margin: 48px 0;
+  background: rgba(255, 255, 255, 0.015);
+}
+.d1-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  margin-top: 32px;
+}
+.d1-feature-card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  padding: 24px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.d1-feature-card:hover { border-color: rgba(255, 138, 61, 0.35); transform: translateY(-4px); }
+.d1-feature-card-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+.d1-feature-icon {
+  width: 46px; height: 46px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #ffcf5c, #ff8a3d, #ff5e1a);
+  color: #1a0e04;
+}
+.d1-feature-icon svg { width: 23px; height: 23px; }
+.d1-feature-num { font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); opacity: 0.6; }
+.d1-feature-card h3 { font-size: 15px; margin: 0 0 8px; }
+.d1-feature-card p { font-size: 13px; color: var(--text-dim); line-height: 1.6; margin: 0; }
+
+.d1-steps-section { text-align: center; margin: 64px 0 20px; }
+.d1-steps-section .d1-eyebrow-row { justify-content: center; }
+.d1-steps-section .d1-section-headline { text-align: center; }
+.d1-steps-subheading { color: var(--text-dim); font-size: 14px; margin: 0 0 40px; }
+
+.d1-steps-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.d1-step-item { text-align: center; position: relative; }
+.d1-step-number {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: 1.5px solid var(--panel-border);
+  color: var(--text);
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 14px;
+}
+.d1-step-number.accent {
+  border: none;
+  background: linear-gradient(135deg, #ffcf5c, #ff8a3d, #ff5e1a);
+  color: #1a0e04;
+}
+.d1-step-item h4 { font-size: 14px; margin: 0 0 6px; }
+.d1-step-item p { font-size: 12px; color: var(--text-dim); margin: 0; }
+@media (max-width: 900px) {
+  .d1-features-panel { padding: 28px 20px; }
+  .d1-section-headline { font-size: 30px; }
+}
 
 /* --- Signature hero visual: the tap card itself, mid-tap ---
    This is the one bold element the page is built around (frontend-design
@@ -1854,7 +2196,15 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   background: #12131b;
   border-right: 1px solid var(--panel-border);
   z-index: 40;
+  /* This many nav items (12+ rows plus brand header and footer) can
+     exceed 100vh on a shorter screen -- without this, the overflow just
+     clipped silently at the sticky container's edge, making Home/Log
+     out completely unreachable rather than merely scrolled past. */
+  overflow-y: auto;
 }
+/* Keeps Home/Log out from ever getting flex-compressed to make room --
+   they should scroll into view, never shrink. */
+.side-footer { flex-shrink: 0; }
 
 .side-brand {
   display: flex;
@@ -1988,14 +2338,28 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
     radial-gradient(circle at 10% 100%, rgba(94, 234, 212, 0.12), transparent 45%),
     var(--panel);
 }
+/* Orange theme -- these two radial glows are hand-tuned rgba() (not
+   var(--holo-cyan) etc.), so they don't pick up the theme override
+   automatically the way most of this file does; overridden explicitly
+   here instead. */
+.theme-orange .dash-hero {
+  background:
+    radial-gradient(circle at 85% 20%, rgba(255, 138, 61, 0.22), transparent 50%),
+    radial-gradient(circle at 10% 100%, rgba(255, 207, 92, 0.14), transparent 45%),
+    var(--panel);
+}
 .dash-hero-title { font-size: 24px; margin: 0 0 6px; }
 .dash-hero-sub { color: var(--text-dim); font-size: 14px; margin: 0 0 16px; max-width: 420px; line-height: 1.5; }
 .dash-hero-btn {
   display: inline-block;
   padding: 11px 22px;
   border-radius: 999px;
-  background: linear-gradient(120deg, #4f8ef7, #7c5cf0);
-  color: #fff;
+  background: var(--holo-gradient);
+  /* Dark, not white -- holo-gradient (both the default cyan/violet/
+     magenta and the orange-theme override) is a light/pastel gradient,
+     same reason every other holo-gradient button in the app (zing-btn,
+     hero-cta-row .btn-primary, etc.) uses dark text over white. */
+  color: #06120f;
   font-size: 13px;
   font-weight: 700;
   text-decoration: none;
@@ -2047,6 +2411,7 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 }
 .zing-btn:hover { filter: brightness(1.08); }
 .zing-btn:active { transform: scale(0.93); }
+.theme-orange .zing-btn { box-shadow: 0 6px 20px rgba(255, 138, 61, 0.3); }
 
 .zing-btn.zing-busy { opacity: 0.7; cursor: wait; }
 .zing-btn.zing-success {
@@ -2101,6 +2466,18 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 .kpi-chip.blue { background: rgba(79, 142, 247, 0.16); color: #4f8ef7; }
 .kpi-chip.orange { background: rgba(245, 165, 36, 0.14); color: #f5a524; }
 .kpi-chip.green { background: rgba(34, 197, 139, 0.14); color: #22c58b; }
+/* Orange theme -- these 4 chips are each hardcoded to a DIFFERENT color
+   on purpose (a quick category code so the 4 stat tiles read apart at a
+   glance), so .kpi-chip.cyan's own color: var(--holo-cyan) already turns
+   orange automatically, but its background tint and the other 3 chips
+   are plain rgba()/hex and need an explicit override. Kept as 3 distinct
+   warm tones (not all identical) so the tiles stay tellable apart, per
+   "white and orange" -- the 4th (checkmark) uses a warm white instead of
+   a 4th orange shade for that reason. */
+.theme-orange .kpi-chip.cyan { background: rgba(255, 138, 61, 0.16); }
+.theme-orange .kpi-chip.blue { background: rgba(255, 207, 92, 0.18); color: #ffcf5c; }
+.theme-orange .kpi-chip.orange { background: rgba(255, 94, 26, 0.16); color: #ff5e1a; }
+.theme-orange .kpi-chip.green { background: rgba(255, 244, 230, 0.14); color: #fff4e6; }
 
 .kpi-value { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
 .kpi-label { font-size: 13px; font-weight: 600; color: var(--text); margin-top: 2px; }
@@ -2209,3 +2586,112 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 
 .dash-empty { color: var(--text-dim); font-size: 14px; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
 .dash-empty p { margin: 0; }
+
+/* ============================================================
+   Orange theme -- light dashboard chrome (sidebar) + Dashboard
+   Overview page, matched closely to a user-supplied static reference
+   (warm cream/white palette, Archivo headings) rather than just tinting
+   the existing dark theme. Scoped under .dash-shell.theme-orange, so
+   the default dark dashboard is completely untouched.
+
+   Deliberately bounded to the sidebar + Overview only: other dashboard
+   pages (Profile, Settings, AR Layout, etc.) aren't part of the
+   reference this was built from, so their own cards still use
+   var(--panel) (dark) -- they'll show as dark cards on the new light
+   backdrop until they get their own pass, rather than half-guessing a
+   light-mode look for pages that were never specified.
+   ============================================================ */
+body.theme-orange,
+.dash-shell.theme-orange,
+.theme-orange .dash-main {
+  background: #f7f5f1;
+}
+
+.theme-orange .side-nav {
+  background: #ffffff;
+  border-right: 1px solid #ece6dc;
+}
+.theme-orange .side-brand { border-bottom-color: #ece6dc; }
+/* .brand-name is reused by the PUBLIC header too (PublicLayout.jsx),
+   which stays dark-background under this theme (not the light redesign
+   below) -- scoped to .dash-shell specifically so this dark-ink color
+   (correct for the sidebar's new white background) doesn't also apply
+   there and turn the public header's "HUNTSTAG" text near-invisible
+   (dark ink on a still-dark background). */
+.dash-shell.theme-orange .brand-name { color: #211a12; }
+.theme-orange .side-link { color: #8a8073; }
+.theme-orange .side-link:hover { color: #211a12; background: #fff3e9; }
+.theme-orange .side-link.active {
+  color: #fff;
+  background: linear-gradient(100deg, #ffc42e 8%, #ff7a1a 92%);
+  box-shadow: 0 8px 18px -8px rgba(255, 122, 26, 0.6);
+}
+.theme-orange .side-footer { border-top-color: #ece6dc; background: #ffffff; }
+.theme-orange .side-logout { color: #e5484d; }
+.theme-orange .side-logout:hover { color: #e5484d; background: rgba(229, 72, 77, 0.08); }
+.theme-orange .dash-menu-btn { background: #ffffff; border-color: #ece6dc; color: #211a12; }
+
+.theme-orange .dash-content,
+.theme-orange .dash-content-full,
+.theme-orange .page-shell {
+  color: #211a12;
+}
+
+/* The welcome banner stays a dark card even on the light page -- that's
+   the reference's own choice (a warm near-black gradient, not the
+   ambient cream), so its text is pinned light regardless of the ambient
+   dark-ink override two rules up. */
+.theme-orange .dash-hero-title,
+.theme-orange .dash-hero-sub { color: #fff; }
+.theme-orange .dash-hero-sub { color: rgba(255, 255, 255, 0.7); }
+.theme-orange .dash-hero-title { font-family: var(--font-heavy); font-weight: 900; }
+
+.theme-orange .zing-section,
+.theme-orange .dash-panel,
+.theme-orange .kpi-card {
+  background: #ffffff;
+  border-color: #ece6dc;
+}
+.theme-orange .zing-title,
+.theme-orange .dash-panel-title,
+.theme-orange .kpi-value,
+.theme-orange .kpi-label,
+.theme-orange .legend-value {
+  color: #211a12;
+}
+.theme-orange .zing-title,
+.theme-orange .dash-panel-title,
+.theme-orange .kpi-value {
+  font-family: var(--font-heavy);
+  font-weight: 800;
+}
+.theme-orange .zing-sub,
+.theme-orange .kpi-sub,
+.theme-orange .legend-label,
+.theme-orange .donut-caption {
+  color: #8a8073;
+}
+.theme-orange .kpi-card:hover { border-color: rgba(255, 122, 26, 0.35); }
+
+.theme-orange .donut-pct { font-family: var(--font-heavy); font-weight: 900; }
+/* --donut-track/--donut-c1/2/3 -- read via inline style={} in
+   DashboardHome.jsx's SVG (presentation attributes can't be reached
+   from an external stylesheet without a fragile structural selector,
+   custom properties can). */
+.theme-orange .donut {
+  --donut-track: #ece6dc;
+  --donut-c1: #ffc42e;
+  --donut-c2: #ff7a1a;
+  --donut-c3: #ff7a1a;
+}
+
+.theme-orange .mini-steps li { color: #8a8073; }
+.theme-orange .mini-steps li.done { color: #211a12; }
+.theme-orange .mini-step-dot { background: #fff3e9; border-color: #ece6dc; }
+.theme-orange .mini-steps li.done .mini-step-dot {
+  background: linear-gradient(100deg, #ffc42e 8%, #ff7a1a 92%);
+  border-color: transparent;
+  color: #fff;
+}
+
+.theme-orange .zing-btn { box-shadow: 0 12px 26px -10px rgba(255, 122, 26, 0.7); }

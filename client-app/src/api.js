@@ -95,6 +95,72 @@ export const api = {
   // on the public MagicArt.jsx gallery page and scanned via the
   // dashboard's MagicCamera.jsx.
   getPublicMagicArt: () => request('/api/public/magic-art', { auth: false }),
+  // Every ACTIVE Magic Business Card -- scanned by MagicCamera.jsx
+  // alongside Magic Art, merged into one target list there.
+  getPublicMagicCards: () => request('/api/public/magic-cards', { auth: false }),
+  // ONE specific client's own ACTIVE Magic Business Card -- feeds
+  // MagicCamera.jsx's client-scoped mode (reached via a specific client's
+  // own AR QR -> "choose AR or Magic" screen), instead of the full
+  // gallery-wide target list the two calls above feed.
+  getPublicMagicCard: (clientId) => request(`/api/public/magic-card/${clientId}`, { auth: false }),
+  // Which homepage design to render (see HomeSwitch.jsx) -- toggled from
+  // the admin app's topbar switch.
+  getSiteSettings: () => request('/api/public/site-settings', { auth: false }),
+  // The logged-in client's own personal Magic Business Card (admin-
+  // uploaded per client, distinct from the shared Magic Art gallery
+  // above). Read-only here -- only returns data once admin has activated
+  // it, otherwise a null-safe empty shape.
+  getMyMagicCard: () => request('/api/profile/magic-card'),
+  // Self-service editing -- client can now design their own Magic
+  // Business Card, same underlying doc/files admin's ClientDetail.jsx
+  // can also edit. Card type first (locks the image crop's aspect
+  // ratio), then image, then video.
+  setMyMagicCardType: (cardType) => request('/api/profile/magic-card/card-type', { method: 'POST', body: { cardType } }),
+  // Where the client dragged the AR QR onto their own card design --
+  // percentages (0-100), composited into the printable download.
+  saveMyMagicCardQrPosition: (x, y) =>
+    request('/api/profile/magic-card/qr-position', { method: 'POST', body: { x, y } }),
+  // Where one AR component (contact/portfolio/social) is placed relative
+  // to this card in MagicCamera.jsx's own 3D scene -- independent of the
+  // main AR Layout system's positions (see that route's own comment).
+  saveMyMagicCardComponentPosition: (key, x, y, z, rotation) =>
+    request('/api/profile/magic-card/component-position', { method: 'POST', body: { key, x, y, z, rotation } }),
+  activateMyMagicCard: () => request('/api/profile/magic-card/activate', { method: 'POST' }),
+  deactivateMyMagicCard: () => request('/api/profile/magic-card/deactivate', { method: 'POST' }),
+  uploadMyMagicCardImage: async (blob, width, height) => {
+    const formData = new FormData();
+    formData.append('image', blob, 'image.jpg');
+    formData.append('width', width);
+    formData.append('height', height);
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/profile/magic-card/image`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+    return data;
+  },
+  uploadMyMagicCardVideo: async (file, crop) => {
+    const formData = new FormData();
+    formData.append('video', file);
+    formData.append('cropX', crop.x);
+    formData.append('cropY', crop.y);
+    formData.append('cropWidth', crop.width);
+    formData.append('cropHeight', crop.height);
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/profile/magic-card/video`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+    return data;
+  },
+  removeMyMagicCardImage: () => request('/api/profile/magic-card/image', { method: 'DELETE' }),
+  removeMyMagicCardVideo: () => request('/api/profile/magic-card/video', { method: 'DELETE' }),
   // Admin-defined extra profile fields (see AttributeDefinition) -- used
   // by both Profile Settings (to know which extra inputs to render) and
   // the public profile page (to know which extra rows to render).
@@ -105,6 +171,10 @@ export const api = {
   submitLead: (clientId, payload, cardNumber) =>
     request(`/api/public/leads/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`, { method: 'POST', body: payload, auth: false }),
   getCatalog: () => request('/api/public/catalog', { auth: false }),
+  // Card variant showcase (photos, price, features) -- distinct from
+  // getCatalog above, which is just the tap-demo videos. Both feed
+  // Catalog.jsx, in separate sections.
+  getCatalogEntries: () => request('/api/public/catalog-entries', { auth: false }),
 
   // Dashboard notification bell + Web Push subscription -- see
   // components/NotificationBell.jsx.

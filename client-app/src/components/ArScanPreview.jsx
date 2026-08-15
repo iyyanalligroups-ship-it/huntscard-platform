@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { api, API_URL } from '../api.js';
 import {
   VIDEO_PLANE_BASE_W,
-  VIDEO_PLANE_BASE_H,
+  videoPlaneBaseHFor,
   MODEL_IMAGE_BASE_W,
   MODEL_SIZE,
   CARD_W_UNITS,
-  CARD_H_UNITS,
+  cardAspectFor,
+  cardHUnitsFor,
   ASSUMED_PREVIEW_DISTANCE,
   ASSUMED_FOV_DEG,
   toLocalOffset,
@@ -81,6 +83,8 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
   const loadedModelRef = useRef(null);
   const autoFitScaleRef = useRef(1);
   const videoPlaneRef = useRef(null);
+  const mixerRef = useRef(null); // AnimationMixer for the loaded model, if it has any clips (see the render loop below)
+  const clockRef = useRef(null);
   const [size, setSize] = useState({ w: 320, h: 400 });
   const [icons, setIcons] = useState({});
   const [dragging, setDragging] = useState(null); // key of whatever's being dragged, or null
@@ -92,6 +96,11 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
   const [, setCameraTick] = useState(0);
 
   const qrPos = layout?.qr || { x: 50, y: 50 };
+  // The physical card's actual shape (see arProjection.js's cardAspectFor)
+  // -- everything below that depends on the card's own proportions (the
+  // card mesh, the video plane's height, every toLocalOffset/heightToLocalZ
+  // call) needs this instead of assuming landscape.
+  const cardAspect = cardAspectFor(profile?.cardShape);
 
   // Admin-managed logo icons -- same as ArLayout.jsx/ArView.jsx, purely
   // cosmetic, a failure here just falls back to plain text pills.
@@ -145,8 +154,13 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
       // with the model/video as one solid composition once the camera
       // orbits, instead of staying frozen in their original straight-on
       // screen position while everything else moves.
+      // A square placeholder -- the card's real height (which depends on
+      // orientation, see cardAspectFor) is applied as cardMesh.scale.y in
+      // the layout-driven effect below instead of baked into the geometry
+      // here, since this setup effect runs once before `profile` (and
+      // therefore the client's actual purchased shape) is necessarily known.
       const cardMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(CARD_W_UNITS, CARD_H_UNITS),
+        new THREE.PlaneGeometry(CARD_W_UNITS, CARD_W_UNITS),
         new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide })
       );
       cardMesh.position.z = -0.02;
@@ -200,11 +214,14 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
   // change like the rest of this component's imperative updates use.
   useEffect(() => {
     let rafId;
+    const clock = new THREE.Clock();
+    clockRef.current = clock;
     function tick() {
       rafId = requestAnimationFrame(tick);
       const three = threeRef.current;
       if (!three) return;
       three.controls.update();
+      mixerRef.current?.update(clock.getDelta());
       three.renderer.render(three.scene, three.camera);
     }
     tick();
@@ -213,6 +230,7 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
 
   useEffect(
     () => () => {
+      mixerRef.current?.stopAllAction();
       if (threeRef.current) {
         threeRef.current.controls.dispose();
         threeRef.current.renderer.dispose();
@@ -280,7 +298,7 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
     if (!dragging) return;
     const point = screenToLocalPoint(e.clientX, e.clientY);
     if (!point) return;
-    const pos = fromLocalOffset(point.x, point.y, qrPos);
+    const pos = fromLocalOffset(point.x, point.y, qrPos, cardAspect);
     onDragPosition?.(dragging, { x: clampPercent(Math.round(pos.x)), y: clampPercent(Math.round(pos.y)) });
   }
   function handleDragEnd() {
@@ -323,8 +341,8 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
     if (!three) return;
     if (three.modelGroup.children.length) {
       const modelPos = layout?.model || { x: 50, y: 35 };
-      const [lx, ly] = toLocalOffset(modelPos, qrPos);
-      const lz = heightToLocalZ(modelPos.z);
+      const [lx, ly] = toLocalOffset(modelPos, qrPos, cardAspect);
+      const lz = heightToLocalZ(modelPos.z, cardAspect);
       three.modelGroup.position.set(lx, ly, lz);
       updateGuideLine(three.modelGuide, lx, ly, lz);
     } else {
@@ -332,8 +350,8 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
     }
     if (three.videoGroup.children.length) {
       const videoPos = layout?.video || { x: 50, y: 20 };
-      const [lx, ly] = toLocalOffset(videoPos, qrPos);
-      const lz = heightToLocalZ(videoPos.z);
+      const [lx, ly] = toLocalOffset(videoPos, qrPos, cardAspect);
+      const lz = heightToLocalZ(videoPos.z, cardAspect);
       three.videoGroup.position.set(lx, ly, lz);
       updateGuideLine(three.videoGuide, lx, ly, lz);
     } else {
@@ -341,24 +359,32 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
     }
   }
 
-  // The card background plane's size is fixed (CARD_W_UNITS x
-  // CARD_H_UNITS never change) -- only its center shifts when the QR's
-  // own saved position changes.
+  // The card background plane's footprint shifts when the QR's own saved
+  // position changes, same as before -- its HEIGHT now also depends on
+  // the client's actual purchased shape (cardAspect), applied as a Y
+  // scale on the square placeholder geometry created above (see that
+  // creation site for why it's a scale here rather than the geometry's
+  // own dimensions).
   function positionCard() {
     const three = threeRef.current;
     if (!three) return;
-    const [x0, y0] = toLocalOffset({ x: 0, y: 0 }, qrPos);
-    const [x1, y1] = toLocalOffset({ x: 100, y: 100 }, qrPos);
+    const [x0, y0] = toLocalOffset({ x: 0, y: 0 }, qrPos, cardAspect);
+    const [x1, y1] = toLocalOffset({ x: 100, y: 100 }, qrPos, cardAspect);
     three.cardMesh.position.x = (x0 + x1) / 2;
     three.cardMesh.position.y = (y0 + y1) / 2;
+    three.cardMesh.scale.y = cardHUnitsFor(cardAspect) / CARD_W_UNITS;
   }
 
   // Load the QR code texture -- same URL the old DOM <img> overlay used,
   // now applied to a real plane so it rotates with the rest of the card.
+  // &transparent=1 -- no opaque white box behind the QR modules, matching
+  // the QR arTargetImage.js composites into the real tracking target, so
+  // this preview shows the same QR style AR actually uses instead of a
+  // solid white square that never appears on a real scan.
   useEffect(() => {
     if (!profile?.clientId) return;
     let cancelled = false;
-    new THREE.TextureLoader().load(`${API_URL}/api/public/qr/${profile.clientId}?type=ar`, (texture) => {
+    new THREE.TextureLoader().load(`${API_URL}/api/public/qr/${profile.clientId}?type=ar&transparent=1`, (texture) => {
       if (cancelled || !threeRef.current) return;
       texture.colorSpace = THREE.SRGBColorSpace;
       const material = threeRef.current.qrMesh.material;
@@ -372,10 +398,49 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
     };
   }, [profile?.clientId, size.w, size.h]);
 
-  // Load the 3D model (GLB or flat image, see arModelType) -- same two
+  // Load the client's own card design (front artwork) as the card mesh's
+  // texture -- same image arTargetImage.js composites the QR onto for
+  // the real tracking target, so arranging elements against this in the
+  // editor actually reflects what the printed/scanned card looks like,
+  // instead of a blank white rectangle that hides where a busy design
+  // might crowd whatever gets positioned on top of it. Falls back to
+  // plain white (the material's own default color) if there's no design
+  // uploaded yet.
+  useEffect(() => {
+    const three = threeRef.current;
+    if (!three) return;
+    const bannerUrl = profile?.bannerUrl || profile?.customDesignFrontUrl || null;
+    if (!bannerUrl) {
+      three.cardMesh.material.map = null;
+      three.cardMesh.material.color.set(0xffffff);
+      three.cardMesh.material.needsUpdate = true;
+      renderThree();
+      return;
+    }
+    let cancelled = false;
+    new THREE.TextureLoader().load(bannerUrl, (texture) => {
+      if (cancelled || !threeRef.current) return;
+      texture.colorSpace = THREE.SRGBColorSpace;
+      const material = threeRef.current.cardMesh.material;
+      material.map = texture;
+      // A textured mesh still tints by its own color -- white is neutral
+      // (shows the texture as-is); leaving whatever color was last set
+      // (e.g. from a previous no-banner fallback) would otherwise tint it.
+      material.color.set(0xffffff);
+      material.needsUpdate = true;
+      renderThree();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.bannerUrl, profile?.customDesignFrontUrl, size.w, size.h]);
+
+  // Load the 3D model (GLB, FBX, or flat image, see arModelType) -- same
   // branches as ArView.jsx's own loading effect.
   useEffect(() => {
     loadedModelRef.current = null;
+    mixerRef.current?.stopAllAction();
+    mixerRef.current = null;
     if (threeRef.current) threeRef.current.modelGroup.clear();
     if (!profile?.arModelUrl) {
       renderThree();
@@ -408,21 +473,34 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
         renderThree();
       });
     } else {
-      new GLTFLoader().load(profile.arModelUrl, (gltf) => {
+      const onModelLoaded = (scene, animations) => {
         if (cancelled) return;
-        const box = new THREE.Box3().setFromObject(gltf.scene);
+        const box = new THREE.Box3().setFromObject(scene);
         const size3 = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size3.x, size3.y, size3.z) || 1;
         autoFitScaleRef.current = MODEL_IMAGE_BASE_W / maxDim;
-        loadedModelRef.current = gltf.scene;
+        loadedModelRef.current = scene;
         applyModelTransform();
         if (threeRef.current) {
           threeRef.current.modelGroup.clear();
-          threeRef.current.modelGroup.add(gltf.scene);
+          threeRef.current.modelGroup.add(scene);
+        }
+        // Play any baked-in animation (walk cycle, idle motion, etc.) --
+        // the continuous render loop above drives mixer.update() every
+        // frame via clockRef, this just starts the clip.
+        if (animations?.length) {
+          const mixer = new THREE.AnimationMixer(scene);
+          mixer.clipAction(animations[0]).play();
+          mixerRef.current = mixer;
         }
         positionGroups();
         renderThree();
-      });
+      };
+      if (profile.arModelType === 'fbx') {
+        new FBXLoader().load(profile.arModelUrl, (fbx) => onModelLoaded(fbx, fbx.animations));
+      } else {
+        new GLTFLoader().load(profile.arModelUrl, (gltf) => onModelLoaded(gltf.scene, gltf.animations));
+      }
     }
 
     return () => {
@@ -449,7 +527,7 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
       if (cancelled) return;
       // See the matching note in the 3D-model-image effect above.
       texture.colorSpace = THREE.SRGBColorSpace;
-      const geometry = new THREE.PlaneGeometry(VIDEO_PLANE_BASE_W, VIDEO_PLANE_BASE_H);
+      const geometry = new THREE.PlaneGeometry(VIDEO_PLANE_BASE_W, videoPlaneBaseHFor(cardAspect));
       const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide });
       const mesh = new THREE.Mesh(geometry, material);
       videoPlaneRef.current = mesh;
@@ -478,7 +556,7 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.arBannerUrl, profile?.arBannerType, profile?.arVideoUrl, profile?.photoUrl, size.w, size.h]);
+  }, [profile?.arBannerUrl, profile?.arBannerType, profile?.arVideoUrl, profile?.photoUrl, profile?.cardShape, size.w, size.h]);
 
   // Re-apply transform/position whenever the saved layout values change --
   // this is what makes the preview update live as you drag things in the
@@ -508,6 +586,7 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
     layout?.videoRotationZ,
     layout?.videoScaleX,
     layout?.videoScaleY,
+    profile?.cardShape,
     size.w,
     size.h,
   ]);
@@ -516,13 +595,22 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
 
   const modelPos = layout?.model || { x: 50, y: 35 };
   const modelProj = profile?.arModelUrl
-    ? projectWorldPoint(...toLocalOffset(modelPos, qrPos), heightToLocalZ(modelPos.z))
+    ? projectWorldPoint(...toLocalOffset(modelPos, qrPos, cardAspect), heightToLocalZ(modelPos.z, cardAspect))
     : null;
   const videoPos = layout?.video || { x: 50, y: 20 };
   const hasVideoContent = Boolean(profile?.arBannerUrl || profile?.arVideoUrl || profile?.photoUrl);
   const videoProj = hasVideoContent
-    ? projectWorldPoint(...toLocalOffset(videoPos, qrPos), heightToLocalZ(videoPos.z))
+    ? projectWorldPoint(...toLocalOffset(videoPos, qrPos, cardAspect), heightToLocalZ(videoPos.z, cardAspect))
     : null;
+  // The QR mesh always sits at local (0,0) by definition -- toLocalOffset
+  // measures every OTHER element's offset FROM the QR, so the QR's own
+  // offset from itself is always zero. Dragging it doesn't move it
+  // relative to itself; it changes qrPos, recalibrating where every other
+  // (unmoved) element's local offset resolves to -- AND, since
+  // arTargetImage.js now composites the real tracking-target QR at this
+  // same layout.qr position, dragging this actually determines where the
+  // QR appears on the physical card/download too, not just this preview.
+  const qrProj = projectWorldPoint(0, 0, 0);
 
   return (
     <div
@@ -560,7 +648,7 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
         if (el.key === 'portfolio' && !profile?.portfolioUrl) return null;
         if (el.key === 'huntsworld' && !profile?.huntsworldUrl) return null;
         const pos = layout[el.key] || { x: 50, y: 50 };
-        const proj = projectWorldPoint(...toLocalOffset(pos, qrPos));
+        const proj = projectWorldPoint(...toLocalOffset(pos, qrPos, cardAspect));
         if (!proj) return null;
         const iconUrl = icons?.[el.key];
         return (
@@ -619,8 +707,13 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
           uses for its own drag canvas (see ArLayout.jsx), not the nested
           `layout.customElements` shape the backend stores it as. */}
       {arComponents.map((c) => {
+        // Same "no value, no pill" rule as the built-in ELEMENTS above --
+        // an admin-defined AR link the client never filled in shouldn't
+        // show up here (or in the real scan, see ArView.jsx/
+        // ArViewMindAR.jsx) at all.
+        if (!profile?.customAttributes?.[c.key]) return null;
         const pos = layout[c.key] || { x: 50, y: 50 };
-        const proj = projectWorldPoint(...toLocalOffset(pos, qrPos));
+        const proj = projectWorldPoint(...toLocalOffset(pos, qrPos, cardAspect));
         if (!proj) return null;
         const iconUrl = icons?.[c.key];
         return (
@@ -671,6 +764,32 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
           </div>
         );
       })}
+
+      {/* QR drag handle -- same invisible-hit-target-over-a-WebGL-mesh
+          pattern as the model/video handles below, but a solid amber
+          ring instead of a dashed one: dragging this is recalibrating
+          where the QR is actually printed on the card (and, now, where
+          it gets composited into the real tracking-target download too),
+          not repositioning a floating decorative element. */}
+      {editable && qrProj && (
+        <div
+          {...dragHandlers('qr')}
+          title="Drag to match where the QR is actually printed on your card"
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            transform: `translate3d(${qrProj.x}px, ${qrProj.y}px, 0) translate(-50%, -50%)`,
+            width: 64,
+            height: 64,
+            borderRadius: '50%',
+            border: '2px solid #f5a524',
+            cursor: dragging === 'qr' ? 'grabbing' : 'grab',
+            touchAction: 'none',
+            zIndex: dragging === 'qr' ? 10 : 2,
+          }}
+        />
+      )}
 
       {/* Model/video drag handles -- invisible-ish hit targets over the
           WebGL-rendered mesh (not a DOM element itself, so it can't carry

@@ -8,6 +8,7 @@ const { nanoid } = require('nanoid');
 const Razorpay = require('razorpay');
 const Client = require('../models/Client');
 const CardPlan = require('../models/CardPlan');
+const CatalogEntry = require('../models/CatalogEntry');
 const CardRequest = require('../models/CardRequest');
 const ContactMessage = require('../models/ContactMessage');
 const Contact = require('../models/Contact');
@@ -17,8 +18,10 @@ const { sendPushToClient } = require('../utils/push');
 const ArLayout = require('../models/ArLayout');
 const ArIcon = require('../models/ArIcon');
 const MagicArt = require('../models/MagicArt');
+const MagicBusinessCard = require('../models/MagicBusinessCard');
 const AttributeDefinition = require('../models/AttributeDefinition');
 const CatalogVideo = require('../models/CatalogVideo');
+const SiteSetting = require('../models/SiteSetting');
 const { getChargeAmount } = require('../utils/pricing');
 
 const router = express.Router();
@@ -83,6 +86,20 @@ router.get('/catalog', async (req, res) => {
   }
 });
 
+
+// GET /api/public/catalog-entries -- active card variants (see
+// models/CatalogEntry.js) for the public Catalog page's tier grid
+// (image gallery, price, features). Distinct from GET /catalog above,
+// which is just the tap-demo video showcase -- both feed the same
+// Catalog.jsx page, in separate sections.
+router.get('/catalog-entries', async (req, res) => {
+  try {
+    const entries = await CatalogEntry.find({ active: true }).sort({ sortOrder: 1, createdAt: 1 });
+    res.json(entries);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET /api/public/themes removed -- Card Designs feature retired.
 
@@ -296,7 +313,7 @@ router.get('/profile/:clientId', async (req, res) => {
     { $inc: { tapCount: 1 } }, // simple tap analytics, per the report's spec -- kept even while paused, harmless
     { new: true }
   ).select(
-    'fullName jobTitle bio photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType clientId cardActive'
+    'fullName jobTitle bio photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType cardVariantId clientId cardActive'
   );
 
   if (!client) {
@@ -313,9 +330,16 @@ router.get('/profile/:clientId', async (req, res) => {
   // Whether this client's plan includes the AR feature -- decides
   // whether the tap page shows a second QR (AR) alongside the regular
   // profile QR every client gets.
-  const plan = await CardPlan.findOne({ key: client.cardType }).select('arEnabled');
+  const plan = await CardPlan.findOne({ key: client.cardType }).select('arEnabled variants');
   const clientObj = client.toObject();
   clientObj.arEnabled = !!plan?.arEnabled;
+  // The physical card's actual shape -- picked at purchase time (see
+  // CardPlanVariantSchema.shape) and needed by the AR layout system to
+  // size/orient itself to match instead of always assuming landscape.
+  // Falls back to 'horizontal' for a client with no variant chosen (older
+  // accounts from before variants existed, or a plan with none configured).
+  const variant = plan?.variants?.find((v) => v._id.toString() === String(client.cardVariantId));
+  clientObj.cardShape = variant?.shape || 'horizontal';
   // client.toObject() does NOT flatten Map-type fields the way a Mongoose
   // document's own toJSON() would -- left as-is, customAttributes would
   // silently serialize as {} below, since a plain Map instance nested in a
@@ -525,6 +549,97 @@ router.get('/magic-art', async (req, res) => {
   }
 });
 
+// GET /api/public/magic-cards -- every ACTIVE Magic Business Card (see
+// backend/models/MagicBusinessCard.js) with both an image and a video.
+// Read-only, no auth, no clientId in the response -- not needed for the
+// AR effect itself. Scanned by client-app's MagicCamera.jsx alongside
+// Magic Art, both merged into one target list there.
+router.get('/magic-cards', async (req, res) => {
+  try {
+    const docs = await MagicBusinessCard.find({
+      active: true,
+      imageUrl: { $ne: null },
+      videoUrl: { $ne: null },
+    });
+    res.set('Cache-Control', 'no-store');
+    res.json(
+      docs.map((doc) => ({
+        imageUrl: doc.imageUrl,
+        imageWidth: doc.imageWidth,
+        imageHeight: doc.imageHeight,
+        videoUrl: doc.videoUrl,
+        videoCrop: {
+          x: doc.videoCropX ?? 0,
+          y: doc.videoCropY ?? 0,
+          width: doc.videoCropWidth ?? 1,
+          height: doc.videoCropHeight ?? 1,
+        },
+      }))
+    );
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/public/magic-card/:clientId -- ONE specific client's ACTIVE
+// Magic Business Card, same field shape as the plural /magic-cards above.
+// Read-only, no auth. Feeds MagicCamera.jsx's client-scoped mode (reached
+// via the "choose AR or Magic" screen off a specific client's own AR QR,
+// see PublicProfile.jsx) -- compiling and tracking just this one image
+// instead of every active client's card gallery-wide is both faster and
+// less prone to false-matching against a similar-looking design.
+router.get('/magic-card/:clientId', async (req, res) => {
+  try {
+    const doc = await MagicBusinessCard.findOne({
+      clientId: req.params.clientId,
+      active: true,
+      imageUrl: { $ne: null },
+      videoUrl: { $ne: null },
+    });
+    if (!doc) return res.status(404).json({ error: 'No active Magic Business Card for this client' });
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      imageUrl: doc.imageUrl,
+      imageWidth: doc.imageWidth,
+      imageHeight: doc.imageHeight,
+      videoUrl: doc.videoUrl,
+      videoCrop: {
+        x: doc.videoCropX ?? 0,
+        y: doc.videoCropY ?? 0,
+        width: doc.videoCropWidth ?? 1,
+        height: doc.videoCropHeight ?? 1,
+      },
+      // Only meaningful (and only sent) for this single-client route --
+      // the gallery-wide /magic-cards above deliberately omits these,
+      // see MagicCamera.jsx's own scoped-mode-only AR component bar.
+      componentPositions: {
+        contact: { x: doc.contactX ?? 20, y: doc.contactY ?? 120, z: doc.contactZ ?? 0, rotation: doc.contactRotation ?? 0 },
+        portfolio: { x: doc.portfolioX ?? 50, y: doc.portfolioY ?? 120, z: doc.portfolioZ ?? 0, rotation: doc.portfolioRotation ?? 0 },
+        social: { x: doc.socialX ?? 80, y: doc.socialY ?? 120, z: doc.socialZ ?? 0, rotation: doc.socialRotation ?? 0 },
+        huntsworld: { x: doc.huntsworldX ?? 50, y: doc.huntsworldY ?? 145, z: doc.huntsworldZ ?? 0, rotation: doc.huntsworldRotation ?? 0 },
+      },
+      // Admin-defined custom components (see AttributeDefinition.magicComponent).
+      magicElements: Object.fromEntries(doc.magicElements || []),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/public/site-settings -- currently just which homepage design
+// to render (see App.jsx). No auth -- read on every client-app load,
+// before we know if anyone's logged in. Defaults to 'default' if the
+// admin has never touched the toggle yet (no doc created).
+router.get('/site-settings', async (req, res) => {
+  try {
+    const doc = await SiteSetting.findOne({ key: 'global' });
+    res.set('Cache-Control', 'no-store');
+    res.json({ homeTheme: doc?.homeTheme || 'default' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/public/attributes -- admin-defined extra profile fields (see
 // AttributeDefinition), active ones only. Used by both Profile Settings
 // (to know which extra inputs to render) and the public tap page (to know
@@ -562,6 +677,24 @@ const HEX_COLOR_RE = /^[0-9a-fA-F]{6}$/;
 function hexColorParam(value, fallback) {
   return HEX_COLOR_RE.test(value || '') ? `#${value}` : fallback;
 }
+
+// GET /api/public/qr/magic-camera -- a fixed QR (no dynamic input at all,
+// unlike /qr/:clientId below) pointing at the now-public /magic-camera
+// page. Registered BEFORE the /:clientId param route below so Express
+// doesn't treat "magic-camera" as a clientId value. Used by the public
+// Magic Art gallery's "scan to see the effect" popup (client-app's
+// MagicArt.jsx), matching the real Artivive product's own QR-popup
+// pattern -- except this one opens straight in the browser, no app
+// install needed.
+router.get('/qr/magic-camera', async (req, res) => {
+  try {
+    const base = process.env.PUBLIC_BASE_URL || 'http://localhost:4000';
+    res.setHeader('Content-Type', 'image/png');
+    QRCode.toFileStream(res, `${base}/magic-camera`, { width: 512, margin: 2 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.get('/qr/:clientId', async (req, res) => {
   try {

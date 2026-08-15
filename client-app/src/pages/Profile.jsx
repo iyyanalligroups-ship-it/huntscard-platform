@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import '@google/model-viewer'; // registers the <model-viewer> custom element used for the 3D model preview below
 import Zoom from 'react-medium-image-zoom';
 import 'react-medium-image-zoom/dist/styles.css';
 import { api } from '../api.js';
+import Magic3DPreview from '../components/Magic3DPreview.jsx';
 
 // Name/job title stay above the tabs, same as the photo/banner -- they're
 // identity, not something that belongs to one of the five card tabs.
@@ -545,8 +545,8 @@ export default function Profile() {
       <div className="card" style={{ marginBottom: 16 }}>
         <label style={{ marginBottom: 8 }}>3D model (optional)</label>
         <p className="hint" style={{ margin: '0 0 10px' }}>
-          Upload either a real 3D model (.glb, shown as an actual 3D object) or a flat cutout
-          image (PNG/JPEG/WEBP -- a transparent PNG works well, shown as a real 3D card in
+          Upload either a real 3D model (.glb or .fbx, shown as an actual 3D object) or a flat
+          cutout image (PNG/JPEG/WEBP -- a transparent PNG works well, shown as a real 3D card in
           HuntsAR World, same as the banner). Without one, your video or photo panel is used
           instead.
         </p>
@@ -555,19 +555,13 @@ export default function Profile() {
           style={{ opacity: arModelUploading ? 0.5 : 1, minHeight: 160 }}
         >
           {profile?.arModelUrl && profile?.arModelType === 'image' ? (
-            // Click to zoom to a full-size lightbox -- the model-viewer
-            // case below already has its own built-in orbit/zoom, this is
-            // only needed for the flat-image case.
+            // Click to zoom to a full-size lightbox -- the 3D-model case
+            // below auto-rotates on a turntable instead, no zoom needed.
             <Zoom>
               <img src={profile.arModelUrl} alt="" style={{ maxHeight: 220, display: 'block', margin: '0 auto' }} />
             </Zoom>
           ) : profile?.arModelUrl ? (
-            <model-viewer
-              src={profile.arModelUrl}
-              camera-controls
-              auto-rotate
-              style={{ width: '100%', height: 220, display: 'block' }}
-            />
+            <Magic3DPreview modelUrl={profile.arModelUrl} modelType={profile.arModelType} width={320} height={220} />
           ) : (
             <span className="banner-placeholder">No model yet</span>
           )}
@@ -576,7 +570,7 @@ export default function Profile() {
           <input
             ref={arModelInputRef}
             type="file"
-            accept=".glb,image/jpeg,image/png,image/webp"
+            accept=".glb,.fbx,image/jpeg,image/png,image/webp"
             onChange={handleArModelChange}
             style={{ display: 'none' }}
             id="arModelInput"
@@ -601,7 +595,7 @@ export default function Profile() {
           )}
         </div>
         <p className="hint" style={{ margin: '8px 0 0' }}>
-          {arModelUploading ? 'Saving your model now…' : '.glb, JPEG, PNG, or WEBP. Max 50MB. Uploads immediately.'}
+          {arModelUploading ? 'Saving your model now…' : '.glb, .fbx, JPEG, PNG, or WEBP. Max 50MB. Uploads immediately.'}
         </p>
         {arModelSaved && !arModelUploading && (
           <p className="hint" style={{ margin: '4px 0 0', color: 'var(--holo-cyan)' }}>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, isLoggedIn } from '../api.js';
 import { loadRazorpayScript } from '../razorpay.js';
 
@@ -60,6 +60,7 @@ function PlanImageGallery({ images }) {
 export default function Shop() {
   const loggedIn = isLoggedIn();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [plans, setPlans] = useState([]);
   const [myProfile, setMyProfile] = useState(null);
   const [selectedKey, setSelectedKey] = useState('');
@@ -92,6 +93,17 @@ export default function Shop() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [loggedIn]);
+
+  // Deep-link from Catalog.jsx's "Get free design preview" button
+  // (/shop?plan=<key>) -- pre-selects that plan and scrolls to checkout,
+  // same as clicking "Choose this plan" directly. Runs once plans have
+  // actually loaded, so the key can be matched against a real plan.
+  useEffect(() => {
+    const planKey = searchParams.get('plan');
+    if (!planKey || plans.length === 0) return;
+    if (plans.some((p) => p.key === planKey)) pickPlan(planKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plans]);
 
   const hasCard = Boolean(myProfile?.cardType);
   // Show every plan, including the client's current one -- it's marked

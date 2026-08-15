@@ -71,15 +71,16 @@ const ClientSchema = new mongoose.Schema(
     // which, set from the uploaded file's mimetype at upload time).
     arBannerUrl: { type: String, trim: true },
     arBannerType: { type: String, enum: ['video', 'image'], default: null },
-    // "3D Model" slot -- EITHER a real .glb model (rendered as an actual
-    // 3D object) OR a flat cutout image (rendered as a real 3D plane, the
-    // same technique arBannerUrl/arBannerType already use for the
-    // banner's own image case). arModelType says which -- 'glb' loads via
-    // GLTFLoader, 'image' loads via TextureLoader onto a PlaneGeometry.
-    // Null/undefined arModelType on an existing arModelUrl means 'glb'
-    // (every model uploaded before this option existed was a real .glb).
+    // "3D Model" slot -- a real 3D model (.glb OR .fbx, rendered as an
+    // actual 3D object) OR a flat cutout image (rendered as a real 3D
+    // plane, the same technique arBannerUrl/arBannerType already use for
+    // the banner's own image case). arModelType says which -- 'glb' loads
+    // via GLTFLoader, 'fbx' via FBXLoader, 'image' via TextureLoader onto
+    // a PlaneGeometry. Null/undefined arModelType on an existing
+    // arModelUrl means 'glb' (every model uploaded before .fbx support
+    // existed was a real .glb).
     arModelUrl: { type: String, trim: true },
-    arModelType: { type: String, enum: ['glb', 'image'], default: null },
+    arModelType: { type: String, enum: ['glb', 'fbx', 'image'], default: null },
     phone: { type: String, trim: true },
     whatsapp: { type: String, trim: true },
     publicEmail: { type: String, trim: true, lowercase: true },

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import '@google/model-viewer'; // registers <model-viewer>, used for the live 3D Model preview below
 import { api, API_URL } from '../api.js';
 import ArScanPreview from '../components/ArScanPreview.jsx';
-import { clampHeight } from '../lib/arProjection.js';
+import ArModelPreview from '../components/ArModelPreview.jsx';
+import { clampHeight, clampPercent } from '../lib/arProjection.js';
 
 /**
  * Lets a client visually position where each element appears in their
@@ -14,14 +14,21 @@ import { clampHeight } from '../lib/arProjection.js';
  *
  * Both panels below are the SAME real 3D renderer (ArScanPreview, the
  * exact Three.js/projection code the live AR view uses) -- not a flat
- * top-down mockup. Drag either one to reposition anything (except the QR
- * itself, which is the tracking anchor everything else is measured
- * relative to, and stays fixed); orbit either one freely to see the
- * arrangement from any angle, same as a real phone scanning at a tilt
- * would. Rotation/height/scale for the 3D model and AR Video/Photo panel
- * live in the controls section below the previews instead of on-canvas
- * handles, since those wouldn't have a fixed screen position to attach to
- * once the model/video can be viewed from any orbit angle.
+ * top-down mockup. Drag either one to reposition anything, including the
+ * QR itself (the amber ring) -- every other element's position is stored
+ * relative to wherever the QR ends up, so dragging the QR recalibrates
+ * the whole arrangement to match where it's actually printed on your
+ * card. Orbit either preview freely to see the arrangement from any
+ * angle, same as a real phone scanning at a tilt would. Rotation/height/
+ * scale for the 3D model and AR Video/Photo panel live in the controls
+ * section below the previews instead of on-canvas handles, since those
+ * wouldn't have a fixed screen position to attach to once the model/video
+ * can be viewed from any orbit angle.
+ *
+ * Live scanning uses ArView.jsx (QR-corner/POSIT tracking, see that
+ * file), not the mind-ar whole-card engine -- the downloaded QR below
+ * deliberately omits `&engine=mindar`, so only the printed QR itself
+ * needs to be recognizable; the card's own design/color can be anything.
  */
 
 export default function ArLayout() {
@@ -30,20 +37,6 @@ export default function ArLayout() {
   const [arComponents, setArComponents] = useState([]); // AR-flagged attributes (AttributeDefinition.arComponent) -- extra AR Layout panel elements
   const [error, setError] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
-  const modelViewerRef = useRef(null);
-
-  // @google/model-viewer has a bug: its own internal handler for the
-  // orientation/scale attributes unconditionally touches AR-session state
-  // that's null outside an actual AR session, throwing before it reaches
-  // the line that actually schedules a re-render -- so the transform is
-  // applied internally but the canvas never redraws. updateFraming() is a
-  // separate, unrelated public method that also ends up requesting a
-  // render, so calling it right after nudges model-viewer into actually
-  // drawing the new orientation/scale.
-  useEffect(() => {
-    modelViewerRef.current?.updateFraming?.();
-  }, [layout?.modelRotationX, layout?.modelRotationY, layout?.modelRotationZ, layout?.modelScale]);
-
   useEffect(() => {
     api
       .getProfile()
@@ -73,6 +66,21 @@ export default function ArLayout() {
   // base size is only 15% of the card width, so it needs more headroom to
   // grow to a comparable on-card size.
   const VIDEO_SCALE_MAX = 10;
+
+  // Explicit X/Y buttons for the QR itself -- dragging it in a tilted 3D
+  // orbit view (see ArScanPreview.jsx's raycasting-based drag) translates
+  // small mouse movements into large position jumps at some angles, too
+  // imprecise for landing on the QR's actual printed position. A small
+  // step (1%) makes this fine enough to nudge into place exactly, same
+  // "buttons over imprecise dragging" reasoning as rotation/height/scale
+  // already use below for the model/video.
+  const QR_POSITION_STEP = 1;
+  function adjustQrPosition(axis, delta) {
+    setLayout((prev) => ({
+      ...prev,
+      qr: { ...(prev.qr || { x: 50, y: 50 }), [axis]: clampPercent((prev.qr?.[axis] ?? 50) + delta) },
+    }));
+  }
 
   // Explicit per-axis buttons -- easier to land on an exact angle than
   // dragging or eyeballing, and the only way to set Z (roll) at all.
@@ -198,6 +206,7 @@ export default function ArLayout() {
     }
   }
 
+
   if (error && !profile) {
     return <div className="error-banner">{error}</div>;
   }
@@ -238,14 +247,13 @@ export default function ArLayout() {
     return <p className="subtitle">Loading…</p>;
   }
 
-  // &engine=mindar -- new AR QR downloads default to the mind-ar engine
-  // now (per the user's explicit decision, 2026-08-09). Existing already-
-  // printed/encoded physical cards are completely unaffected -- this only
-  // changes what a NEW download of this QR encodes going forward, not
-  // anything already out in the world (see the engine query param's
-  // comment in backend/routes/public.js for why an old card can't be
-  // retroactively changed).
-  const qrUrl = `${API_URL}/api/public/qr/${profile.clientId}?type=ar&engine=mindar`;
+  // No &engine=mindar -- this deliberately opens ArView.jsx (QR-corner/
+  // POSIT tracking) on scan, not the whole-card mind-ar engine, so only
+  // the printed QR itself needs to be recognizable; the card's own
+  // design/color is free to be anything. &transparent=1 -- no opaque
+  // white box behind the QR modules, so it sits cleanly on whatever the
+  // card design actually is.
+  const qrUrl = `${API_URL}/api/public/qr/${profile.clientId}?type=ar&transparent=1`;
 
   const panelBtnStyle = {
     width: 26,
@@ -283,9 +291,10 @@ export default function ArLayout() {
     <div>
       <h1 className="page-title">AR Layout</h1>
       <p className="subtitle">
-        The QR code is the anchor a phone locks onto when scanning -- its position is fixed. Drag anything
-        else, in either preview below, to where you want it to float relative to that QR; orbit either
-        preview (drag empty space) to check the arrangement from any angle. This is just for your own card.
+        The QR code (amber ring) is the anchor a phone locks onto when scanning -- drag it to match where
+        it's actually printed on your card; this also controls where it's placed in your downloadable AR
+        tracking target. Drag anything else, in either preview below, to where you want it to float relative
+        to that QR; orbit either preview (drag empty space) to check the arrangement from any angle.
       </p>
 
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start', marginTop: 20 }}>
@@ -321,6 +330,26 @@ export default function ArLayout() {
             onDragPosition={(key, pos) => setLayout((prev) => ({ ...prev, [key]: pos }))}
           />
         </div>
+      </div>
+
+      {/* Precise buttons for the QR's own position -- the amber-ring drag
+          handle above still works for coarse placement, but nudging it
+          exactly onto where the QR is really printed is much easier with
+          fixed steps than eyeballing a drag in a tilted 3D view. */}
+      <div className="card" style={{ marginTop: 20, padding: '16px 18px' }}>
+        <h3 style={{ fontSize: 14, margin: '0 0 10px' }}>QR position</h3>
+        <ControlRow
+          label="Left/right"
+          value={`${Math.round(layout.qr?.x ?? 50)}%`}
+          onDecrement={() => adjustQrPosition('x', -QR_POSITION_STEP)}
+          onIncrement={() => adjustQrPosition('x', QR_POSITION_STEP)}
+        />
+        <ControlRow
+          label="Up/down"
+          value={`${Math.round(layout.qr?.y ?? 50)}%`}
+          onDecrement={() => adjustQrPosition('y', -QR_POSITION_STEP)}
+          onIncrement={() => adjustQrPosition('y', QR_POSITION_STEP)}
+        />
       </div>
 
       {(hasModel || hasVideoContent) && (
@@ -422,13 +451,14 @@ export default function ArLayout() {
       {hasModel && profile?.arModelType !== 'image' && (
         <div className="card" style={{ marginTop: 16, padding: '16px 18px' }}>
           <h3 style={{ fontSize: 14, margin: '0 0 10px' }}>3D Model preview</h3>
-          <model-viewer
-            ref={modelViewerRef}
-            src={profile.arModelUrl}
-            orientation={`${layout.modelRotationZ ?? 0}deg ${layout.modelRotationX ?? 0}deg ${layout.modelRotationY ?? 0}deg`}
-            scale={`${layout.modelScale ?? 1} ${layout.modelScale ?? 1} ${layout.modelScale ?? 1}`}
-            camera-controls
-            style={{ width: '100%', height: 220, display: 'block', background: '#f4f4f4', borderRadius: 'var(--radius)' }}
+          <ArModelPreview
+            modelUrl={profile.arModelUrl}
+            modelType={profile.arModelType}
+            rotationX={layout.modelRotationX ?? 0}
+            rotationY={layout.modelRotationY ?? 0}
+            rotationZ={layout.modelRotationZ ?? 0}
+            scale={layout.modelScale ?? 1}
+            height={220}
           />
           <p className="hint" style={{ marginTop: 6 }}>
             Freely orbit-able here (unlike the Layout/Scan preview panels) since this is just for checking
@@ -445,14 +475,15 @@ export default function ArLayout() {
         {error && <span style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</span>}
       </div>
 
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <a href={qrUrl} download={`huntstag-ar-qr-${profile.clientId}.png`}>
           <button className="secondary" style={{ width: 'auto' }}>
             Download AR QR
           </button>
         </a>
         <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>
-          To print or share separately from your NFC tap card.
+          To print or share separately from your NFC tap card -- your card's own design/color can be
+          anything, since scanning only needs to recognize this QR, not the whole card.
         </span>
       </div>
 

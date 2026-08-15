@@ -269,7 +269,7 @@ export default function DashboardHome() {
           <h2 className="dash-panel-title">Profile completeness</h2>
           <div className="donut-wrap">
             <svg viewBox="0 0 200 200" className="donut">
-              <circle cx="100" cy="100" r={R} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="16" />
+              <circle cx="100" cy="100" r={R} fill="none" style={{ stroke: 'var(--donut-track, rgba(255,255,255,0.07))' }} strokeWidth="16" />
               <circle
                 cx="100" cy="100" r={R} fill="none"
                 stroke="url(#donutGrad)" strokeWidth="16" strokeLinecap="round"
@@ -278,9 +278,9 @@ export default function DashboardHome() {
               />
               <defs>
                 <linearGradient id="donutGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#4f8ef7" />
-                  <stop offset="50%" stopColor="#22c58b" />
-                  <stop offset="100%" stopColor="#f5a524" />
+                  <stop offset="0%" style={{ stopColor: 'var(--donut-c1, #4f8ef7)' }} />
+                  <stop offset="50%" style={{ stopColor: 'var(--donut-c2, #22c58b)' }} />
+                  <stop offset="100%" style={{ stopColor: 'var(--donut-c3, #f5a524)' }} />
                 </linearGradient>
               </defs>
               <text x="100" y="94" textAnchor="middle" className="donut-pct">{pct}%</text>

@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, API_URL } from '../api.js';
 import ArView from './ArView.jsx';
 
@@ -81,6 +81,13 @@ export default function PublicProfile() {
   // models/Card.js) -- absent for cards written before this existed, in
   // which case only the whole-profile pause applies (see backend).
   const cardNumber = searchParams.get('card') || undefined;
+  // Which AR experience to show -- asked once per visit via the chooser
+  // screen below, only relevant while isArMode is true. 'ar' falls
+  // through into the existing useMindAR/ArView logic below unchanged;
+  // 'magic' hands off to the client-scoped Magic Camera (a client-side
+  // redirect, not rendered inline here, since MagicCamera.jsx is a full
+  // route component that reads its own :clientId via useParams).
+  const [arChoice, setArChoice] = useState(null);
 
   // "Exchange Contact" -- the reverse direction of saveContact() below.
   // Combined into one action (see the button itself, ~line 229) rather
@@ -110,6 +117,48 @@ export default function PublicProfile() {
       .then(setAttributes)
       .catch(() => {});
   }, [clientId, isArMode, cardNumber]);
+
+  // Asked once, before committing to either experience -- a card can have
+  // both a HuntsAR World floating panel AND a Magic Business Card effect
+  // set up, and there's no way to tell which one a visitor wants just
+  // from the QR itself, so ask instead of guessing.
+  if (isArMode && !arChoice) {
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: '#000',
+          color: '#fff',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 24,
+          padding: 24,
+          textAlign: 'center',
+        }}
+      >
+        <p style={{ fontSize: 16, maxWidth: 320 }}>Choose an experience</p>
+        <div style={{ display: 'flex', gap: 16 }}>
+          <button onClick={() => setArChoice('ar')} style={{ width: 'auto', padding: '14px 28px' }}>
+            AR
+          </button>
+          <button
+            onClick={() => setArChoice('magic')}
+            className="secondary"
+            style={{ width: 'auto', padding: '14px 28px' }}
+          >
+            Magic
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (arChoice === 'magic') {
+    return <Navigate to={`/magic-camera/${clientId}`} replace />;
+  }
 
   if (useMindAR) {
     return (
