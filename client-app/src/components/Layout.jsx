@@ -108,17 +108,20 @@ export default function Layout() {
     navigate('/');
   }
 
-  // The overview page uses a wide grid; every other page keeps the
-  // original narrow centered column so existing forms don't stretch.
-  // AR Layout is the one exception -- it's a drag-and-drop canvas shaped
-  // like a real (landscape) business card, and needs the full width next
-  // to the sidebar (not just a wider cap) to be comfortable to use.
+  // The overview page uses a wide (1100px, centered) grid; every other
+  // page keeps the original narrow 640px centered column so existing
+  // forms don't stretch. Two exceptions need more room than that:
+  // - AR Layout / Appointments need the width next to the sidebar
+  //   completely uncapped (a landscape drag-and-drop canvas, and a
+  //   month+week calendar grid that horizontal-scrolls if squeezed).
+  // - Shop's plan detail panel (photo + form side by side, up to 900px)
+  //   was getting boxed into the 640px column with big empty gutters on
+  //   either side, so it shares the overview page's wider 1100px cap
+  //   instead -- wide enough to breathe, still capped so it doesn't run
+  //   edge-to-edge on an ultrawide monitor.
   const isOverview = location.pathname === '/dashboard';
-  // Appointments' calendar (mini month + week grid side by side) needs
-  // the same full-width treatment for the same reason AR Layout does --
-  // a narrow centered column forces the week grid to horizontal-scroll
-  // to show all 7 days instead of just laying out naturally.
-  const isArLayout =
+  const isWideColumn = isOverview || location.pathname === '/dashboard/upgrade';
+  const isEdgeToEdge =
     location.pathname === '/dashboard/ar-layout' ||
     location.pathname === '/dashboard/huntsengine-test' ||
     location.pathname === '/dashboard/appointments';
@@ -169,8 +172,8 @@ export default function Layout() {
         </div>
       </aside>
 
-      <main className={isOverview || isArLayout ? 'dash-main' : 'dash-main page-shell-wrap'}>
-        <div className={isOverview ? 'dash-content' : isArLayout ? 'dash-content-full' : 'page-shell'}>
+      <main className={isWideColumn || isEdgeToEdge ? 'dash-main' : 'dash-main page-shell-wrap'}>
+        <div className={isWideColumn ? 'dash-content' : isEdgeToEdge ? 'dash-content-full' : 'page-shell'}>
           <Outlet />
         </div>
       </main>

@@ -44,6 +44,53 @@ function parseQuantity(raw) {
   return Math.min(n, MAX_CARD_QUANTITY);
 }
 
+// Multiple variants of the SAME plan in one order (e.g. 1x "White Night"
+// + 1x "Revenge Red") -- only used for plans that actually have variants;
+// a plan with none keeps using the plain `quantity` field above
+// unchanged. Each entry's own quantity is clamped the same way a single
+// order's quantity already is, and the SUM is capped too (two entries of
+// 15 each would each individually pass parseQuantity's own cap but still
+// total 30). Returns null on anything invalid -- an unknown variantId, no
+// entries at all, or a total over the cap -- so the caller can reject the
+// whole order rather than silently drop/clamp it into something the
+// buyer didn't actually ask for.
+function parseVariantBreakdown(raw, plan) {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const validIds = new Set(plan.variants.map((v) => v._id.toString()));
+  const breakdown = [];
+  let total = 0;
+  for (const entry of raw) {
+    const variantId = String(entry?.variantId || '');
+    if (!validIds.has(variantId)) return null;
+    const qty = parseQuantity(entry?.quantity);
+    breakdown.push({ variantId, quantity: qty });
+    total += qty;
+  }
+  if (total > MAX_CARD_QUANTITY) return null;
+  return { breakdown, total };
+}
+
+// Creates one Card doc per physical unit actually paid for -- expands
+// variantBreakdown (one entry per style, each with its own quantity) into
+// individual cards, or falls back to `quantity` cards with no variant for a
+// plan that doesn't have any. cardNumber continues from whatever's already
+// highest for this client, so a repeat purchase appends new numbers rather
+// than colliding with cards an earlier purchase already created.
+async function createCardsForPurchase({ clientId, cardType, quantity, variantBreakdown }) {
+  const lastCard = await Card.findOne({ clientId }).sort({ cardNumber: -1 }).select('cardNumber');
+  let nextNumber = (lastCard?.cardNumber || 0) + 1;
+  const units = variantBreakdown && variantBreakdown.length > 0
+    ? variantBreakdown.flatMap((entry) => Array(entry.quantity).fill(entry.variantId))
+    : Array(quantity).fill(null);
+  const cardDocs = units.map((variantId) => ({
+    clientId,
+    cardNumber: nextNumber++,
+    cardType,
+    cardVariantId: variantId,
+  }));
+  if (cardDocs.length > 0) await Card.insertMany(cardDocs);
+}
+
 // ---------------------------------------------------------------------
 // Photo upload -- stored on local disk under backend/uploads/photos,
 // served statically (see server.js). This is the actual "upload a file"
@@ -887,7 +934,6 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
 
     const { requestedPlan } = req.body;
     if (!requestedPlan) return res.status(400).json({ error: 'requestedPlan is required' });
-    const quantity = parseQuantity(req.body.quantity);
 
     const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase(), active: true });
     if (!plan) return res.status(400).json({ error: 'requestedPlan must match an active card plan' });
@@ -896,11 +942,32 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'This plan has no price set yet -- ask admin to set one, or use the request-only flow.' });
     }
 
+    // A plan with variants requires picking one or more styles + a
+    // quantity for each (e.g. 1x "White Night" + 1x "Revenge Red"); a
+    // plan with none keeps the plain single quantity it always had.
+    let quantity;
+    let variantBreakdown = null;
+    if (plan.variants.length > 0) {
+      const parsed = parseVariantBreakdown(req.body.variants, plan);
+      if (!parsed) return res.status(400).json({ error: 'Choose at least one card style and quantity.' });
+      quantity = parsed.total;
+      variantBreakdown = parsed.breakdown;
+    } else {
+      quantity = parseQuantity(req.body.quantity);
+    }
+
     const order = await razorpay.orders.create({
       amount: Math.round(chargeAmount * quantity * 100), // Razorpay wants paise, the smallest unit
       currency: 'INR',
       receipt: `upg_${req.user.clientId}_${Date.now()}`,
-      notes: { clientId: req.user.clientId, requestedPlan: plan.key, quantity },
+      // Razorpay notes are flat string values -- the breakdown array is
+      // stringified, parsed back out in upgrade-confirm below.
+      notes: {
+        clientId: req.user.clientId,
+        requestedPlan: plan.key,
+        quantity,
+        variantBreakdown: variantBreakdown ? JSON.stringify(variantBreakdown) : '',
+      },
     });
 
     res.json({
@@ -930,7 +997,7 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
 
     const {
       requestedPlan, razorpay_order_id, razorpay_payment_id, razorpay_signature,
-      cardVariantId, designFrontUrl, designBackUrl,
+      designFrontUrl, designBackUrl,
     } = req.body;
     if (!requestedPlan || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({ error: 'Missing payment verification fields' });
@@ -945,29 +1012,52 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Payment verification failed -- signature mismatch.' });
     }
 
-    // Variant/design fields don't affect the charge amount (unlike
-    // quantity below), so there's no tampering risk in trusting them
-    // straight from this request body -- same trust level requestedPlan
-    // itself already has here (no order.notes cross-check exists for it
-    // either).
+    // A retried/duplicate confirm for a payment already recorded -- return
+    // the existing request instead of re-running any of the writes below.
+    // Matters more now than it used to: this route also mints physical
+    // Card placeholders (see below), and a duplicate confirm would mint
+    // duplicates nobody actually paid for.
+    const existingRequest = await CardRequest.findOne({ razorpayPaymentId: razorpay_payment_id });
+    if (existingRequest) return res.status(200).json(existingRequest);
+
+    // Design fields don't affect the charge amount, so there's no
+    // tampering risk in trusting them straight from this request body --
+    // same trust level requestedPlan itself already has here (no
+    // order.notes cross-check exists for it either). The variant
+    // breakdown DOES determine how the charge amount was computed, so
+    // (like quantity below) it's read from the order's own notes, never
+    // trusted from this request body directly.
     const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase() });
     if (!plan) return res.status(400).json({ error: 'requestedPlan must match an existing card plan' });
-    if (plan.variants.length > 0) {
-      if (!cardVariantId || !plan.variants.some((v) => v._id.toString() === cardVariantId)) {
-        return res.status(400).json({ error: 'A valid card variant must be selected for this plan.' });
-      }
-    }
     if (plan.requiresDesignUpload && (!designFrontUrl || !designBackUrl)) {
       return res.status(400).json({ error: 'Front and back design uploads are required for this plan.' });
     }
 
-    // Quantity comes from the ORDER we created (server-controlled at
-    // create-order time), never from this request's body -- otherwise
-    // someone could pay for 1 card and just claim quantity: 100 here to
-    // get free spare cards. The order's notes are the source of truth for
-    // what was actually paid for.
+    // Quantity AND the variant breakdown both come from the ORDER we
+    // created (server-controlled at create-order time), never from this
+    // request's body -- otherwise someone could pay for 1 card and just
+    // claim a bigger quantity/breakdown here to get free spare cards. The
+    // order's notes are the source of truth for what was actually paid for.
     const order = await getRazorpay().orders.fetch(razorpay_order_id);
     const quantity = parseQuantity(order?.notes?.quantity);
+    let variantBreakdown = [];
+    if (order?.notes?.variantBreakdown) {
+      try {
+        variantBreakdown = JSON.parse(order.notes.variantBreakdown);
+      } catch {
+        variantBreakdown = [];
+      }
+    }
+    if (plan.variants.length > 0 && variantBreakdown.length === 0) {
+      return res.status(400).json({ error: 'A valid card variant must be selected for this plan.' });
+    }
+    // The client's own profile/card record only carries ONE variant
+    // (Client.cardVariantId) -- the first style they picked, same
+    // convention a single-variant order already had (there was only ever
+    // one to pick from before). Any additional styles/quantities from the
+    // breakdown are for admin to encode as extra physical copies (see
+    // CardRequest.variantBreakdown), not reflected on the account itself.
+    const primaryVariantId = variantBreakdown[0]?.variantId || null;
 
     // Payment is verified above -- that IS the trust step now, so this
     // applies immediately rather than sitting in the admin queue waiting
@@ -981,7 +1071,7 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
       { $set: {
           cardType: requestedPlan.toLowerCase(),
           paid: true,
-          cardVariantId: plan.variants.length > 0 ? cardVariantId : null,
+          cardVariantId: plan.variants.length > 0 ? primaryVariantId : null,
           customDesignFrontUrl: plan.requiresDesignUpload ? designFrontUrl : null,
           customDesignBackUrl: plan.requiresDesignUpload ? designBackUrl : null,
         } }
@@ -997,6 +1087,18 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
       razorpayPaymentId: razorpay_payment_id,
       amountPaid: order.amount / 100, // the actual charged total, straight from Razorpay's own order record
       quantity,
+      variantBreakdown,
+    });
+
+    // One trackable physical card per unit paid for -- a repeat purchase
+    // against a client who already has a (possibly already-delivered) card
+    // used to leave no way to fulfill the new one; this gives it its own
+    // Card record instead of silently reusing the existing fulfillment state.
+    await createCardsForPurchase({
+      clientId: req.user.clientId,
+      cardType: requestedPlan.toLowerCase(),
+      quantity,
+      variantBreakdown,
     });
 
     res.status(201).json(request);
@@ -1035,7 +1137,6 @@ router.post('/new-card-order', requireAuth, async (req, res) => {
     if (!requestedPlan || !recipientName || !recipientEmail) {
       return res.status(400).json({ error: 'requestedPlan, recipientName, and recipientEmail are required' });
     }
-    const quantity = parseQuantity(req.body.quantity);
 
     const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase(), active: true });
     if (!plan) return res.status(400).json({ error: 'requestedPlan must match an active card plan' });
@@ -1049,11 +1150,30 @@ router.post('/new-card-order', requireAuth, async (req, res) => {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
 
+    // Same "one or more styles + a quantity each" shape as upgrade-order
+    // above -- see that route's own comment.
+    let quantity;
+    let variantBreakdown = null;
+    if (plan.variants.length > 0) {
+      const parsed = parseVariantBreakdown(req.body.variants, plan);
+      if (!parsed) return res.status(400).json({ error: 'Choose at least one card style and quantity.' });
+      quantity = parsed.total;
+      variantBreakdown = parsed.breakdown;
+    } else {
+      quantity = parseQuantity(req.body.quantity);
+    }
+
     const order = await razorpay.orders.create({
       amount: Math.round(chargeAmount * quantity * 100),
       currency: 'INR',
       receipt: `new_${req.user.clientId}_${Date.now()}`,
-      notes: { purchasedBy: req.user.clientId, requestedPlan: plan.key, recipientEmail: recipientEmail.toLowerCase(), quantity },
+      notes: {
+        purchasedBy: req.user.clientId,
+        requestedPlan: plan.key,
+        recipientEmail: recipientEmail.toLowerCase(),
+        quantity,
+        variantBreakdown: variantBreakdown ? JSON.stringify(variantBreakdown) : '',
+      },
     });
 
     res.json({
@@ -1084,7 +1204,6 @@ router.post('/new-card-confirm', requireAuth, async (req, res) => {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-      cardVariantId,
       designFrontUrl,
       designBackUrl,
     } = req.body;
@@ -1101,24 +1220,41 @@ router.post('/new-card-confirm', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Payment verification failed -- signature mismatch.' });
     }
 
-    // Same reasoning as upgrade-confirm above: variant/design don't
-    // affect the charge amount, so trusting them from this request body
-    // (rather than order.notes) carries no tampering risk.
+    // Same reasoning as upgrade-confirm above -- a retried/duplicate confirm
+    // shouldn't re-run the writes below (which now includes minting real
+    // Card placeholders, not just the CardRequest audit row). The recipient-
+    // email check further down already catches most duplicate calls too,
+    // but this fires first and avoids relying on that as the only guard.
+    const existingRequest = await CardRequest.findOne({ razorpayPaymentId: razorpay_payment_id });
+    if (existingRequest) return res.status(200).json(existingRequest);
+
+    // Same reasoning as upgrade-confirm above: design fields don't affect
+    // the charge amount, so trusting them from this request body carries
+    // no tampering risk -- the variant breakdown DOES, so it's read from
+    // the order's own notes below instead.
     const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase() });
     if (!plan) return res.status(400).json({ error: 'requestedPlan must match an existing card plan' });
-    if (plan.variants.length > 0) {
-      if (!cardVariantId || !plan.variants.some((v) => v._id.toString() === cardVariantId)) {
-        return res.status(400).json({ error: 'A valid card variant must be selected for this plan.' });
-      }
-    }
     if (plan.requiresDesignUpload && (!designFrontUrl || !designBackUrl)) {
       return res.status(400).json({ error: 'Front and back design uploads are required for this plan.' });
     }
 
-    // Same as upgrade-confirm above: quantity comes from the order WE
-    // created, never trusted from this request body directly.
+    // Same as upgrade-confirm above: quantity AND the variant breakdown
+    // both come from the order WE created, never trusted from this
+    // request body directly.
     const order = await getRazorpay().orders.fetch(razorpay_order_id);
     const quantity = parseQuantity(order?.notes?.quantity);
+    let variantBreakdown = [];
+    if (order?.notes?.variantBreakdown) {
+      try {
+        variantBreakdown = JSON.parse(order.notes.variantBreakdown);
+      } catch {
+        variantBreakdown = [];
+      }
+    }
+    if (plan.variants.length > 0 && variantBreakdown.length === 0) {
+      return res.status(400).json({ error: 'A valid card variant must be selected for this plan.' });
+    }
+    const primaryVariantId = variantBreakdown[0]?.variantId || null;
 
     const existing = await Client.findOne({ loginEmail: recipientEmail.toLowerCase() });
     if (existing) {
@@ -1140,7 +1276,7 @@ router.post('/new-card-confirm', requireAuth, async (req, res) => {
       passwordHash,
       fullName: recipientName,
       cardType: requestedPlan.toLowerCase(),
-      cardVariantId: plan.variants.length > 0 ? cardVariantId : null,
+      cardVariantId: plan.variants.length > 0 ? primaryVariantId : null,
       customDesignFrontUrl: plan.requiresDesignUpload ? designFrontUrl : null,
       customDesignBackUrl: plan.requiresDesignUpload ? designBackUrl : null,
       paid: true, // verified above -- real payment already happened
@@ -1150,12 +1286,24 @@ router.post('/new-card-confirm', requireAuth, async (req, res) => {
     await CardRequest.create({
       clientId: req.user.clientId, // who paid, for audit -- not the new account
       type: 'new_card',
+      requestedPlan: requestedPlan.toLowerCase(), // needed to resolve variantBreakdown's variantId for admin display (see admin.js's GET /requests)
       note: `Purchased for ${recipientName} <${recipientEmail}> -- new clientId ${clientId}${quantity > 1 ? ` -- ${quantity} physical cards for this one profile` : ''}`,
       status: 'fulfilled', // account already exists, nothing left for admin to do but encode the physical card(s)
       paymentStatus: 'paid',
       razorpayOrderId: razorpay_order_id,
       razorpayPaymentId: razorpay_payment_id,
       quantity,
+      variantBreakdown,
+    });
+
+    // Cards belong to the new recipient's account, not the purchaser who
+    // paid for them (CardRequest above is attributed to the purchaser for
+    // audit purposes only).
+    await createCardsForPurchase({
+      clientId: newClient.clientId,
+      cardType: requestedPlan.toLowerCase(),
+      quantity,
+      variantBreakdown,
     });
 
     res.status(201).json({

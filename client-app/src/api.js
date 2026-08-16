@@ -31,7 +31,22 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const data = await res.json().catch(() => ({}));
+  // A response body that fails to parse as JSON is only a legitimate,
+  // ignorable case when the request already FAILED (some proxies/hosts
+  // return a plain-text or HTML error page instead of JSON) -- silently
+  // defaulting to {} on a 2xx response instead let a truncated/empty body
+  // (a real risk on slow connections, especially the large video/image
+  // uploads below) masquerade as a valid, empty success payload. Callers
+  // like `setCard(await api.uploadMyMagicCardVideo(...))` would then wipe
+  // out every field of already-saved state (imageUrl included) even
+  // though the upload itself succeeded server-side.
+  let data;
+  try {
+    data = await res.json();
+  } catch (parseErr) {
+    if (res.ok) throw new Error('The server response could not be read -- please try again.');
+    data = {};
+  }
   if (!res.ok) {
     if (res.status === 401 && auth) {
       clearSession();
@@ -40,6 +55,30 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
     }
     throw new Error(data.error || `Request failed (${res.status})`);
   }
+  return data;
+}
+
+// Shared response handling for the multipart upload functions below (they
+// can't go through request() since that always sets Content-Type:
+// application/json). Same fix as request() above, for the same reason:
+// on a successful (2xx) response, a body that fails to parse as JSON must
+// not silently become {} -- that would let a truncated/empty response (a
+// real risk on slow connections, especially for these large file
+// uploads) masquerade as valid empty data, and the caller's
+// `setCard(await api.uploadX(...))` would then wipe out every
+// already-saved field of state even though the upload itself succeeded
+// server-side. Only a genuinely FAILED response is allowed to fall back
+// to {} (some hosts/proxies return a plain-text or HTML error page
+// instead of JSON for those).
+async function parseUploadResponse(res, actionLabel = 'Upload') {
+  let data;
+  try {
+    data = await res.json();
+  } catch (parseErr) {
+    if (res.ok) throw new Error('The server response could not be read -- please try again.');
+    data = {};
+  }
+  if (!res.ok) throw new Error(data.error || `${actionLabel} failed (${res.status})`);
   return data;
 }
 
@@ -138,9 +177,7 @@ export const api = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
-    return data;
+    return parseUploadResponse(res);
   },
   uploadMyMagicCardVideo: async (file, crop) => {
     const formData = new FormData();
@@ -155,9 +192,7 @@ export const api = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
-    return data;
+    return parseUploadResponse(res);
   },
   removeMyMagicCardImage: () => request('/api/profile/magic-card/image', { method: 'DELETE' }),
   removeMyMagicCardVideo: () => request('/api/profile/magic-card/video', { method: 'DELETE' }),
@@ -170,6 +205,10 @@ export const api = {
   // PublicProfile.jsx's "Exchange Contact" flow).
   submitLead: (clientId, payload, cardNumber) =>
     request(`/api/public/leads/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`, { method: 'POST', body: payload, auth: false }),
+  // "Raise a ticket" -- shown in place of a raw phone/email when a card is
+  // temporarily deactivated (see PublicProfile.jsx's 'deactivated' branch).
+  submitCardTicket: (clientId, payload, cardNumber) =>
+    request(`/api/public/card-tickets/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`, { method: 'POST', body: payload, auth: false }),
   getCatalog: () => request('/api/public/catalog', { auth: false }),
   // Card variant showcase (photos, price, features) -- distinct from
   // getCatalog above, which is just the tap-demo videos. Both feed
@@ -186,7 +225,12 @@ export const api = {
   submitRequest: (payload) => request('/api/profile/requests', { method: 'POST', body: payload }),
   listMyRequests: () => request('/api/profile/requests'),
 
-  createUpgradeOrder: (requestedPlan, quantity) => request('/api/profile/upgrade-order', { method: 'POST', body: { requestedPlan, quantity } }),
+  // `variants` (only for a plan that has any): array of {variantId,
+  // quantity} for a mixed order (e.g. 1x "White Night" + 1x "Revenge
+  // Red") -- omit/leave undefined for a plan with no variants, which
+  // still just uses `quantity` directly.
+  createUpgradeOrder: (requestedPlan, quantity, variants) =>
+    request('/api/profile/upgrade-order', { method: 'POST', body: { requestedPlan, quantity, variants } }),
   confirmUpgradePayment: (payload) => request('/api/profile/upgrade-confirm', { method: 'POST', body: payload }),
 
   createNewCardOrder: (payload) => request('/api/profile/new-card-order', { method: 'POST', body: payload }),
@@ -207,9 +251,7 @@ export const api = {
     const formData = new FormData();
     formData.append('design', file);
     const res = await fetch(`${API_URL}/api/public/design-upload`, { method: 'POST', body: formData });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
-    return data;
+    return parseUploadResponse(res);
   },
 
   // Multipart upload -- can't go through the generic request() helper
@@ -223,9 +265,7 @@ export const api = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
-    return data;
+    return parseUploadResponse(res);
   },
 
   uploadBanner: async (file) => {
@@ -237,9 +277,7 @@ export const api = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
-    return data;
+    return parseUploadResponse(res);
   },
   removeBanner: () => request('/api/profile/banner', { method: 'DELETE' }),
 
@@ -252,9 +290,7 @@ export const api = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
-    return data;
+    return parseUploadResponse(res);
   },
   removeLogo: () => request('/api/profile/logo', { method: 'DELETE' }),
 
@@ -267,9 +303,7 @@ export const api = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
-    return data;
+    return parseUploadResponse(res);
   },
   removeArBanner: () => request('/api/profile/ar-banner', { method: 'DELETE' }),
 
@@ -282,9 +316,7 @@ export const api = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
-    return data;
+    return parseUploadResponse(res);
   },
   removeArModel: () => request('/api/profile/ar-model', { method: 'DELETE' }),
 
@@ -311,9 +343,7 @@ export const api = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
-    return data;
+    return parseUploadResponse(res);
   },
 
   // Export returns a file, not JSON -- can't go through the generic

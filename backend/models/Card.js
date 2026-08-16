@@ -22,6 +22,11 @@ const CardSchema = new mongoose.Schema(
     // own variants[], joined at read time rather than copied.
     cardType: { type: String, trim: true, lowercase: true, default: null },
     cardVariantId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    // Admin's own free-text nickname for THIS specific physical card (e.g.
+    // "Front desk", "Spare for Priya") -- distinct from cardType/variant,
+    // which describe the plan/style, not which literal object it is. Purely
+    // for telling several cards for the same client apart at a glance.
+    label: { type: String, trim: true, default: null },
     // AES-256-GCM ciphertext (see backend/utils/crypto.js) -- the actual
     // chip write-password, admin-viewable on purpose (unlike every other
     // secret in this codebase, which is one-way hashed). NEVER sent to
@@ -37,6 +42,22 @@ const CardSchema = new mongoose.Schema(
     encoded: { type: Boolean, default: false },
     encodedAt: { type: Date, default: null },
     encodedBy: { type: String, default: null },
+
+    // ---- Fulfillment pipeline -- same shape as the legacy Client fields
+    // (see Client.js), now per physical card instead of per profile, so a
+    // client with several cards can have each one independently claimed,
+    // dispatched, and delivered. Card #1 is mirrored back onto Client's
+    // own fields wherever it's mutated (see routes/admin.js), so anything
+    // that still reads Client.* directly keeps working for a client's
+    // first card. ----
+    claimedBy: { type: String, default: null },
+    assignedTo: { type: String, default: null },
+    dispatched: { type: Boolean, default: false },
+    dispatchedAt: { type: Date, default: null },
+    dispatchedBy: { type: String, default: null },
+    trackingId: { type: String, default: null, trim: true },
+    delivered: { type: Boolean, default: false },
+    deliveredAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

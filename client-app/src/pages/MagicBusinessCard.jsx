@@ -199,7 +199,8 @@ export default function MagicBusinessCard() {
     setBusy(true);
     setError('');
     try {
-      setCard(await api.setMyMagicCardType(cardType));
+      const updated = await api.setMyMagicCardType(cardType);
+      setCard((prev) => ({ ...prev, ...updated }));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -240,7 +241,8 @@ export default function MagicBusinessCard() {
     setQrSaveStatus('Saving...');
     setError('');
     try {
-      setCard(await api.saveMyMagicCardQrPosition(qrPos.x, qrPos.y));
+      const updatedQr = await api.saveMyMagicCardQrPosition(qrPos.x, qrPos.y);
+      setCard((prev) => ({ ...prev, ...updatedQr }));
       // Also mirrors into the main AR Layout system's own qr position
       // (see ArLayout.jsx / arTargetImage.js) -- one QR placement, not
       // two separately-set ones that can drift apart. Sent as a partial
@@ -423,9 +425,19 @@ export default function MagicBusinessCard() {
           targetW,
           targetH
         );
-        setCard(await api.uploadMyMagicCardImage(blob, width, height));
+        const updated = await api.uploadMyMagicCardImage(blob, width, height);
+        // Merge onto the existing state rather than replacing it wholesale
+        // -- the server always returns the full current card, so this is
+        // normally a no-op, but it means a response that's ever missing a
+        // field it didn't actually touch (a stray/overlapping request, a
+        // flaky connection) can't silently wipe already-known-good data
+        // like `imageUrl`, which several OTHER sections on this page key
+        // their visibility off of (see the "AR components" section
+        // vanishing after a video crop -- same defensive fix below).
+        setCard((prev) => ({ ...prev, ...updated }));
       } else {
-        setCard(await api.uploadMyMagicCardVideo(session.file, session.crop));
+        const updated = await api.uploadMyMagicCardVideo(session.file, session.crop);
+        setCard((prev) => ({ ...prev, ...updated }));
       }
       closeCropSession();
     } catch (err) {
@@ -439,7 +451,8 @@ export default function MagicBusinessCard() {
     setBusy(true);
     setError('');
     try {
-      setCard(card?.active ? await api.deactivateMyMagicCard() : await api.activateMyMagicCard());
+      const updated = card?.active ? await api.deactivateMyMagicCard() : await api.activateMyMagicCard();
+      setCard((prev) => ({ ...prev, ...updated }));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -543,7 +556,8 @@ export default function MagicBusinessCard() {
     setError('');
     try {
       const remove = field === 'image' ? api.removeMyMagicCardImage : api.removeMyMagicCardVideo;
-      setCard(await remove());
+      const updated = await remove();
+      setCard((prev) => ({ ...prev, ...updated }));
     } catch (err) {
       setError(err.message);
     } finally {

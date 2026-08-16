@@ -93,8 +93,6 @@ body {
   border-radius: 16px;
   padding: 32px;
 }
-.card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-
 h1 { font-size: 20px; margin: 0 0 8px; }
 .muted { color: var(--text-dim); font-size: 14px; line-height: 1.5; }
 
@@ -111,6 +109,82 @@ input {
 }
 input:focus { outline: none; border-color: #4f8ef7; }
 input:disabled { opacity: 0.55; cursor: not-allowed; background: rgba(255,255,255,0.02); }
+
+select {
+  width: 100%;
+  background: #0e0f16;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 12px 40px 12px 14px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: var(--font);
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239a9ba8' stroke-width='1.6' fill='none' fill-rule='evenodd'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  cursor: pointer;
+}
+select:focus { outline: none; border-color: #4f8ef7; }
+select option { background: #15161f; color: var(--text); }
+
+/* Also used by the Write tab's client-summary line (#writeFormMeta) --
+   not exclusively a "pending item" class despite the name. */
+.pending-item-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+
+/* Create a card: per-card details collected before arming (name + style),
+   shown once a client is found. */
+.gift-details-panel {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid var(--panel-border);
+}
+.gift-client-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 22px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--panel-border);
+}
+.gift-client-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(120deg, #5eead4, #4f8ef7, #a78bfa, #f472b6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: #0b0c11;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.gift-client-name { font-weight: 700; font-size: 15px; }
+.gift-client-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.gift-client-meta .mono { font-family: 'SFMono-Regular', Consolas, monospace; }
+
+.gift-field { margin-bottom: 18px; }
+.gift-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 0;
+  margin-bottom: 7px;
+}
+.gift-field-hint {
+  display: block;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.gift-field input, .gift-field select { width: 100%; }
+#giftConfirmBtn { margin-top: 4px; }
 
 .btn-primary {
   margin-top: 18px;
@@ -140,65 +214,6 @@ input:disabled { opacity: 0.55; cursor: not-allowed; background: rgba(255,255,25
 
 .error { color: var(--danger); font-size: 13px; margin-top: 12px; }
 
-/* Create a card: gift-by-ID on the left, paid clients list on the right.
-   This section alone breaks out of the page's normal 640px column width
-   since two side-by-side panels need more room. */
-#pickerView.card { align-self: center; width: min(920px, calc(100vw - 40px)); }
-.picker-columns { display: flex; gap: 32px; align-items: flex-start; margin-top: 20px; }
-.picker-columns .subsection { flex: 1; min-width: 0; padding-top: 0; margin-top: 0; border-top: none; }
-.picker-col-left { border-right: 1px solid var(--panel-border); padding-right: 32px; }
-@media (max-width: 720px) {
-  .picker-columns { flex-direction: column; }
-  .picker-col-left { border-right: none; padding-right: 0; padding-bottom: 20px; border-bottom: 1px solid var(--panel-border); }
-}
-
-.pending-list { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
-.pending-list.encoding-active .pending-item:not(.pending-item-active) { opacity: 0.4; pointer-events: none; }
-.pending-item {
-  padding: 14px 16px;
-  border-radius: 10px;
-  background: #0e0f16;
-  border: 1px solid var(--panel-border);
-}
-.pending-item-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.pending-item-name { font-weight: 600; font-size: 14px; }
-.pending-item-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
-.pending-item-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
-.preview-link { font-size: 12px; color: var(--text-dim); text-decoration: underline; }
-.preview-link:hover { color: var(--text); }
-.pending-item-actions .edit-toggle {
-  background: none;
-  border: 1px solid var(--panel-border);
-  color: var(--text-dim);
-  border-radius: 999px;
-  padding: 8px 14px;
-  font-size: 12px;
-  cursor: pointer;
-}
-.pending-item-actions .encode-btn {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 999px;
-  background: linear-gradient(120deg, #5eead4, #4f8ef7, #a78bfa, #f472b6);
-  color: #0b0c11;
-  font-weight: 700;
-  font-size: 13px;
-  cursor: pointer;
-}
-/* When the shared status view is relocated inside a pending-item (see
-   armClient() in app.js), it drops its full-page card chrome and reads
-   as an inline expansion of that row instead. */
-.pending-item #statusView.inline-status {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--panel-border);
-  background: none;
-  border: none;
-  border-radius: 0;
-  padding-left: 0;
-  padding-right: 0;
-  padding-bottom: 0;
-}
 .edit-panel {
   margin-top: 14px;
   padding-top: 14px;

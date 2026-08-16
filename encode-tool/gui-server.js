@@ -22,7 +22,7 @@ const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 const { NFC } = require('nfc-pcsc');
-const { writeNdef, verifyWrite, lockCard, readNdefUri, checkLockStatus, attemptPasswordAuth, attemptRewriteTest, unlockAndBlankCard, blankUnprotectedCard, identifyCard } = require('./lib');
+const { writeNdef, verifyWrite, lockCard, readNdefUri, checkLockStatus, attemptPasswordAuth, attemptRewriteTest, unlockAndBlankCard, blankUnprotectedCard, identifyCard, assertNtag216 } = require('./lib');
 const { readConfig, writeConfig, clearSavedSession } = require('./config-store');
 
 const PORT = process.env.GUI_PORT || 5175;
@@ -177,13 +177,14 @@ app.post('/api/logout', (req, res) => {
 });
 
 // ---------------------------------------------------------------------
-// Pending clients
+// Client lookup
 // ---------------------------------------------------------------------
 
-// Looks up ANY client by ID -- unlike /api/pending, this has no paid or
-// chipEncoded filter, because the Write panel's job is finding a
-// specific person to fix up their details, not listing who's ready for
-// a card.
+// Looks up ANY client by ID, no paid or chipEncoded filter -- used by both
+// the Write panel (finding a specific person to fix up their details) and
+// the Create-a-card panel (finding who to arm, plus their plan's variant
+// choices for the style picker -- see GET /api/admin/encode/client/:id's
+// own comment for the planVariants field this returns).
 app.get('/api/client/:clientId', requireSession, async (req, res) => {
   try {
     const r = await fetch(`${BACKEND_URL}/api/admin/encode/client/${req.params.clientId}`, {
@@ -197,34 +198,24 @@ app.get('/api/client/:clientId', requireSession, async (req, res) => {
   }
 });
 
-app.get('/api/pending', requireSession, async (req, res) => {
-  try {
-    const r = await fetch(`${BACKEND_URL}/api/admin/encode/pending`, {
-      headers: { Authorization: `Bearer ${session.token}` },
-    });
-    const body = await r.json().catch(() => ([]));
-    if (!r.ok) return res.status(r.status).json({ error: body.error || 'Could not load pending clients' });
-    res.json(body);
-  } catch (err) {
-    res.status(502).json({ error: `Could not reach backend: ${err.message}` });
-  }
-});
-
-// Shared by both /api/arm (paid clients only) and /api/arm-by-id (any
-// client, for gifting a card without payment) -- the actual arming logic
-// is identical either way, only how the client was found differs.
+// Arming logic for /api/arm-by-id -- the only client-lookup-and-arm route
+// left (see that route's own comment for why the paid-clients-list variant
+// this used to also serve was removed).
 //
 // Multi-card support: a client can now have several independently-tracked
 // physical cards (see backend's Card model), so arming no longer requires
-// "not encoded yet" -- it always reserves a NEW card slot from the
-// backend first (POST /clients/:clientId/cards), which hands back a
-// cardNumber that gets written straight into the chip's own URL
-// (?card=N) so that specific card can later be individually deactivated.
-async function doArm(client) {
+// "not encoded yet" -- it always reserves a card slot from the backend
+// first (POST /clients/:clientId/cards, reusing an unencoded placeholder
+// if one exists or minting a new one), which hands back a cardNumber that
+// gets written straight into the chip's own URL (?card=N) so that specific
+// card can later be individually deactivated. `label`/`cardVariantId` are
+// optional, admin-supplied details for THIS specific physical card (its
+// own nickname and which style it is), passed straight through.
+async function doArm(client, { label, cardVariantId } = {}) {
   const cardRes = await fetch(`${BACKEND_URL}/api/admin/clients/${client.clientId}/cards`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
-    body: JSON.stringify({ cardType: client.cardType }),
+    body: JSON.stringify({ cardType: client.cardType, label, cardVariantId }),
   });
   const cardBody = await cardRes.json().catch(() => ({}));
   if (!cardRes.ok) throw new Error(cardBody.error || 'Could not reserve a card slot');
@@ -250,32 +241,17 @@ async function doArm(client) {
   return { ok: true, url, cardNumber };
 }
 
-// Arm the tool to write the next card that's placed on the reader for
-// this specific client. Nothing gets written until an actual card is
-// detected -- this just tells the reader-watcher what to do when one is.
-app.post('/api/arm', requireSession, async (req, res) => {
-  const { clientId } = req.body || {};
-  if (!clientId) return res.status(400).json({ error: 'clientId required' });
-
-  try {
-    const r = await fetch(`${BACKEND_URL}/api/admin/encode/client/${clientId}`, {
-      headers: { Authorization: `Bearer ${session.token}` },
-    });
-    const client = await r.json().catch(() => null);
-    if (!r.ok || !client || !client.paid) {
-      return res.status(404).json({ error: 'Client not found, or has not paid' });
-    }
-    res.json(await doArm(client));
-  } catch (err) {
-    res.status(502).json({ error: `Could not reach backend: ${err.message}` });
-  }
-});
-
-// Same as /api/arm, but deliberately does NOT require paid:true -- for
-// gifting a card to someone (family, close contacts) without them going
-// through checkout.
+// Arm the tool to write the next card that's placed on the reader, for
+// ANY client ID (paid or not -- deliberately no paid:true check, so this
+// also covers gifting a card to someone, e.g. family/close contacts,
+// without them going through checkout). Nothing gets written until an
+// actual card is detected -- this just tells the reader-watcher what to
+// do when one is. `label`/`cardVariantId` come from the "Create a card"
+// panel's own inputs, gathered after looking the client up via
+// GET /api/client/:clientId (which also returns that client's plan
+// variants to populate the style picker) and before this call.
 app.post('/api/arm-by-id', requireSession, async (req, res) => {
-  const { clientId } = req.body || {};
+  const { clientId, label, cardVariantId } = req.body || {};
   if (!clientId) return res.status(400).json({ error: 'clientId required' });
 
   try {
@@ -286,7 +262,7 @@ app.post('/api/arm-by-id', requireSession, async (req, res) => {
     if (!r.ok || !client) {
       return res.status(404).json({ error: `No client "${clientId}" found` });
     }
-    res.json(await doArm(client));
+    res.json(await doArm(client, { label, cardVariantId }));
   } catch (err) {
     res.status(502).json({ error: `Could not reach backend: ${err.message}` });
   }
@@ -582,8 +558,32 @@ nfc.on('reader', (reader) => {
     armedJob = null; // one card per arm -- prevents a second stray tap from reusing the same job
 
     try {
+      // Confirm this is actually an NTAG216 BEFORE writing anything -- the
+      // same check lockCard() already does before touching config pages,
+      // just run first now instead of last. Without this, a wrong/
+      // incompatible chip (see identifyCard()'s comment -- cards sold as
+      // "NTAG216" that turned out to be a different chip entirely) failed
+      // with a raw, unhelpful status code partway through the write
+      // instead of a clear "this is an X chip, not NTAG216" message before
+      // anything was attempted.
+      await assertNtag216(reader, cardInfo && cardInfo.uid);
+
       broadcast('writing', { fullName: job.fullName });
-      await writeNdef(reader, job.url);
+      try {
+        await writeNdef(reader, job.url);
+      } catch (err) {
+        // Status word 6300 here specifically means the chip rejected an
+        // unauthenticated write -- i.e. this card already has a password
+        // lock on it from a previous encoding, not actually blank despite
+        // looking like any other card. Same signal blankUnprotectedCard()
+        // in lib.js already translates the same way.
+        if (/6300/i.test(err.message)) {
+          throw new Error(
+            'This card already has a password on it, so it can\'t be written as a fresh/blank card -- it was locked by a previous encoding. Use a genuinely blank card instead, or unlock this one first via "Unlock & wipe this card" (Recover a card tab) using its password from the client\'s Cards section in the admin panel.'
+          );
+        }
+        throw err;
+      }
 
       broadcast('verifying', {});
       await verifyWrite(reader, job.url);

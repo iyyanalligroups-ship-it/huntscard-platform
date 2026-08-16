@@ -56,6 +56,91 @@ function CustomRow({ row }) {
   );
 }
 
+// Shown in place of a raw phone/email when a card is temporarily
+// deactivated (see PublicProfile.jsx's 'deactivated' branch below) -- a
+// real way for whoever tapped the card to reach support, not just a
+// number/address they have to copy out by hand. Its own component (not
+// inline in the parent) so its form state doesn't need to live in
+// PublicProfile's already-large hook list for a screen most visitors will
+// never reach.
+function RaiseTicketForm({ clientId, cardNumber }) {
+  const [name, setName] = useState('');
+  const [contactNumber, setContactNumber] = useState('');
+  const [issue, setIssue] = useState('');
+  const [email, setEmail] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!name.trim() || !contactNumber.trim() || !issue.trim()) {
+      setError('Name, contact number, and the reason/issue are required.');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    try {
+      await api.submitCardTicket(clientId, { name, contactNumber, issue, email }, cardNumber);
+      setSubmitted(true);
+    } catch (err) {
+      setError(err.message || 'Could not submit your ticket');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (submitted) {
+    return (
+      <div className="pv-page">
+        <p className="pv-state-msg">
+          Ticket submitted — our support team will review your issue and contact you within 24–48 hours.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pv-page">
+      <div className="pv-shell" style={{ padding: '48px 20px' }}>
+        <h1 style={{ fontSize: 18, textAlign: 'center', marginBottom: 6 }}>This card has been temporarily deactivated</h1>
+        <p className="subtitle" style={{ textAlign: 'center', marginBottom: 24 }}>
+          Raise a ticket below and our support team will get back to you.
+        </p>
+        {error && <div className="error-banner">{error}</div>}
+        <form onSubmit={handleSubmit}>
+          <div className="field">
+            <label htmlFor="ticketName">Name</label>
+            <input id="ticketName" type="text" value={name} onChange={(e) => setName(e.target.value)} required />
+          </div>
+          <div className="field">
+            <label htmlFor="ticketContactNumber">Contact number</label>
+            <input
+              id="ticketContactNumber"
+              type="tel"
+              autoComplete="tel"
+              value={contactNumber}
+              onChange={(e) => setContactNumber(e.target.value)}
+              required
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="ticketIssue">Reason / Issue</label>
+            <textarea id="ticketIssue" rows={3} value={issue} onChange={(e) => setIssue(e.target.value)} required />
+          </div>
+          <div className="field">
+            <label htmlFor="ticketEmail">Email (optional)</label>
+            <input id="ticketEmail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <button type="submit" disabled={submitting}>
+            {submitting ? 'Submitting…' : 'Submit ticket'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // The public tap page -- what a stranger sees when they tap the physical
 // card or scan its QR code. No login, no session: anyone who has the
 // clientId can view this, same as backend/public-tap/index.html did
@@ -272,11 +357,22 @@ export default function PublicProfile() {
   }
 
   if (loading) return <div className="pv-page"><p className="pv-state-msg">Loading card…</p></div>;
-  // Deliberately distinct wording from "Card not found" below -- this
-  // card genuinely exists, its owner just turned it off (see
-  // Settings.jsx's "Card status"), which reads very differently to
-  // someone debugging their own link.
+  // Deliberately distinct wording per reason (see backend's
+  // cardBlockReason) -- these read very differently depending on who's
+  // looking: the owner debugging their own paused link, a stranger who
+  // tapped a card admin turned off temporarily (who needs a way to reach
+  // support), vs one admin permanently removed (nothing to do about it).
   if (profile?.paused) {
+    if (profile.reason === 'deleted') {
+      return (
+        <div className="pv-page">
+          <p className="pv-state-msg">This card has been permanently deleted and can no longer be used.</p>
+        </div>
+      );
+    }
+    if (profile.reason === 'deactivated') {
+      return <RaiseTicketForm clientId={clientId} cardNumber={cardNumber} />;
+    }
     return (
       <div className="pv-page">
         <p className="pv-state-msg">This card has been deactivated by its owner.</p>

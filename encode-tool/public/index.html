@@ -205,25 +205,39 @@
 
     <section id="pickerView" class="card hidden">
       <h1>Create a card</h1>
+      <p class="muted">Gift a card without payment, or add another card to an existing client -- enter any Client ID (paid or not):</p>
+      <div class="id-search-row">
+        <input id="giftIdInput" placeholder="Client ID" />
+        <button id="giftLookupBtn" class="btn-secondary" style="margin-top:0; width:auto;">Look up client</button>
+      </div>
+      <p id="giftError" class="error hidden"></p>
 
-      <div class="picker-columns">
-        <div class="subsection picker-col-left">
-          <p class="muted">Gift a card without payment -- enter any Client ID (paid or not) directly:</p>
-          <div class="id-search-row">
-            <input id="giftIdInput" placeholder="Client ID" />
-            <button id="giftLookupBtn" class="btn-secondary" style="margin-top:0; width:auto;">Encode this ID</button>
+      <!-- Shown once the client above is found -- collects details for
+           THIS specific physical card before arming, so it goes onto the
+           card record from the start instead of being edited in later. -->
+      <div id="giftDetailsPanel" class="gift-details-panel hidden">
+        <div class="gift-client-summary">
+          <div id="giftClientAvatar" class="gift-client-avatar"></div>
+          <div>
+            <div id="giftClientName" class="gift-client-name"></div>
+            <div id="giftClientMeta" class="gift-client-meta"></div>
           </div>
-          <p id="giftError" class="error hidden"></p>
         </div>
 
-        <div class="subsection picker-col-right">
-          <div class="card-head">
-            <h2>Paid clients awaiting a card</h2>
-            <button id="refreshBtn" class="link-btn">Refresh</button>
-          </div>
-          <div id="pendingList" class="pending-list"></div>
-          <p id="pendingEmpty" class="muted hidden">No paid, unencoded clients found. Complete a purchase in the Shop, then refresh.</p>
+        <div class="gift-field">
+          <label for="giftCardLabel">
+            Card name
+            <span class="gift-field-hint">Optional -- your own label for this specific card, e.g. "Front desk", "Spare"</span>
+          </label>
+          <input id="giftCardLabel" placeholder="e.g. Front desk" />
         </div>
+
+        <div id="giftVariantRow" class="gift-field hidden">
+          <label for="giftCardVariant">Style / variant</label>
+          <select id="giftCardVariant"></select>
+        </div>
+
+        <button id="giftConfirmBtn" class="btn-primary" style="width:auto;">Start encoding →</button>
       </div>
     </section>
 

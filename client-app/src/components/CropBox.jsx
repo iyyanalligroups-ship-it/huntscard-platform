@@ -22,9 +22,17 @@ export default function CropBox({ naturalWidth, naturalHeight, aspectRatio, crop
   const containerRef = useRef(null);
   const moveStartRef = useRef(null);
   const cornerStartRef = useRef(null);
+  const edgeStartRef = useRef(null);
 
   function widthToHeight(width) {
     return (width * naturalWidth) / (naturalHeight * aspectRatio);
+  }
+  // Inverse of the above -- corner drags always derive height FROM width
+  // (dx is the only input that matters when locked), but a north/south
+  // edge handle only gives a vertical delta, so it needs to go the other
+  // direction: derive width from the height it just picked.
+  function heightToWidth(height) {
+    return (height * naturalHeight * aspectRatio) / naturalWidth;
   }
 
   function handleBoxPointerDown(e) {
@@ -91,6 +99,57 @@ export default function CropBox({ naturalWidth, naturalHeight, aspectRatio, crop
     cornerStartRef.current = null;
   }
 
+  // Edge (mid-side) handles -- resize from one side at a time instead of
+  // always having to grab a corner. When locked to an aspect ratio, the
+  // other dimension still has to move to match (a pure single-axis resize
+  // isn't possible under a fixed ratio), so e/w derive height from the
+  // width they just picked (same direction corners already use) while
+  // n/s go the other way via heightToWidth, re-centering horizontally
+  // since a vertical-only drag has no natural left/right anchor of its
+  // own the way a corner drag does.
+  function handleEdgePointerDown(edge, e) {
+    e.preventDefault();
+    e.stopPropagation(); // don't also trigger the whole-box move handler
+    e.currentTarget.setPointerCapture(e.pointerId);
+    edgeStartRef.current = { edge, x: e.clientX, y: e.clientY, crop: { ...crop } };
+  }
+  function handleEdgePointerMove(e) {
+    const start = edgeStartRef.current;
+    if (!start || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const dxPct = (e.clientX - start.x) / rect.width;
+    const dyPct = (e.clientY - start.y) / rect.height;
+    const s = start.crop;
+    let { x, y, width, height } = s;
+
+    if (start.edge === 'e') {
+      width = s.width + dxPct;
+      height = aspectRatio ? widthToHeight(width) : s.height;
+    } else if (start.edge === 'w') {
+      width = s.width - dxPct;
+      height = aspectRatio ? widthToHeight(width) : s.height;
+      x = s.x + s.width - width;
+    } else if (start.edge === 's') {
+      height = s.height + dyPct;
+      width = aspectRatio ? heightToWidth(height) : s.width;
+      if (aspectRatio) x = s.x + (s.width - width) / 2;
+    } else if (start.edge === 'n') {
+      height = s.height - dyPct;
+      width = aspectRatio ? heightToWidth(height) : s.width;
+      y = s.y + s.height - height;
+      if (aspectRatio) x = s.x + (s.width - width) / 2;
+    }
+
+    width = clamp(width, MIN_SIZE, 1);
+    height = clamp(height, MIN_SIZE, 1);
+    x = clamp(x, 0, 1 - width);
+    y = clamp(y, 0, 1 - height);
+    onCropChange({ x, y, width, height });
+  }
+  function handleEdgePointerUp() {
+    edgeStartRef.current = null;
+  }
+
   // Fit within a bounding box (max 420 wide, max 560 tall) rather than a
   // fixed width -- a tall portrait video at a fixed 420 width would
   // render ~750px tall, awkward in-page. Picks whichever dimension is
@@ -105,17 +164,45 @@ export default function CropBox({ naturalWidth, naturalHeight, aspectRatio, crop
     displayHeight = MAX_DISPLAY_HEIGHT;
     displayWidth = displayHeight * naturalAspect;
   }
-  const handleStyle = (cursor) => ({
+  // Two-part handles: a big invisible TOUCH target (real mobile-usable
+  // size, ~44px per Apple/Google's own touch-target guidance) around a
+  // small VISUAL indicator centered inside it -- so dragging is actually
+  // easy to grab precisely on a phone without the handles themselves
+  // looking like huge blobs on screen. The previous version made the
+  // 14px visual dot ALSO the clickable area, which is what made this
+  // hard to use accurately on a touchscreen.
+  const TOUCH_SIZE = 40;
+  const touchTargetStyle = (cursor) => ({
     position: 'absolute',
-    width: 14,
-    height: 14,
-    marginLeft: -7,
-    marginTop: -7,
+    width: TOUCH_SIZE,
+    height: TOUCH_SIZE,
+    marginLeft: -TOUCH_SIZE / 2,
+    marginTop: -TOUCH_SIZE / 2,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor,
+    touchAction: 'none',
+  });
+  const cornerDotStyle = {
+    width: 18,
+    height: 18,
     background: '#fff',
     border: '2px solid var(--holo-cyan, #5eead4)',
     borderRadius: '50%',
-    cursor,
-    touchAction: 'none',
+    boxShadow: '0 1px 5px rgba(0,0,0,0.5)',
+  };
+  // Oriented ALONG the edge they sit on (a wide short bar for the
+  // top/bottom edges, a narrow tall bar for the left/right edges) --
+  // reads as "drag this side" rather than a generic dot, matching how
+  // most photo-crop tools distinguish edge handles from corner ones.
+  const edgeBarStyle = (vertical) => ({
+    width: vertical ? 6 : 24,
+    height: vertical ? 24 : 6,
+    background: '#fff',
+    border: '2px solid var(--holo-cyan, #5eead4)',
+    borderRadius: 4,
+    boxShadow: '0 1px 5px rgba(0,0,0,0.5)',
   });
 
   return (
@@ -142,33 +229,78 @@ export default function CropBox({ naturalWidth, naturalHeight, aspectRatio, crop
         }}
       >
         <div
-          style={{ ...handleStyle('nwse-resize'), left: 0, top: 0 }}
+          style={{ ...touchTargetStyle('nwse-resize'), left: 0, top: 0 }}
           onPointerDown={(e) => handleCornerPointerDown('nw', e)}
           onPointerMove={handleCornerPointerMove}
           onPointerUp={handleCornerPointerUp}
           onPointerCancel={handleCornerPointerUp}
-        />
+        >
+          <div style={cornerDotStyle} />
+        </div>
         <div
-          style={{ ...handleStyle('nesw-resize'), left: '100%', top: 0 }}
+          style={{ ...touchTargetStyle('nesw-resize'), left: '100%', top: 0 }}
           onPointerDown={(e) => handleCornerPointerDown('ne', e)}
           onPointerMove={handleCornerPointerMove}
           onPointerUp={handleCornerPointerUp}
           onPointerCancel={handleCornerPointerUp}
-        />
+        >
+          <div style={cornerDotStyle} />
+        </div>
         <div
-          style={{ ...handleStyle('nesw-resize'), left: 0, top: '100%' }}
+          style={{ ...touchTargetStyle('nesw-resize'), left: 0, top: '100%' }}
           onPointerDown={(e) => handleCornerPointerDown('sw', e)}
           onPointerMove={handleCornerPointerMove}
           onPointerUp={handleCornerPointerUp}
           onPointerCancel={handleCornerPointerUp}
-        />
+        >
+          <div style={cornerDotStyle} />
+        </div>
         <div
-          style={{ ...handleStyle('nwse-resize'), left: '100%', top: '100%' }}
+          style={{ ...touchTargetStyle('nwse-resize'), left: '100%', top: '100%' }}
           onPointerDown={(e) => handleCornerPointerDown('se', e)}
           onPointerMove={handleCornerPointerMove}
           onPointerUp={handleCornerPointerUp}
           onPointerCancel={handleCornerPointerUp}
-        />
+        >
+          <div style={cornerDotStyle} />
+        </div>
+
+        <div
+          style={{ ...touchTargetStyle('ns-resize'), left: '50%', top: 0 }}
+          onPointerDown={(e) => handleEdgePointerDown('n', e)}
+          onPointerMove={handleEdgePointerMove}
+          onPointerUp={handleEdgePointerUp}
+          onPointerCancel={handleEdgePointerUp}
+        >
+          <div style={edgeBarStyle(false)} />
+        </div>
+        <div
+          style={{ ...touchTargetStyle('ns-resize'), left: '50%', top: '100%' }}
+          onPointerDown={(e) => handleEdgePointerDown('s', e)}
+          onPointerMove={handleEdgePointerMove}
+          onPointerUp={handleEdgePointerUp}
+          onPointerCancel={handleEdgePointerUp}
+        >
+          <div style={edgeBarStyle(false)} />
+        </div>
+        <div
+          style={{ ...touchTargetStyle('ew-resize'), left: 0, top: '50%' }}
+          onPointerDown={(e) => handleEdgePointerDown('w', e)}
+          onPointerMove={handleEdgePointerMove}
+          onPointerUp={handleEdgePointerUp}
+          onPointerCancel={handleEdgePointerUp}
+        >
+          <div style={edgeBarStyle(true)} />
+        </div>
+        <div
+          style={{ ...touchTargetStyle('ew-resize'), left: '100%', top: '50%' }}
+          onPointerDown={(e) => handleEdgePointerDown('e', e)}
+          onPointerMove={handleEdgePointerMove}
+          onPointerUp={handleEdgePointerUp}
+          onPointerCancel={handleEdgePointerUp}
+        >
+          <div style={edgeBarStyle(true)} />
+        </div>
       </div>
     </div>
   );

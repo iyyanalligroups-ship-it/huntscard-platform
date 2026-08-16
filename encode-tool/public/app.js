@@ -13,20 +13,6 @@ const tabBar = document.getElementById('tabBar');
 
 let currentClient = null; // { clientId, fullName }
 let currentTabId = 'writeCard'; // remembers which tab to return to after an encode finishes
-let statusViewHomeMarker = null; // set only while statusView is relocated inline into a pending-item row
-
-// Moves the shared statusView node back to its normal place in the DOM
-// (right after pickerView) and hides it. No-op if it was never relocated.
-function returnStatusViewHome() {
-  statusView.classList.add('hidden');
-  statusView.classList.remove('inline-status');
-  document.getElementById('pendingList').classList.remove('encoding-active');
-  if (statusViewHomeMarker && statusViewHomeMarker.parentNode) {
-    statusViewHomeMarker.parentNode.insertBefore(statusView, statusViewHomeMarker);
-    statusViewHomeMarker.remove();
-  }
-  statusViewHomeMarker = null;
-}
 
 // Fetched once at startup so "Preview page" links and backend API URLs can be built
 fetch('/api/settings')
@@ -214,7 +200,6 @@ async function checkSession() {
     sessionInfo.classList.remove('hidden');
     showView(pickerView);
     showTab(currentTabId);
-    loadPending();
   } else {
     sessionInfo.classList.add('hidden');
     tabBar.classList.add('hidden');
@@ -258,95 +243,6 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 // ---------------------------------------------------------------------
 // Pending client list
 // ---------------------------------------------------------------------
-async function loadPending() {
-  const listEl = document.getElementById('pendingList');
-  const emptyEl = document.getElementById('pendingEmpty');
-  listEl.innerHTML = '';
-
-  const res = await fetch(`${getBackendUrl()}/api/admin/encode/pending`, {
-    headers: getAuthHeader(),
-  });
-  if (res.status === 401) {
-    // The backend rejected our token (expired/revoked), but the local
-    // gui-server still has it saved -- checkSession() alone would just see
-    // that saved session, report loggedIn again, and call loadPending()
-    // again, looping forever. Clear it server-side first so checkSession()
-    // correctly reports loggedIn: false and shows the login screen.
-    await fetch('/api/logout', { method: 'POST' });
-    return checkSession();
-  }
-  const clients = await res.json();
-
-  if (clients.length === 0) {
-    emptyEl.classList.remove('hidden');
-    return;
-  }
-  emptyEl.classList.add('hidden');
-
-  clients.forEach((c) => {
-    const item = document.createElement('div');
-    item.className = 'pending-item';
-    item.innerHTML = `
-      <div class="pending-item-row">
-        <div>
-          <div class="pending-item-name">${escapeHtml(c.fullName)}</div>
-          <div class="pending-item-meta">${escapeHtml(c.clientId)} &middot; ${escapeHtml(c.cardType || 'no plan set')}</div>
-        </div>
-        <div class="pending-item-actions">
-          <a class="preview-link" href="${escapeHtml((window.PUBLIC_BASE_URL || '') + '/c/' + c.clientId)}" target="_blank" rel="noopener">Preview page</a>
-          <button class="edit-toggle">Edit details</button>
-          <button class="encode-btn">Encode this card</button>
-        </div>
-      </div>
-      <div class="edit-panel hidden">
-        <label>Full name</label>
-        <input class="edit-fullName" value="${escapeHtml(c.fullName || '')}" />
-        <label>Phone</label>
-        <input class="edit-phone" value="${escapeHtml(c.phone || '')}" placeholder="+91..." />
-        <label>Login email</label>
-        <input class="edit-loginEmail" value="${escapeHtml(c.loginEmail || '')}" type="email" />
-        <div class="edit-panel-actions">
-          <button class="save-btn">Save details</button>
-          <span class="save-status"></span>
-        </div>
-      </div>
-    `;
-    item.querySelector('.encode-btn').addEventListener('click', () => armClient(c, item));
-    item.querySelector('.edit-toggle').addEventListener('click', () => {
-      item.querySelector('.edit-panel').classList.toggle('hidden');
-    });
-    item.querySelector('.save-btn').addEventListener('click', async () => {
-      const statusEl = item.querySelector('.save-status');
-      const fullName = item.querySelector('.edit-fullName').value.trim();
-      const phone = item.querySelector('.edit-phone').value.trim();
-      const loginEmail = item.querySelector('.edit-loginEmail').value.trim();
-
-      statusEl.textContent = 'Saving...';
-      statusEl.className = 'save-status';
-
-      const res = await fetch(`${getBackendUrl()}/api/admin/clients/${encodeURIComponent(c.clientId)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-        body: JSON.stringify({ fullName, phone, loginEmail }),
-      });
-      const body = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        statusEl.textContent = body.error || 'Could not save';
-        statusEl.classList.add('save-error');
-      } else {
-        statusEl.textContent = 'Saved';
-        statusEl.classList.add('save-ok');
-        item.querySelector('.pending-item-name').textContent = fullName;
-        c.fullName = fullName; // keep the in-memory object in sync so "Encode this card" uses the new name
-      }
-    });
-    listEl.appendChild(item);
-  });
-}
-
-document.getElementById('refreshBtn').addEventListener('click', loadPending);
-
 function escapeHtml(s) {
   const d = document.createElement('div');
   d.textContent = s ?? '';
@@ -356,11 +252,11 @@ function escapeHtml(s) {
 // ---------------------------------------------------------------------
 // Arm + live status
 // ---------------------------------------------------------------------
-async function armClient(client, item) {
-  const res = await fetch('/api/arm', {
+async function armClientById(clientId, { label, cardVariantId } = {}) {
+  const res = await fetch('/api/arm-by-id', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientId: client.clientId }),
+    body: JSON.stringify({ clientId, label, cardVariantId }),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -368,29 +264,14 @@ async function armClient(client, item) {
     return;
   }
 
-  currentClient = client;
-  document.getElementById('statusName').textContent = client.fullName;
+  document.getElementById('statusName').textContent = currentClient?.fullName || clientId;
   resetSteps();
   document.getElementById('successPanel').classList.add('hidden');
   document.getElementById('errorPanel').classList.add('hidden');
   document.getElementById('cancelBtn').classList.remove('hidden');
   setStep('arm', 'active');
-
-  if (item) {
-    // Picked from "Paid clients awaiting a card" -- keep that whole list
-    // visible and show the writing progress right inside this client's
-    // own row, instead of navigating away to a separate full-page view.
-    statusViewHomeMarker = document.createComment('status-view-home');
-    statusView.parentNode.insertBefore(statusViewHomeMarker, statusView);
-    item.appendChild(statusView);
-    statusView.classList.remove('hidden');
-    statusView.classList.add('inline-status');
-    item.classList.add('pending-item-active');
-    document.getElementById('pendingList').classList.add('encoding-active');
-  } else {
-    tabBar.classList.add('hidden');
-    showView(statusView);
-  }
+  tabBar.classList.add('hidden');
+  showView(statusView);
 }
 
 function resetSteps() {
@@ -429,36 +310,18 @@ document.getElementById('copyPasswordBtn').addEventListener('click', async () =>
 
 document.getElementById('cancelBtn').addEventListener('click', async () => {
   await fetch('/api/disarm', { method: 'POST' });
-  if (statusViewHomeMarker) {
-    returnStatusViewHome();
-    loadPending();
-  } else {
-    showView(pickerView);
-    showTab(currentTabId);
-    loadPending();
-  }
+  showView(pickerView);
+  showTab(currentTabId);
 });
 
 document.getElementById('doneBtn').addEventListener('click', () => {
-  if (statusViewHomeMarker) {
-    returnStatusViewHome();
-    loadPending();
-  } else {
-    showView(pickerView);
-    showTab(currentTabId);
-    loadPending();
-  }
+  showView(pickerView);
+  showTab(currentTabId);
 });
 
 document.getElementById('retryBtn').addEventListener('click', () => {
-  if (statusViewHomeMarker) {
-    returnStatusViewHome();
-    loadPending();
-  } else {
-    showView(pickerView);
-    showTab(currentTabId);
-    loadPending();
-  }
+  showView(pickerView);
+  showTab(currentTabId);
 });
 
 // ---------------------------------------------------------------------
@@ -598,10 +461,8 @@ cancelReadBtn.addEventListener('click', async () => {
 });
 
 document.getElementById('readAfterWriteBtn').addEventListener('click', async () => {
-  if (statusViewHomeMarker) returnStatusViewHome();
   showView(pickerView);
   showTab('readCard');
-  loadPending();
   startReadBtn.click();
 });
 
@@ -677,9 +538,13 @@ document.getElementById('writeLookupBtn').addEventListener('click', async () => 
     return;
   }
 
-  const cardCount = Array.isArray(body.cards) ? body.cards.length : 0;
+  // Paid purchases now pre-create unencoded Card placeholders (see
+  // backend's createCardsForPurchase), so body.cards.length alone no longer
+  // means "encoded" -- count only the ones actually written to a chip.
+  const cards = Array.isArray(body.cards) ? body.cards : [];
+  const encodedCount = cards.filter((c) => c.encoded).length;
   document.getElementById('writeFormMeta').textContent =
-    `${body.clientId} · ${body.paid ? 'paid' : 'not paid'} · ${cardCount === 0 ? 'no cards yet' : `${cardCount} card${cardCount === 1 ? '' : 's'} encoded`}`;
+    `${body.clientId} · ${body.paid ? 'paid' : 'not paid'} · ${encodedCount === 0 ? 'no cards encoded yet' : `${encodedCount} card${encodedCount === 1 ? '' : 's'} encoded`}${cards.length > encodedCount ? ` (${cards.length - encodedCount} on file, not yet written)` : ''}`;
   document.getElementById('writeFullName').value = body.fullName || '';
   document.getElementById('writeJobTitle').value = body.jobTitle || '';
   document.getElementById('writeBio').value = body.bio || '';
@@ -730,42 +595,66 @@ document.getElementById('writeSaveBtn').addEventListener('click', async () => {
 });
 
 // ---------------------------------------------------------------------
-// 3b. Gift a card by Client ID -- same encode flow as picking from the
-// paid list, but skips the paid:true requirement entirely. A client can
-// have several cards now (see models/Card.js), so this always reserves a
-// NEW card slot -- there's no more "already encoded, replace it?" block.
+// 3b. Create a card by Client ID -- works for any client, paid or not
+// (family/close contacts can be gifted a card without checkout). A client
+// can have several cards now (see models/Card.js), so this always
+// reserves a card slot rather than assuming at most one. Two steps: look
+// the client up first (also fetches their plan's variant choices), THEN
+// collect this specific card's own name/style before actually arming --
+// so those land on the card record from the start instead of needing a
+// later edit.
 // ---------------------------------------------------------------------
-document.getElementById('giftLookupBtn').addEventListener('click', () => attemptGiftArm());
+document.getElementById('giftLookupBtn').addEventListener('click', () => lookupGiftClient());
 
-async function attemptGiftArm() {
+async function lookupGiftClient() {
   const clientId = document.getElementById('giftIdInput').value.trim();
   const errorEl = document.getElementById('giftError');
+  const panel = document.getElementById('giftDetailsPanel');
   errorEl.classList.add('hidden');
+  panel.classList.add('hidden');
   if (!clientId) return;
 
-  const res = await fetch('/api/arm-by-id', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientId }),
+  const res = await fetch(`${getBackendUrl()}/api/admin/encode/client/${encodeURIComponent(clientId)}`, {
+    headers: getAuthHeader(),
   });
   const body = await res.json().catch(() => ({}));
-
   if (!res.ok) {
-    errorEl.textContent = body.error || 'Could not start encoding';
+    errorEl.textContent = body.error || `No client "${clientId}" found`;
     errorEl.classList.remove('hidden');
     return;
   }
 
-  // Reuse the exact same status screen as the normal paid-client flow --
-  // it doesn't care how the client was found, only that a job is armed.
-  document.getElementById('statusName').textContent = clientId;
-  resetSteps();
-  document.getElementById('successPanel').classList.add('hidden');
-  document.getElementById('errorPanel').classList.add('hidden');
-  document.getElementById('cancelBtn').classList.remove('hidden');
-  tabBar.classList.add('hidden');
-  setStep('arm', 'active');
-  showView(statusView);
+  currentClient = { clientId: body.clientId, fullName: body.fullName };
+
+  document.getElementById('giftClientAvatar').textContent = (body.fullName || '?').trim().charAt(0).toUpperCase();
+  document.getElementById('giftClientName').textContent = body.fullName || '(no name)';
+  document.getElementById('giftClientMeta').innerHTML =
+    `<span class="mono">${escapeHtml(body.clientId)}</span> · ${escapeHtml(body.cardType || 'no plan set')}`;
+  document.getElementById('giftCardLabel').value = '';
+
+  const variants = Array.isArray(body.planVariants) ? body.planVariants : [];
+  const variantRow = document.getElementById('giftVariantRow');
+  const variantSelect = document.getElementById('giftCardVariant');
+  if (variants.length > 0) {
+    variantSelect.innerHTML =
+      '<option value="">No specific style</option>' +
+      variants.map((v) => `<option value="${escapeHtml(v._id)}">${escapeHtml(v.name)}${v.shape ? ` (${escapeHtml(v.shape)})` : ''}</option>`).join('');
+    variantRow.classList.remove('hidden');
+  } else {
+    variantSelect.innerHTML = '';
+    variantRow.classList.add('hidden');
+  }
+
+  panel.classList.remove('hidden');
+}
+
+document.getElementById('giftConfirmBtn').addEventListener('click', () => confirmGiftArm());
+
+async function confirmGiftArm() {
+  if (!currentClient) return;
+  const label = document.getElementById('giftCardLabel').value.trim();
+  const cardVariantId = document.getElementById('giftCardVariant').value || undefined;
+  await armClientById(currentClient.clientId, { label: label || undefined, cardVariantId });
 }
 
 // ---------------------------------------------------------------------

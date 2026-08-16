@@ -575,14 +575,28 @@ async function unlockAndBlankCard(reader, pwdHex) {
 // response" error case) -- no PWD_AUTH step at all, since there's no
 // password to authenticate with. If the card actually IS protected, the
 // write below will simply fail/throw (a protected page rejects an
-// unauthenticated write) rather than silently corrupting anything -- that
-// failure is the signal to use "Unlock & wipe" with the password instead.
+// unauthenticated write) rather than silently corrupting anything.
 async function blankUnprotectedCard(reader) {
-  await wipeContentAndDisableProtection(reader);
+  try {
+    await wipeContentAndDisableProtection(reader);
+  } catch (err) {
+    // Status word 6300 from a write is specifically "rejected, no auth
+    // provided" (see checkLockStatus()'s comment) -- the reliable signal
+    // this card actually IS password-protected, not the unrelated variety
+    // of other things that can go wrong here (reader dropped the card,
+    // wrong chip type, etc, which this deliberately leaves as-is so real
+    // errors aren't masked behind a wrong explanation).
+    if (/6300/i.test(err.message)) {
+      throw new Error(
+        'This card is password-protected, so it can\'t be blanked without its password. Use "Unlock & wipe this card" (the Recover a card tab) with that card\'s actual password instead -- look it up on the client\'s Cards section in the admin panel if you don\'t have it handy.'
+      );
+    }
+    throw err;
+  }
 }
 
 module.exports = {
   writeNdef, verifyWrite, lockCard, hashPassword, readNdefUri, checkLockStatus, attemptPasswordAuth, attemptRewriteTest,
-  unlockAndBlankCard, blankUnprotectedCard, identifyCard,
+  unlockAndBlankCard, blankUnprotectedCard, identifyCard, assertNtag216,
   USER_MEMORY_START_PAGE,
 };

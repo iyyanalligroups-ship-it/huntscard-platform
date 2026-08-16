@@ -13,6 +13,14 @@ const CardPlanVariantSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true }, // e.g. "Matte Black"
     shape: { type: String, enum: ['horizontal', 'vertical'], required: true },
+    // Two fixed, named slots (not a growable list) -- a real card only
+    // ever has a front and a back. Same shape as CatalogEntry's own
+    // frontImageUrl/backImageUrl. Set via their own dedicated routes
+    // (see admin.js's cardPlanVariantImageSlotRoutes), not this create/
+    // PATCH form -- a brand-new variant has no _id yet to upload against
+    // until the plan itself is first saved.
+    frontImageUrl: { type: String, trim: true, default: null },
+    backImageUrl: { type: String, trim: true, default: null },
   },
   { _id: true }
 );
@@ -56,6 +64,10 @@ const CardPlanSchema = new mongoose.Schema(
     // `key === 'custom'`, so it survives a plan rename/re-key. Gates the
     // Shop checkout's front/back design-upload step.
     requiresDesignUpload: { type: Boolean, default: false },
+    // Whether clients on this plan can use Magic Business Card (their own
+    // AR image+video effect, distinct from the general arEnabled AR QR/AR
+    // Layout feature above). Same premium-tier gating pattern.
+    magicEnabled: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

@@ -43,6 +43,13 @@ const CatalogEntrySchema = new mongoose.Schema(
     active: { type: Boolean, default: true },
     sortOrder: { type: Number, default: 0 }, // lower shows first
     updatedBy: { type: String, trim: true },
+    // Both options are the same overall row on the public Catalog page
+    // (name/price/details on one side, front+back photos on the other) --
+    // they only differ in how the two photos are arranged within that
+    // image side. 'horizontal' (default, the original/only layout before
+    // this field existed): front above back, stacked. 'vertical': front
+    // next to back, side by side.
+    viewLayout: { type: String, enum: ['vertical', 'horizontal'], default: 'horizontal' },
   },
   { timestamps: true }
 );

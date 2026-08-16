@@ -10,7 +10,10 @@ const CardRequestSchema = new mongoose.Schema(
   {
     clientId: { type: String, required: true, index: true }, // references Client.clientId
     type: { type: String, enum: ['upgrade', 'new_card'], required: true },
-    requestedPlan: { type: String, trim: true, lowercase: true, default: null }, // plan key, only for 'upgrade'
+    // Plan key -- always set for 'upgrade'; also set for 'new_card' now
+    // (needed to resolve variantBreakdown's variantId back to a real
+    // name/shape for admin display, see admin.js's GET /requests).
+    requestedPlan: { type: String, trim: true, lowercase: true, default: null },
     note: { type: String, trim: true, default: '' }, // free text, mainly for 'new_card'
     status: {
       type: String,
@@ -33,7 +36,23 @@ const CardRequestSchema = new mongoose.Schema(
     // How many physical cards this covers -- all encoded with the SAME
     // clientId/profile URL (spare copies), not separate accounts. Shown to
     // admin so they know to encode more than one card for this request.
+    // Always the TOTAL across variantBreakdown below when that's set.
     quantity: { type: Number, default: 1, min: 1 },
+    // How that quantity splits across the plan's own variants when it has
+    // any (e.g. 1x "White Night" + 1x "Revenge Red" in one order) --
+    // empty for a plan with no variants, or a request from before this
+    // existed. variantId is an ObjectId into that plan's own
+    // CardPlan.variants subarray (see Client.cardVariantId's own comment
+    // for why it's a reference, not a copied name), joined at read time.
+    variantBreakdown: {
+      type: [
+        {
+          variantId: { type: mongoose.Schema.Types.ObjectId, required: true },
+          quantity: { type: Number, required: true, min: 1 },
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );

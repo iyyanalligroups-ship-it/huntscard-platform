@@ -2,17 +2,103 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 
-// One full-width row per variant -- detail block (name, price, printing
-// & material bullets, digital-features bullets, CTA) on the left,
-// stacked front/back photos on the right. Matches the TapMo reference
-// catalog's per-product layout (a row per card type, not a compact
-// grid-of-cards) rather than the earlier Shop-style image-gallery card.
-function EntryRow({ entry }) {
+// The name/price/bullets/CTA block, shared by both EntryRow layouts below
+// -- only how it's arranged relative to the photo(s) differs between them,
+// not its own content.
+function EntryDetails({ entry }) {
   const hasMaterialDetails = Boolean(
     entry.printingType || entry.material || entry.nfcChipSize || entry.engravedTextColor || entry.durability || entry.colorCount
   );
   const hasFeatures = (entry.features || []).length > 0;
 
+  return (
+    <>
+      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, margin: '0 0 10px' }}>{entry.name}</h2>
+      <p style={{ fontWeight: 700, margin: '0 0 20px' }}>
+        {entry.price ? (
+          <>
+            Price: <span style={{ color: 'var(--holo-cyan)' }}>₹{entry.price}</span>{' '}
+            <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}>(Inclusive of all features)</span>
+          </>
+        ) : (
+          <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>Contact us for pricing</span>
+        )}
+      </p>
+
+      {hasMaterialDetails && (
+        <>
+          <h3 style={{ fontSize: 15, margin: '0 0 8px' }}>Printing &amp; Material Details:</h3>
+          <ul style={{ margin: '0 0 22px', paddingLeft: 20, color: 'var(--text-dim)', fontSize: 14, lineHeight: 1.9 }}>
+            {entry.printingType && (
+              <li>
+                <b style={{ color: 'var(--text)' }}>Printing Type:</b> {entry.printingType}
+              </li>
+            )}
+            {entry.material && (
+              <li>
+                <b style={{ color: 'var(--text)' }}>Material:</b> {entry.material}
+              </li>
+            )}
+            {entry.nfcChipSize && (
+              <li>
+                <b style={{ color: 'var(--text)' }}>NFC Chip Size:</b> {entry.nfcChipSize}
+              </li>
+            )}
+            {entry.engravedTextColor && (
+              <li>
+                <b style={{ color: 'var(--text)' }}>Engraved Text Color:</b> {entry.engravedTextColor}
+              </li>
+            )}
+            {entry.durability && (
+              <li>
+                <b style={{ color: 'var(--text)' }}>Durability:</b> {entry.durability}
+              </li>
+            )}
+            {entry.colorCount && (
+              <li>
+                <b style={{ color: 'var(--text)' }}>Color options:</b> {entry.colorCount}
+              </li>
+            )}
+          </ul>
+        </>
+      )}
+
+      {hasFeatures && (
+        <>
+          <h3 style={{ fontSize: 15, margin: '0 0 8px' }}>Digital Features Included</h3>
+          <ul style={{ margin: '0 0 24px', paddingLeft: 20, color: 'var(--text-dim)', fontSize: 14, lineHeight: 1.9 }}>
+            {entry.features.map((f, i) => (
+              <li key={i}>{f}</li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <Link
+        to={entry.linkedPlanKey ? `/shop?plan=${entry.linkedPlanKey}` : '/shop'}
+        style={{
+          display: 'inline-block',
+          padding: '12px 28px',
+          borderRadius: 999,
+          background: 'var(--holo-gradient)',
+          color: '#06120f',
+          fontWeight: 700,
+          fontSize: 13,
+          textDecoration: 'none',
+        }}
+      >
+        Get free design preview
+      </Link>
+    </>
+  );
+}
+
+// 'horizontal' layout (the original/default) -- a single ROW: stacked
+// front/back photos (one above the other) on one side, the
+// name/price/details block on the other. Matches the TapMo reference
+// catalog's per-product layout (a row per card type, not a compact
+// grid-of-cards).
+function EntryRowStacked({ entry }) {
   return (
     <div
       style={{
@@ -26,82 +112,7 @@ function EntryRow({ entry }) {
       }}
     >
       <div style={{ flex: '1 1 320px', minWidth: 280 }}>
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, margin: '0 0 10px' }}>{entry.name}</h2>
-        <p style={{ fontWeight: 700, margin: '0 0 20px' }}>
-          {entry.price ? (
-            <>
-              Price: <span style={{ color: 'var(--holo-cyan)' }}>₹{entry.price}</span>{' '}
-              <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}>(Inclusive of all features)</span>
-            </>
-          ) : (
-            <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>Contact us for pricing</span>
-          )}
-        </p>
-
-        {hasMaterialDetails && (
-          <>
-            <h3 style={{ fontSize: 15, margin: '0 0 8px' }}>Printing &amp; Material Details:</h3>
-            <ul style={{ margin: '0 0 22px', paddingLeft: 20, color: 'var(--text-dim)', fontSize: 14, lineHeight: 1.9 }}>
-              {entry.printingType && (
-                <li>
-                  <b style={{ color: 'var(--text)' }}>Printing Type:</b> {entry.printingType}
-                </li>
-              )}
-              {entry.material && (
-                <li>
-                  <b style={{ color: 'var(--text)' }}>Material:</b> {entry.material}
-                </li>
-              )}
-              {entry.nfcChipSize && (
-                <li>
-                  <b style={{ color: 'var(--text)' }}>NFC Chip Size:</b> {entry.nfcChipSize}
-                </li>
-              )}
-              {entry.engravedTextColor && (
-                <li>
-                  <b style={{ color: 'var(--text)' }}>Engraved Text Color:</b> {entry.engravedTextColor}
-                </li>
-              )}
-              {entry.durability && (
-                <li>
-                  <b style={{ color: 'var(--text)' }}>Durability:</b> {entry.durability}
-                </li>
-              )}
-              {entry.colorCount && (
-                <li>
-                  <b style={{ color: 'var(--text)' }}>Color options:</b> {entry.colorCount}
-                </li>
-              )}
-            </ul>
-          </>
-        )}
-
-        {hasFeatures && (
-          <>
-            <h3 style={{ fontSize: 15, margin: '0 0 8px' }}>Digital Features Included</h3>
-            <ul style={{ margin: '0 0 24px', paddingLeft: 20, color: 'var(--text-dim)', fontSize: 14, lineHeight: 1.9 }}>
-              {entry.features.map((f, i) => (
-                <li key={i}>{f}</li>
-              ))}
-            </ul>
-          </>
-        )}
-
-        <Link
-          to={entry.linkedPlanKey ? `/shop?plan=${entry.linkedPlanKey}` : '/shop'}
-          style={{
-            display: 'inline-block',
-            padding: '12px 28px',
-            borderRadius: 999,
-            background: 'var(--holo-gradient)',
-            color: '#06120f',
-            fontWeight: 700,
-            fontSize: 13,
-            textDecoration: 'none',
-          }}
-        >
-          Get free design preview
-        </Link>
+        <EntryDetails entry={entry} />
       </div>
 
       <div style={{ flex: '0 0 260px', display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -137,6 +148,80 @@ function EntryRow({ entry }) {
       </div>
     </div>
   );
+}
+
+// 'vertical' layout -- same overall ROW as the stacked layout (content on
+// one side, images on the other), differing only in how the two photos
+// are arranged within that image side: side by side here, instead of
+// stacked one above the other.
+function EntryRowSideBySide({ entry }) {
+  const images = [entry.frontImageUrl, entry.backImageUrl].filter(Boolean);
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 40,
+        flexWrap: 'wrap',
+        maxWidth: 1100,
+        margin: '0 auto',
+        padding: '44px 24px',
+        borderBottom: '1px solid var(--panel-border)',
+      }}
+    >
+      <div style={{ flex: '1 1 320px', minWidth: 280 }}>
+        <EntryDetails entry={entry} />
+      </div>
+
+      <div style={{ flex: '0 0 420px', display: 'flex', gap: 14 }}>
+        {images.length > 0 ? (
+          images.map((img, i) => (
+            // Fixed portrait aspect ratio + object-fit: cover -- without
+            // this, a real uploaded photo renders at whatever its own
+            // natural pixel dimensions imply once scaled to fit the flex
+            // width, which for a tall/differently-cropped source photo
+            // can balloon the image far taller than the card-mockup-sized
+            // look every other layout on this page has.
+            <img
+              key={i}
+              src={img}
+              alt=""
+              style={{
+                flex: 1,
+                minWidth: 0,
+                maxWidth: 200,
+                aspectRatio: '3 / 4.24',
+                objectFit: 'cover',
+                borderRadius: 12,
+                display: 'block',
+                background: 'var(--panel-raised)',
+              }}
+            />
+          ))
+        ) : (
+          <div
+            style={{
+              width: '100%',
+              aspectRatio: '4 / 3',
+              borderRadius: 12,
+              background: 'var(--panel-raised)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--text-dim)',
+              fontSize: 13,
+            }}
+          >
+            No photo yet
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EntryRow({ entry }) {
+  return entry.viewLayout === 'vertical' ? <EntryRowSideBySide entry={entry} /> : <EntryRowStacked entry={entry} />;
 }
 
 export default function Catalog() {

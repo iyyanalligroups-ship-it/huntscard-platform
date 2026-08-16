@@ -20,6 +20,7 @@ const ContactMessage = require('../models/ContactMessage');
 const Contact = require('../models/Contact');
 const CatalogVideo = require('../models/CatalogVideo');
 const Card = require('../models/Card');
+const CardTicket = require('../models/CardTicket');
 const CardInventory = require('../models/CardInventory');
 const SiteSetting = require('../models/SiteSetting');
 const cardCrypto = require('../utils/crypto'); // named apart from the built-in `crypto` above (line 4)
@@ -216,7 +217,7 @@ router.patch('/site-settings', requireAdmin, async (req, res) => {
 
 // GET /api/admin/stats
 router.get('/stats', requireAdmin, async (req, res) => {
-  const [totalClients, paid, encoded, adminCount, planCount, latestClient, monthlyAgg, pendingRequests, cardsByPlanAgg, recentClients, unclaimedOrders, unreadMessages] = await Promise.all([
+  const [totalClients, paid, encoded, adminCount, planCount, latestClient, monthlyAgg, pendingRequests, cardsByPlanAgg, recentClients, unclaimedOrders, unreadMessages, openCardTickets] = await Promise.all([
     Client.countDocuments({}),
     Client.countDocuments({ paid: true }),
     Client.countDocuments({ chipEncoded: true }),
@@ -249,6 +250,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
     // Fulfillment badge count -- paid orders nobody has claimed yet.
     Client.countDocuments({ paid: true, claimedBy: null }),
     ContactMessage.countDocuments({ read: false }),
+    CardTicket.countDocuments({ status: 'open' }),
   ]);
 
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -282,6 +284,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
     recentClients,
     unclaimedOrders,
     unreadMessages,
+    openCardTickets,
   };
 
   // Revenue -- Admin Prime only (see models/Admin.js's role comment).
@@ -334,7 +337,7 @@ router.post('/plans', requireAdmin, (req, res) => {
     if (err) return res.status(400).json({ error: err.message });
 
     try {
-      const { name, price, priceAmount, description, arEnabled, zingEnabled, requiresDesignUpload, variants } = req.body;
+      const { name, price, priceAmount, description, arEnabled, zingEnabled, magicEnabled, requiresDesignUpload, variants } = req.body;
       if (!name) return res.status(400).json({ error: 'name is required' });
 
       // multipart/form-data can't carry a real nested array -- the
@@ -367,6 +370,7 @@ router.post('/plans', requireAdmin, (req, res) => {
         images,
         arEnabled: arEnabled === 'true' || arEnabled === true,
         zingEnabled: zingEnabled === 'true' || zingEnabled === true,
+        magicEnabled: magicEnabled === 'true' || magicEnabled === true,
         variants: parsedVariants,
         requiresDesignUpload: requiresDesignUpload === 'true' || requiresDesignUpload === true,
       });
@@ -394,7 +398,7 @@ router.post('/plans', requireAdmin, (req, res) => {
 // bug that dropped the id" from the server side alone.
 router.patch('/plans/:id', requireAdmin, async (req, res) => {
   try {
-    const { name, price, priceAmount, description, active, arEnabled, zingEnabled, requiresDesignUpload, variants } = req.body;
+    const { name, price, priceAmount, description, active, arEnabled, zingEnabled, magicEnabled, requiresDesignUpload, variants } = req.body;
     const updates = {};
     if (name !== undefined) updates.name = name;
     if (price !== undefined) updates.price = price;
@@ -403,6 +407,7 @@ router.patch('/plans/:id', requireAdmin, async (req, res) => {
     if (active !== undefined) updates.active = active;
     if (arEnabled !== undefined) updates.arEnabled = arEnabled === 'true' || arEnabled === true;
     if (zingEnabled !== undefined) updates.zingEnabled = zingEnabled === 'true' || zingEnabled === true;
+    if (magicEnabled !== undefined) updates.magicEnabled = magicEnabled === 'true' || magicEnabled === true;
     if (requiresDesignUpload !== undefined) updates.requiresDesignUpload = requiresDesignUpload === 'true' || requiresDesignUpload === true;
     if (variants !== undefined) {
       const variantError = validateVariants(variants);
@@ -487,6 +492,87 @@ router.delete('/plans/:id/images', requireAdmin, async (req, res) => {
   res.json(plan);
 });
 
+// ---------------------------------------------------------------------
+// Card Plan VARIANT front/back photo -- a single variant's own product
+// shot (e.g. the "White night" vs "Black sun" finish of a plan looking
+// visibly different), distinct from the plan-level `images` above (which
+// show the plan generally, not any one specific variant). Two fixed
+// slots per variant, same pattern as CatalogEntry's own front/back
+// routes -- just addressed by both the plan's id AND the variant
+// subdocument's own id, since a variant lives inside CardPlan.variants
+// rather than being its own top-level document. Only works for a variant
+// that's already been saved (has a real _id) -- a brand-new row the
+// admin just added client-side has nothing to upload against yet.
+// ---------------------------------------------------------------------
+const CARD_PLAN_VARIANTS_DIR = path.join(__dirname, '..', 'uploads', 'plan-variants');
+fs.mkdirSync(CARD_PLAN_VARIANTS_DIR, { recursive: true });
+const cardPlanVariantImageStorage = multer.diskStorage({
+  destination: CARD_PLAN_VARIANTS_DIR,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `plan-variant-${crypto.randomBytes(8).toString('hex')}${ext}`);
+  },
+});
+const uploadCardPlanVariantImage = multer({
+  storage: cardPlanVariantImageStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!THEME_MIME_TYPES.includes(file.mimetype)) {
+      return cb(new Error('Only JPEG, PNG, or WEBP images are allowed'));
+    }
+    cb(null, true);
+  },
+});
+
+function cardPlanVariantImageSlotRoutes(slot, field) {
+  router.post(`/plans/:planId/variants/:variantId/${slot}-image`, requireAdmin, (req, res) => {
+    uploadCardPlanVariantImage.single('image')(req, res, async (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      if (!req.file) return res.status(400).json({ error: 'No image file received' });
+
+      try {
+        const plan = await CardPlan.findById(req.params.planId);
+        if (!plan) return res.status(404).json({ error: 'Plan not found' });
+        const variant = plan.variants.id(req.params.variantId);
+        if (!variant) return res.status(404).json({ error: 'Variant not found' });
+
+        const previousUrl = variant[field];
+        variant[field] = `${process.env.BACKEND_URL}/uploads/plan-variants/${req.file.filename}`;
+        await plan.save();
+        if (previousUrl) {
+          fs.unlink(path.join(CARD_PLAN_VARIANTS_DIR, path.basename(previousUrl)), () => {});
+        }
+        res.status(201).json(plan);
+      } catch (err2) {
+        console.error(`[admin/plans variant ${slot}-image POST]`, err2);
+        res.status(500).json({ error: 'Failed to save image' });
+      }
+    });
+  });
+
+  router.delete(`/plans/:planId/variants/:variantId/${slot}-image`, requireAdmin, async (req, res) => {
+    try {
+      const plan = await CardPlan.findById(req.params.planId);
+      if (!plan) return res.status(404).json({ error: 'Plan not found' });
+      const variant = plan.variants.id(req.params.variantId);
+      if (!variant) return res.status(404).json({ error: 'Variant not found' });
+
+      const previousUrl = variant[field];
+      variant[field] = null;
+      await plan.save();
+      if (previousUrl) {
+        fs.unlink(path.join(CARD_PLAN_VARIANTS_DIR, path.basename(previousUrl)), () => {});
+      }
+      res.json(plan);
+    } catch (err2) {
+      console.error(`[admin/plans variant ${slot}-image DELETE]`, err2);
+      res.status(500).json({ error: 'Failed to remove image' });
+    }
+  });
+}
+cardPlanVariantImageSlotRoutes('front', 'frontImageUrl');
+cardPlanVariantImageSlotRoutes('back', 'backImageUrl');
+
 // -----------------------------------------------------------------------
 // Catalog entries (card variant showcase, see models/CatalogEntry.js)
 // -----------------------------------------------------------------------
@@ -506,7 +592,7 @@ router.post('/catalog-entries', requireAdmin, (req, res) => {
     if (err) return res.status(400).json({ error: err.message });
 
     try {
-      const { name, price, printingType, material, nfcChipSize, engravedTextColor, durability, colorCount, linkedPlanKey, features, active, sortOrder } = req.body;
+      const { name, price, printingType, material, nfcChipSize, engravedTextColor, durability, colorCount, linkedPlanKey, features, active, sortOrder, viewLayout } = req.body;
       if (!name) return res.status(400).json({ error: 'name is required' });
 
       let parsedFeatures = [];
@@ -544,6 +630,7 @@ router.post('/catalog-entries', requireAdmin, (req, res) => {
         linkedPlanKey: linkedPlanKey || null,
         active: active === 'true' || active === true || active === undefined,
         sortOrder: sortOrder !== undefined && sortOrder !== '' ? Number(sortOrder) : 0,
+        viewLayout: viewLayout === 'horizontal' ? 'horizontal' : 'vertical',
         updatedBy: req.admin?.email || 'unknown',
       });
       res.status(201).json(entry);
@@ -558,7 +645,7 @@ router.post('/catalog-entries', requireAdmin, (req, res) => {
 // dedicated images routes below for that).
 router.patch('/catalog-entries/:id', requireAdmin, async (req, res) => {
   try {
-    const { name, price, printingType, material, nfcChipSize, engravedTextColor, durability, colorCount, linkedPlanKey, features, active, sortOrder } = req.body;
+    const { name, price, printingType, material, nfcChipSize, engravedTextColor, durability, colorCount, linkedPlanKey, features, active, sortOrder, viewLayout } = req.body;
     const updates = { updatedBy: req.admin?.email || 'unknown' };
     if (name !== undefined) updates.name = name;
     if (price !== undefined) updates.price = price === '' ? null : Number(price);
@@ -571,6 +658,7 @@ router.patch('/catalog-entries/:id', requireAdmin, async (req, res) => {
     if (linkedPlanKey !== undefined) updates.linkedPlanKey = linkedPlanKey || null;
     if (active !== undefined) updates.active = active === 'true' || active === true;
     if (sortOrder !== undefined) updates.sortOrder = Number(sortOrder) || 0;
+    if (viewLayout !== undefined) updates.viewLayout = viewLayout === 'horizontal' ? 'horizontal' : 'vertical';
     if (features !== undefined) {
       if (!Array.isArray(features) || features.some((f) => typeof f !== 'string')) {
         return res.status(400).json({ error: 'features must be an array of strings' });
@@ -870,41 +958,104 @@ router.get('/clients/:clientId/contacts', requireAdmin, async (req, res) => {
 });
 
 // -----------------------------------------------------------------------
-// Fulfillment pipeline (new card purchases only -- upgrades never need
-// physical re-encoding, so they never appear here). Stages, derived from
-// existing + new fields rather than a separate status to keep in sync:
-//   Paid -> claimedBy set -> assignedTo set -> chipEncoded true (the
-//   encode tool sets this directly -- "Created" IS this flag, not a
-//   parallel one) -> dispatched true.
-// Claim/assign/dispatch are requireSeniorAdmin -- subadmins can be
+// Fulfillment pipeline -- one row per PHYSICAL CARD (see models/Card.js),
+// not per client. A paid purchase (first-time or a repeat/extra-quantity
+// one) pre-creates a Card placeholder per unit paid for (see
+// routes/profile.js's createCardsForPurchase), so a client who buys more
+// than once, or more than one at a time, gets an independently trackable
+// row for each card instead of just their first ever showing up here.
+// Stages, derived from existing fields rather than a separate status to
+// keep in sync: Paid -> claimedBy set -> assignedTo set -> encoded true
+// (the encode tool sets this directly -- "Created" IS this flag, not a
+// parallel one) -> dispatched true -> delivered true.
+// Claim/assign/dispatch/deliver are requireSeniorAdmin -- subadmins can be
 // assigned work and the encode tool still works for them exactly as
 // before, they just can't claim or hand off orders themselves.
+//
+// Card #1 specifically is mirrored back onto the legacy Client fields on
+// every mutation below, same precedent already established by
+// POST /cards/:cardId/mark-encoded further down -- everything that still
+// reads Client.dispatched/delivered/trackingId/etc directly (the client's
+// own Track/Dashboard pages) keeps working for a client's first card
+// without needing to be migrated itself. Cards 2+ are Card-only.
 // -----------------------------------------------------------------------
 
+function mirrorCardOneToClient(card, fields) {
+  if (card.cardNumber !== 1) return Promise.resolve();
+  return Client.updateOne({ clientId: card.clientId }, { $set: fields });
+}
+
 // GET /api/admin/fulfillment
-// Every paid client, for the fulfillment pipeline view. Includes already-
-// dispatched ones too (filter client-side) so the page can show history.
+// Every card on file, grouped by client, for the fulfillment pipeline view.
+// Includes already-delivered ones too (filter client-side) so the page can
+// show history.
 router.get('/fulfillment', requireAdmin, async (req, res) => {
-  const clients = await Client.find({ paid: true })
-    .select('clientId fullName cardType claimedBy assignedTo chipEncoded encodedAt encodedBy dispatched dispatchedAt dispatchedBy trackingId delivered deliveredAt createdAt')
+  const cards = await Card.find({})
+    .select('clientId cardNumber cardType cardVariantId claimedBy assignedTo encoded encodedAt dispatched dispatchedAt dispatchedBy trackingId delivered deliveredAt createdAt')
     .sort({ createdAt: -1 });
-  res.json(clients);
+
+  const clientIds = [...new Set(cards.map((c) => c.clientId))];
+  const clients = await Client.find({ clientId: { $in: clientIds } }).select('clientId fullName');
+  const nameMap = Object.fromEntries(clients.map((c) => [c.clientId, c.fullName]));
+
+  // Resolve each card's cardVariantId into a real name/shape, same join
+  // pattern GET /requests already uses for CardRequest.variantBreakdown.
+  const planKeys = [...new Set(cards.map((c) => c.cardType).filter(Boolean))];
+  const plans = await CardPlan.find({ key: { $in: planKeys } }).select('key variants');
+  const variantMap = {}; // `${planKey}:${variantId}` -> { name, shape }
+  plans.forEach((p) => {
+    p.variants.forEach((v) => {
+      variantMap[`${p.key}:${v._id.toString()}`] = { name: v.name, shape: v.shape };
+    });
+  });
+
+  const byClient = {};
+  for (const c of cards) {
+    const obj = c.toObject();
+    const variant = c.cardVariantId ? variantMap[`${c.cardType}:${String(c.cardVariantId)}`] : null;
+    (byClient[c.clientId] ||= []).push({
+      cardId: obj._id,
+      cardNumber: obj.cardNumber,
+      cardType: obj.cardType,
+      variantName: variant?.name || null,
+      shape: variant?.shape || null,
+      claimedBy: obj.claimedBy,
+      assignedTo: obj.assignedTo,
+      encoded: obj.encoded,
+      encodedAt: obj.encodedAt,
+      dispatched: obj.dispatched,
+      dispatchedAt: obj.dispatchedAt,
+      dispatchedBy: obj.dispatchedBy,
+      trackingId: obj.trackingId,
+      delivered: obj.delivered,
+      deliveredAt: obj.deliveredAt,
+    });
+  }
+
+  res.json(
+    clientIds.map((clientId) => ({
+      clientId,
+      fullName: nameMap[clientId] || '(deleted client)',
+      cards: byClient[clientId],
+    }))
+  );
 });
 
-// PATCH /api/admin/fulfillment/:clientId/claim
-router.patch('/fulfillment/:clientId/claim', requireSeniorAdmin, async (req, res) => {
-  const client = await Client.findOne({ clientId: req.params.clientId });
-  if (!client) return res.status(404).json({ error: 'Client not found' });
-  if (client.claimedBy) return res.status(409).json({ error: `Already claimed by ${client.claimedBy}` });
+// PATCH /api/admin/fulfillment/cards/:cardId/claim
+router.patch('/fulfillment/cards/:cardId/claim', requireSeniorAdmin, async (req, res) => {
+  const card = await Card.findById(req.params.cardId);
+  if (!card) return res.status(404).json({ error: 'Card not found' });
+  if (card.claimedBy) return res.status(409).json({ error: `Already claimed by ${card.claimedBy}` });
 
-  client.claimedBy = req.admin.email;
-  await client.save();
-  res.json(client);
+  card.claimedBy = req.admin.email;
+  await card.save();
+  await mirrorCardOneToClient(card, { claimedBy: card.claimedBy });
+  res.json(card);
 });
 
-// PATCH /api/admin/fulfillment/:clientId/assign
+// PATCH /api/admin/fulfillment/cards/:cardId/assign
 // body: { subadminEmail }
-router.patch('/fulfillment/:clientId/assign', requireSeniorAdmin, async (req, res) => {
+router.patch('/fulfillment/cards/:cardId/assign', requireSeniorAdmin, async (req, res) => {
   try {
     const { subadminEmail } = req.body;
     if (!subadminEmail) return res.status(400).json({ error: 'subadminEmail is required' });
@@ -912,56 +1063,64 @@ router.patch('/fulfillment/:clientId/assign', requireSeniorAdmin, async (req, re
     const subadmin = await Admin.findOne({ email: subadminEmail.toLowerCase() });
     if (!subadmin) return res.status(400).json({ error: 'No admin account with that email' });
 
-    const client = await Client.findOne({ clientId: req.params.clientId });
-    if (!client) return res.status(404).json({ error: 'Client not found' });
-    if (!client.claimedBy) {
-      return res.status(400).json({ error: 'Claim this order before assigning it.' });
+    const card = await Card.findById(req.params.cardId);
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+    if (!card.claimedBy) {
+      return res.status(400).json({ error: 'Claim this card before assigning it.' });
     }
 
-    client.assignedTo = subadmin.email;
-    await client.save();
-    res.json(client);
+    card.assignedTo = subadmin.email;
+    await card.save();
+    await mirrorCardOneToClient(card, { assignedTo: card.assignedTo });
+    res.json(card);
   } catch (err) {
     console.error('[admin/fulfillment assign]', err);
     res.status(500).json({ error: 'Failed to assign' });
   }
 });
 
-// PATCH /api/admin/fulfillment/:clientId/dispatch
+// PATCH /api/admin/fulfillment/cards/:cardId/dispatch
 // Blocked until the card is actually encoded -- can't ship what doesn't
-// physically exist yet. Now requires a tracking ID, since that's what
-// the client-facing Track page shows them once it's shipped.
-router.patch('/fulfillment/:clientId/dispatch', requireSeniorAdmin, async (req, res) => {
+// physically exist yet. Requires a tracking ID, since that's what the
+// client-facing Track page shows them once it's shipped.
+router.patch('/fulfillment/cards/:cardId/dispatch', requireSeniorAdmin, async (req, res) => {
   const { trackingId } = req.body;
   if (!trackingId) return res.status(400).json({ error: 'trackingId is required to mark as dispatched' });
 
-  const client = await Client.findOne({ clientId: req.params.clientId });
-  if (!client) return res.status(404).json({ error: 'Client not found' });
-  if (!client.chipEncoded) {
+  const card = await Card.findById(req.params.cardId);
+  if (!card) return res.status(404).json({ error: 'Card not found' });
+  if (!card.encoded) {
     return res.status(400).json({ error: 'Card must be encoded before it can be dispatched.' });
   }
 
-  client.dispatched = true;
-  client.dispatchedAt = new Date();
-  client.dispatchedBy = req.admin.email;
-  client.trackingId = trackingId;
-  await client.save();
-  res.json(client);
+  card.dispatched = true;
+  card.dispatchedAt = new Date();
+  card.dispatchedBy = req.admin.email;
+  card.trackingId = trackingId;
+  await card.save();
+  await mirrorCardOneToClient(card, {
+    dispatched: card.dispatched,
+    dispatchedAt: card.dispatchedAt,
+    dispatchedBy: card.dispatchedBy,
+    trackingId: card.trackingId,
+  });
+  res.json(card);
 });
 
-// PATCH /api/admin/fulfillment/:clientId/deliver
+// PATCH /api/admin/fulfillment/cards/:cardId/deliver
 // Final stage -- confirms the card actually reached the client.
-router.patch('/fulfillment/:clientId/deliver', requireSeniorAdmin, async (req, res) => {
-  const client = await Client.findOne({ clientId: req.params.clientId });
-  if (!client) return res.status(404).json({ error: 'Client not found' });
-  if (!client.dispatched) {
+router.patch('/fulfillment/cards/:cardId/deliver', requireSeniorAdmin, async (req, res) => {
+  const card = await Card.findById(req.params.cardId);
+  if (!card) return res.status(404).json({ error: 'Card not found' });
+  if (!card.dispatched) {
     return res.status(400).json({ error: 'Card must be dispatched before it can be marked delivered.' });
   }
 
-  client.delivered = true;
-  client.deliveredAt = new Date();
-  await client.save();
-  res.json(client);
+  card.delivered = true;
+  card.deliveredAt = new Date();
+  await card.save();
+  await mirrorCardOneToClient(card, { delivered: card.delivered, deliveredAt: card.deliveredAt });
+  res.json(card);
 });
 
 // -----------------------------------------------------------------------
@@ -1146,11 +1305,32 @@ router.get('/requests', requireAdmin, async (req, res) => {
   const clients = await Client.find({ clientId: { $in: clientIds } }).select('clientId fullName');
   const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c.fullName]));
 
+  // Resolve each variantBreakdown entry's variantId into a real name/shape
+  // for display -- requests only store the ObjectId reference (see
+  // CardRequest.variantBreakdown's own comment), joined here the same way
+  // clientName above is, rather than making the frontend do its own
+  // per-plan lookup.
+  const planKeys = [...new Set(requests.map((r) => r.requestedPlan).filter(Boolean))];
+  const plans = await CardPlan.find({ key: { $in: planKeys } }).select('key variants');
+  const variantMap = {}; // `${planKey}:${variantId}` -> { name, shape }
+  plans.forEach((p) => {
+    p.variants.forEach((v) => {
+      variantMap[`${p.key}:${v._id.toString()}`] = { name: v.name, shape: v.shape };
+    });
+  });
+
   res.json(
-    requests.map((r) => ({
-      ...r.toObject(),
-      clientName: clientMap[r.clientId] || '(deleted client)',
-    }))
+    requests.map((r) => {
+      const obj = r.toObject();
+      return {
+        ...obj,
+        clientName: clientMap[r.clientId] || '(deleted client)',
+        variantBreakdown: (obj.variantBreakdown || []).map((entry) => ({
+          ...entry,
+          ...(variantMap[`${obj.requestedPlan}:${String(entry.variantId)}`] || {}),
+        })),
+      };
+    })
   );
 });
 
@@ -1221,6 +1401,40 @@ router.patch('/contact-messages/:id', requireAdmin, async (req, res) => {
 router.delete('/contact-messages/:id', requireAdmin, async (req, res) => {
   const message = await ContactMessage.findByIdAndDelete(req.params.id);
   if (!message) return res.status(404).json({ error: 'Message not found' });
+  res.json({ ok: true });
+});
+
+// -----------------------------------------------------------------------
+// Card tickets -- "Raise a ticket" submissions from the public tap page,
+// shown there when a specific card is temporarily deactivated (see
+// routes/public.js's POST /card-tickets/:clientId and PublicProfile.jsx).
+// Distinct from contact messages above: these carry which client/card
+// they're about, so they're joined with the client's name here the same
+// way GET /requests already resolves clientName for CardRequest.
+// -----------------------------------------------------------------------
+
+// GET /api/admin/card-tickets
+router.get('/card-tickets', requireAdmin, async (req, res) => {
+  const tickets = await CardTicket.find({}).sort({ createdAt: -1 });
+  const clientIds = [...new Set(tickets.map((t) => t.clientId))];
+  const clients = await Client.find({ clientId: { $in: clientIds } }).select('clientId fullName');
+  const nameMap = Object.fromEntries(clients.map((c) => [c.clientId, c.fullName]));
+  res.json(tickets.map((t) => ({ ...t.toObject(), clientName: nameMap[t.clientId] || '(deleted client)' })));
+});
+
+// PATCH /api/admin/card-tickets/:id -- mark open/resolved
+router.patch('/card-tickets/:id', requireAdmin, async (req, res) => {
+  const { status } = req.body;
+  if (!['open', 'resolved'].includes(status)) return res.status(400).json({ error: 'status must be open or resolved' });
+  const ticket = await CardTicket.findByIdAndUpdate(req.params.id, { $set: { status } }, { new: true });
+  if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+  res.json(ticket);
+});
+
+// DELETE /api/admin/card-tickets/:id
+router.delete('/card-tickets/:id', requireAdmin, async (req, res) => {
+  const ticket = await CardTicket.findByIdAndDelete(req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
   res.json({ ok: true });
 });
 
@@ -2027,6 +2241,17 @@ router.get('/encode/client/:clientId', requireEncodeAccess, async (req, res) => 
     const cards = await Card.find({ clientId: client.clientId }).select('-passwordEncrypted').sort({ cardNumber: 1 });
     const clientObj = client.toObject();
     clientObj.cards = cards;
+
+    // The variant choices for this client's current plan, if it has any --
+    // lets the "Create a card" flow offer a style picker when reserving a
+    // new card slot, the same way a real purchase's checkout does.
+    if (client.cardType) {
+      const plan = await CardPlan.findOne({ key: client.cardType }).select('variants');
+      clientObj.planVariants = plan ? plan.variants.map((v) => ({ _id: v._id, name: v.name, shape: v.shape })) : [];
+    } else {
+      clientObj.planVariants = [];
+    }
+
     res.json(clientObj);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2066,23 +2291,48 @@ router.get('/clients/:clientId/cards', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/admin/clients/:clientId/cards -- reserves a new card slot
-// BEFORE the physical write happens, so the encode tool knows what
-// ?card=N to put in the chip's own URL. cardNumber is sequential per
-// client, not a global ID.
+// POST /api/admin/clients/:clientId/cards -- claims a card slot to write to
+// BEFORE the physical write happens, so the encode tool knows what ?card=N
+// to put in the chip's own URL. cardNumber is sequential per client, not a
+// global ID.
+//
+// A paid purchase now pre-creates unencoded Card placeholders (see
+// routes/profile.js's createCardsForPurchase) so a repeat/multi-quantity
+// order has somewhere to be tracked before anyone touches the encode tool.
+// This route has to know about that: it reuses the client's oldest
+// not-yet-encoded card instead of always minting a new slot on top, or
+// arming the encode tool for a client with an unencoded placeholder would
+// create a second, genuinely orphaned slot -- the placeholder would sit
+// forever as a phantom "needs attention" row nothing physical will ever
+// satisfy.
 router.post('/clients/:clientId/cards', requireEncodeAccess, async (req, res) => {
   try {
-    const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId');
+    const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId cardType');
     if (!client) return res.status(404).json({ error: 'Client not found' });
+
+    const { cardType, cardVariantId, label } = req.body || {};
+
+    const existing = await Card.findOne({ clientId: client.clientId, encoded: false }).sort({ cardNumber: 1 });
+    if (existing) {
+      // Reusing a placeholder (e.g. auto-created by a purchase) shouldn't
+      // silently drop a label/variant the caller just specified for it --
+      // apply whatever was actually provided this time, leave the rest as
+      // it was.
+      if (label !== undefined) existing.label = label || null;
+      if (cardVariantId !== undefined) existing.cardVariantId = cardVariantId || null;
+      if (cardType) existing.cardType = cardType;
+      await existing.save();
+      return res.status(200).json({ cardId: existing._id, cardNumber: existing.cardNumber });
+    }
 
     const last = await Card.findOne({ clientId: client.clientId }).sort({ cardNumber: -1 }).select('cardNumber');
     const cardNumber = (last?.cardNumber || 0) + 1;
-    const { cardType, cardVariantId } = req.body || {};
     const card = await Card.create({
       clientId: client.clientId,
       cardNumber,
       cardType: cardType || client.cardType || null,
       cardVariantId: cardVariantId || null,
+      label: label || null,
     });
     res.status(201).json({ cardId: card._id, cardNumber: card.cardNumber });
   } catch (err) {
@@ -2109,13 +2359,23 @@ router.get('/cards/:cardId/password', requireAdmin, async (req, res) => {
   }
 });
 
-// PATCH /api/admin/cards/:cardId -- active/cardType/cardVariantId only;
-// password/encoded status change exclusively via mark-encoded below.
+// PATCH /api/admin/cards/:cardId -- active/cardType/cardVariantId/label,
+// plus a direct `delivered` toggle for cards handed to the client in
+// person (gifted/manually created ones especially) rather than shipped --
+// that path has no tracking ID or dispatch step to go through, so this
+// skips straight past the postal claim/assign/dispatch pipeline
+// (/fulfillment/cards/:cardId/*, further up) instead of forcing it through
+// stages that don't apply. Password/encoded status change exclusively via
+// mark-encoded below.
 router.patch('/cards/:cardId', requireAdmin, async (req, res) => {
   try {
     const updates = {};
-    for (const field of ['active', 'cardType', 'cardVariantId']) {
+    for (const field of ['active', 'cardType', 'cardVariantId', 'label']) {
       if (field in req.body) updates[field] = req.body[field];
+    }
+    if ('delivered' in req.body) {
+      updates.delivered = Boolean(req.body.delivered);
+      updates.deliveredAt = updates.delivered ? new Date() : null;
     }
     const card = await Card.findByIdAndUpdate(req.params.cardId, { $set: updates }, { new: true, runValidators: true }).select(
       '-passwordEncrypted'

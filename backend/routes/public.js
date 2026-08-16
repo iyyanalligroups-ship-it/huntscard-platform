@@ -14,6 +14,7 @@ const ContactMessage = require('../models/ContactMessage');
 const Contact = require('../models/Contact');
 const Notification = require('../models/Notification');
 const Card = require('../models/Card');
+const CardTicket = require('../models/CardTicket');
 const { sendPushToClient } = require('../utils/push');
 const ArLayout = require('../models/ArLayout');
 const ArIcon = require('../models/ArIcon');
@@ -38,19 +39,31 @@ function generateTempPassword() {
     .join('');
 }
 
-// Two independent gates: the whole-profile pause (Client.cardActive, see
-// Settings.jsx's "Card status") is always checked -- the overall kill
-// switch. The optional ?card=N query param additionally targets ONE
-// specific physical card (see models/Card.js), since every card for a
-// client used to encode the identical URL with no way to tell them apart
-// -- cards written before this feature has no ?card= and so can't be
-// individually blocked, only the whole-profile switch applies to them.
-// Used by every public route below that exposes real client data.
-async function isCardBlocked(clientId, cardNumberParam) {
+// Three independent ways a tap can be blocked, returned as a reason string
+// (or null if it's fine) so the frontend can show wording specific to
+// which one actually happened, instead of one generic message for all of
+// them:
+//   'owner'       -- Client.cardActive is off (see Settings.jsx's "Card
+//                     status") -- the profile owner paused everything
+//                     themselves, reversible by them.
+//   'deactivated' -- this ONE physical card's own Card.active is off (see
+//                     models/Card.js) -- admin turned it off, reversible by
+//                     admin (Reactivate).
+//   'deleted'     -- a ?card=N was given but no Card record exists for it
+//                     anymore -- admin PERMANENTLY deleted it (see DELETE
+//                     /api/admin/cards/:cardId); this can never be undone,
+//                     that card number is gone for good.
+// Cards written before individual card tracking existed have no ?card= in
+// their URL at all, so they can only ever hit 'owner' -- there's no way to
+// target just one of them individually.
+async function cardBlockReason(client, cardNumberParam) {
+  if (!client.cardActive) return 'owner';
   const cardNumber = Number(cardNumberParam);
-  if (!cardNumberParam || !Number.isFinite(cardNumber)) return false;
-  const card = await Card.findOne({ clientId, cardNumber }).select('active');
-  return Boolean(card && !card.active);
+  if (!cardNumberParam || !Number.isFinite(cardNumber)) return null;
+  const card = await Card.findOne({ clientId: client.clientId, cardNumber }).select('active');
+  if (!card) return 'deleted';
+  if (!card.active) return 'deactivated';
+  return null;
 }
 
 // GET /api/public/plans
@@ -320,11 +333,13 @@ router.get('/profile/:clientId', async (req, res) => {
     return res.status(404).json({ error: 'Profile not found' });
   }
 
-  // Paused by the owner (see POST /api/profile/pause-card) -- a distinct
-  // signal, not a 404, since the card genuinely exists and the owner may
-  // be debugging their own link. No profile fields are sent at all.
-  if (!client.cardActive || (await isCardBlocked(client.clientId, req.query.card))) {
-    return res.json({ paused: true });
+  // Blocked (any reason -- see cardBlockReason's own comment) -- a
+  // distinct signal, not a 404, since the card genuinely exists and
+  // whoever's looking may be debugging their own link. No profile fields
+  // are sent at all.
+  const blockReason = await cardBlockReason(client, req.query.card);
+  if (blockReason) {
+    return res.json({ paused: true, reason: blockReason });
   }
 
   // Whether this client's plan includes the AR feature -- decides
@@ -357,8 +372,9 @@ router.get('/vcard/:clientId', async (req, res) => {
   if (!client) {
     return res.status(404).json({ error: 'Profile not found' });
   }
-  if (!client.cardActive || (await isCardBlocked(client.clientId, req.query.card))) {
-    return res.status(403).json({ error: 'This card has been deactivated' });
+  const vcardBlockReason = await cardBlockReason(client, req.query.card);
+  if (vcardBlockReason) {
+    return res.status(403).json({ error: 'This card has been deactivated', reason: vcardBlockReason });
   }
 
   const vcard = [
@@ -390,8 +406,9 @@ router.post('/leads/:clientId', async (req, res) => {
   try {
     const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId cardActive');
     if (!client) return res.status(404).json({ error: 'Profile not found' });
-    if (!client.cardActive || (await isCardBlocked(client.clientId, req.query.card))) {
-      return res.status(403).json({ error: 'This card has been deactivated' });
+    const leadsBlockReason = await cardBlockReason(client, req.query.card);
+    if (leadsBlockReason) {
+      return res.status(403).json({ error: 'This card has been deactivated', reason: leadsBlockReason });
     }
 
     const { name, phone, email, org } = req.body || {};
@@ -438,6 +455,44 @@ router.post('/leads/:clientId', async (req, res) => {
   }
 });
 
+// POST /api/public/card-tickets/:clientId
+// "Raise a ticket" -- shown on the tap page in place of a raw phone/email
+// when a card is temporarily deactivated (see PublicProfile.jsx's
+// 'deactivated' branch), so whoever tapped it has an actual way to reach
+// support instead of just being told to call/email somewhere. Deliberately
+// does NOT gate on cardBlockReason the way leads/vcard/ar-layout do --
+// this route's whole purpose is to still work while the card is blocked,
+// not despite it.
+router.post('/card-tickets/:clientId', async (req, res) => {
+  try {
+    const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId');
+    if (!client) return res.status(404).json({ error: 'Profile not found' });
+
+    const { name, contactNumber, issue, email } = req.body || {};
+    const trimmedName = (name || '').toString().trim();
+    const trimmedContactNumber = (contactNumber || '').toString().trim();
+    const trimmedIssue = (issue || '').toString().trim();
+    if (!trimmedName) return res.status(400).json({ error: 'Name is required' });
+    if (!trimmedContactNumber) return res.status(400).json({ error: 'Contact number is required' });
+    if (!trimmedIssue) return res.status(400).json({ error: 'Please describe the issue' });
+
+    const cardNumber = Number(req.query.card);
+    const ticket = await CardTicket.create({
+      clientId: client.clientId,
+      cardNumber: Number.isFinite(cardNumber) ? cardNumber : null,
+      name: trimmedName,
+      contactNumber: trimmedContactNumber,
+      email: (email || '').toString().trim() || null,
+      issue: trimmedIssue,
+    });
+
+    res.status(201).json({ ok: true, ticketId: ticket._id });
+  } catch (err) {
+    console.error('[public/card-tickets POST]', err);
+    res.status(500).json({ error: 'Failed to submit ticket' });
+  }
+});
+
 // GET /api/public/ar-targets
 // Feeds the MyNetwork app's AR image recognition -- each client's own
 // profile photo doubles as the AR marker image, since it's naturally
@@ -469,11 +524,12 @@ router.get('/ar-targets', async (req, res) => {
 router.get('/ar-layout/:clientId', async (req, res) => {
   try {
     const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId cardActive');
-    if (client && (!client.cardActive || (await isCardBlocked(client.clientId, req.query.card)))) {
+    const arBlockReason = client ? await cardBlockReason(client, req.query.card) : null;
+    if (arBlockReason) {
       // Surfaces verbatim in ArView.jsx's existing loadError UI (see
       // Promise.all([getPublicProfile, getPublicArLayout]).catch(...)) --
       // wording is user-facing as-is, not just a log message.
-      return res.status(403).json({ error: 'This card has been deactivated' });
+      return res.status(403).json({ error: 'This card has been deactivated', reason: arBlockReason });
     }
     let layout = await ArLayout.findOne({ clientId: req.params.clientId });
     if (!layout) {

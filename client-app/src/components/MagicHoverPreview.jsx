@@ -53,6 +53,13 @@ export default function MagicHoverPreview({ imageUrl, videoUrl, videoCrop, alt, 
       />
       {videoUrl && (
         <video
+          // Keyed to the URL itself -- a plain `src` prop change updates
+          // the DOM attribute, but an already-loaded <video> element
+          // doesn't reliably reload just because that attribute changed
+          // (needs an explicit .load()). Keying it forces React to mount
+          // a genuinely fresh element whenever the video is replaced, so
+          // the old buffered content can't keep playing on hover.
+          key={videoUrl}
           ref={videoRef}
           src={videoUrl}
           muted
