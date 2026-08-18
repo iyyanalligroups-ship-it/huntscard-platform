@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, isLoggedIn } from '../api.js';
 import { loadRazorpayScript } from '../razorpay.js';
 
+const PLAN_DISPLAY_ORDER = ['premium', 'elite', 'nova', 'custom', 'apex'];
+
 function PlanImageGallery({ images }) {
   const [index, setIndex] = useState(0);
   if (!images || images.length === 0) return null;
@@ -72,32 +74,42 @@ function VariantPhoto({ url, label }) {
   );
 }
 
-// Left-side image panel of the plan detail view -- a big preview of
-// whichever variant is currently "focused" (front photo normally, back on
-// hover), Prev/Next arrows, and a thumbnail strip of every variant below
-// it for jumping straight to one. Purely browsing: it doesn't pick a
-// style for purchase itself (that's the quantity steppers on the right,
-// which support choosing several styles at once) -- clicking a thumbnail
-// or Next/Prev just changes what's previewed here and which card is
-// highlighted on the right.
+// Left-side image panel of the plan detail view -- a big side-by-side
+// front + back preview of whichever variant is currently "focused" (both
+// shown at once, not one hidden behind a hover), Prev/Next arrows, and a
+// thumbnail strip of every variant below it for jumping straight to one.
+// Purely browsing: it doesn't pick a style for purchase itself (that's
+// the quantity steppers on the right, which support choosing several
+// styles at once) -- clicking a thumbnail or Next/Prev just changes what's
+// previewed here and which card is highlighted on the right.
 function PlanHeroMedia({ variants, focusIndex, onFocusChange }) {
   const variant = variants[focusIndex] || variants[0];
-  const [hovering, setHovering] = useState(false);
-  const displayUrl = (hovering && variant?.backImageUrl) ? variant.backImageUrl : variant?.frontImageUrl;
   const multi = variants.length > 1;
+  // Horizontal card designs are landscape -- squeezing front+back side by
+  // side into two narrow portrait boxes (sized for vertical designs)
+  // crushed them down to a sliver. Stacking front above back instead lets
+  // each box use the landscape shape the design actually is.
+  const isHorizontal = variant?.shape === 'horizontal';
 
   return (
     <div className="checkout-modal-media-col">
-      <div
-        className="checkout-modal-media"
-        onMouseEnter={() => setHovering(true)}
-        onMouseLeave={() => setHovering(false)}
-      >
-        {displayUrl ? (
-          <img src={displayUrl} alt={variant?.name} />
-        ) : (
-          <span className="checkout-modal-media-empty">No photo yet</span>
-        )}
+      <div className={`checkout-modal-media-pair${isHorizontal ? ' horizontal' : ''}`}>
+        <div className="checkout-modal-media-single">
+          {variant?.frontImageUrl ? (
+            <img src={variant.frontImageUrl} alt={`${variant?.name} front`} />
+          ) : (
+            <span className="checkout-modal-media-empty">No front photo yet</span>
+          )}
+          <span className="checkout-modal-media-tag">Front</span>
+        </div>
+        <div className="checkout-modal-media-single">
+          {variant?.backImageUrl ? (
+            <img src={variant.backImageUrl} alt={`${variant?.name} back`} />
+          ) : (
+            <span className="checkout-modal-media-empty">No back photo yet</span>
+          )}
+          <span className="checkout-modal-media-tag">Back</span>
+        </div>
       </div>
       <div className="checkout-modal-media-caption">
         {variant?.name}
@@ -144,13 +156,8 @@ function PlanHeroMedia({ variants, focusIndex, onFocusChange }) {
 // account. Actually buying requires being logged in: clicking "Choose
 // this plan" while logged out sends you to Register instead of opening
 // checkout, rather than letting an anonymous guest pay straight through.
-//
-// Once logged in, two paths:
-// - For yourself: pick a plan, pay -- updates YOUR OWN account. No fields
-//   needed, we already know who you are.
-// - "Buying for someone else" toggled on: pick a plan, enter the
-//   recipient's name + email, pay -- creates a SEPARATE new account for
-//   them (audit-tracked as purchased by you).
+// Once logged in, picking a plan and paying updates YOUR OWN account --
+// no extra fields needed, we already know who you are.
 export default function Shop() {
   const loggedIn = isLoggedIn();
   const navigate = useNavigate();
@@ -172,15 +179,27 @@ export default function Shop() {
   const [designBackUrl, setDesignBackUrl] = useState('');
   const [uploadingDesign, setUploadingDesign] = useState(null); // 'front' | 'back' | null
   const [quantity, setQuantity] = useState(1);
-  const [forSomeoneElse, setForSomeoneElse] = useState(false);
-  const [fullName, setFullName] = useState('');
-  const [loginEmail, setLoginEmail] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [handoff, setHandoff] = useState(null);
   const [upgraded, setUpgraded] = useState(false);
   const [requests, setRequests] = useState([]);
+  // Same admin-toggled setting PublicLayout.jsx's header/footer follow --
+  // fetched independently here (rather than threaded down as a prop)
+  // because this page is mounted two different ways: standalone on the
+  // public site at /shop, and inside the dashboard at /dashboard/upgrade
+  // (where .dash-shell already carries .theme-orange from Layout.jsx, so
+  // this is redundant-but-harmless there). Only the public /shop mount
+  // actually needs it -- nothing else on that route puts .theme-orange
+  // anywhere near this page's own content.
+  const [homeTheme, setHomeTheme] = useState('default');
+
+  useEffect(() => {
+    api
+      .getSiteSettings()
+      .then((s) => setHomeTheme(s.homeTheme || 'default'))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -211,13 +230,23 @@ export default function Shop() {
   const hasCard = Boolean(myProfile?.cardType);
   // Show every plan, including the client's current one -- it's marked
   // as "Current Plan" in the card below instead of being hidden, so
-  // they can see where they stand relative to the other tiers. Buying
-  // for someone else never marks anything as "current" (that's about
-  // the client's own account, not the recipient's).
+  // they can see where they stand relative to the other tiers.
   function isCurrentPlan(p) {
-    return loggedIn && hasCard && !forSomeoneElse && p.key === myProfile.cardType;
+    return loggedIn && hasCard && p.key === myProfile.cardType;
   }
-  const visiblePlans = plans;
+  // Fixed display order (Premium, Elite, Nova, Custom, then Apex last) --
+  // independent of the plans' own DB insertion order/keys, which don't
+  // line up with this at all (e.g. the "Premium" plan's key is "basic").
+  // Matched by name keyword rather than key since that's the stable,
+  // human-meaningful identifier here. Anything that doesn't match one of
+  // these keywords (a future new plan) falls back to the end, not lost.
+  const visiblePlans = [...plans].sort((a, b) => {
+    const rank = (p) => {
+      const i = PLAN_DISPLAY_ORDER.findIndex((k) => p.name.toLowerCase().includes(k));
+      return i === -1 ? PLAN_DISPLAY_ORDER.length : i;
+    };
+    return rank(a) - rank(b);
+  });
   const selectedPlan = visiblePlans.find((p) => p.key === selectedKey);
 
   // Switching plans is just browsing -- unlike the old "Choose this plan"
@@ -231,21 +260,18 @@ export default function Shop() {
     setDesignBackUrl('');
     setQuantity(1);
     setError('');
-    setHandoff(null);
     setUpgraded(false);
   }
 
   // Default to a plan as soon as there's one to show: the client's
   // current plan if they have one (so "Upgrade your card" opens already
   // showing what they're on), otherwise just the first plan in the list.
-  // Buying for someone else has no "current" plan of its own, so it
-  // always falls back to the first one.
   useEffect(() => {
     if (loading || selectedKey || visiblePlans.length === 0) return;
-    const current = loggedIn && hasCard && !forSomeoneElse ? visiblePlans.find((p) => p.key === myProfile.cardType) : null;
+    const current = loggedIn && hasCard ? visiblePlans.find((p) => p.key === myProfile.cardType) : null;
     setSelectedKey((current || visiblePlans[0]).key);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, visiblePlans, selectedKey, forSomeoneElse]);
+  }, [loading, visiblePlans, selectedKey]);
 
   async function handleDesignUpload(side, file) {
     if (!file) return;
@@ -299,7 +325,7 @@ export default function Shop() {
         order_id: order.orderId,
         name: 'HuntsTAG',
         description,
-        prefill: forSomeoneElse ? { name: fullName, email: loginEmail } : { name: myProfile?.fullName, email: myProfile?.loginEmail },
+        prefill: { name: myProfile?.fullName, email: myProfile?.loginEmail },
         handler: async (response) => {
           try {
             const result = await confirmPayment(response);
@@ -326,8 +352,6 @@ export default function Shop() {
       navigate('/register');
       return;
     }
-    if (forSomeoneElse && (!fullName || !loginEmail)) return;
-
     if (!selectedPlan.chargeAmount) {
       setError('This plan isn\'t available for instant checkout yet — please contact us to order it.');
       return;
@@ -345,56 +369,25 @@ export default function Shop() {
     setSubmitting(true);
     try {
       const qtySuffix = effectiveQuantity > 1 ? ` × ${effectiveQuantity}` : '';
-      if (forSomeoneElse) {
-        // Buy for someone else -- new account, audit-tracked as purchased by
-        // you. Quantity here means N physical copies of THEIR one profile,
-        // not N separate people.
-        const result = await runCheckout({
-          createOrder: () =>
-            api.createNewCardOrder({
-              requestedPlan: selectedKey,
-              recipientName: fullName,
-              recipientEmail: loginEmail,
-              quantity,
-              variants: hasVariants ? variantEntries : undefined,
-            }),
-          confirmPayment: (response) =>
-            api.confirmNewCardPayment({
-              requestedPlan: selectedKey,
-              recipientName: fullName,
-              recipientEmail: loginEmail,
-              designFrontUrl: designFrontUrl || undefined,
-              designBackUrl: designBackUrl || undefined,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            }),
-          description: `${selectedPlan.name} card${qtySuffix} — for ${fullName}`,
-        });
-        setHandoff(result);
-        setFullName('');
-        setLoginEmail('');
-      } else {
-        // Buy/upgrade your own account. Quantity = spare physical copies of
-        // your own profile, still just the one account.
-        const result = await runCheckout({
-          createOrder: () => api.createUpgradeOrder(selectedKey, quantity, hasVariants ? variantEntries : undefined),
-          confirmPayment: (response) =>
-            api.confirmUpgradePayment({
-              requestedPlan: selectedKey,
-              designFrontUrl: designFrontUrl || undefined,
-              designBackUrl: designBackUrl || undefined,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            }),
-          description: `${selectedPlan.name} card${qtySuffix}`,
-        });
-        setUpgraded(result.quantity || 1);
-        const [fresh, reqs] = await Promise.all([api.getProfile(), api.listMyRequests()]);
-        setMyProfile(fresh);
-        setRequests(reqs.filter((r) => r.type === 'upgrade'));
-      }
+      // Buy/upgrade your own account. Quantity = spare physical copies of
+      // your own profile, still just the one account.
+      const result = await runCheckout({
+        createOrder: () => api.createUpgradeOrder(selectedKey, quantity, hasVariants ? variantEntries : undefined),
+        confirmPayment: (response) =>
+          api.confirmUpgradePayment({
+            requestedPlan: selectedKey,
+            designFrontUrl: designFrontUrl || undefined,
+            designBackUrl: designBackUrl || undefined,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          }),
+        description: `${selectedPlan.name} card${qtySuffix}`,
+      });
+      setUpgraded(result.quantity || 1);
+      const [fresh, reqs] = await Promise.all([api.getProfile(), api.listMyRequests()]);
+      setMyProfile(fresh);
+      setRequests(reqs.filter((r) => r.type === 'upgrade'));
       setSelectedKey('');
       setVariantQuantities({});
       setDesignFrontUrl('');
@@ -409,96 +402,18 @@ export default function Shop() {
 
   if (loading) return <p className="subtitle" style={{ textAlign: 'center' }}>Loading plans…</p>;
 
-  if (handoff) {
-    return (
-      <div className="checkout-panel">
-        <h2 className="section-heading" style={{ marginTop: 0 }}>Card created! 🎉</h2>
-        <p className="section-subheading">Send these to the card owner — shown once.</p>
-        <div className="handoff-ticket">
-          <div className="handoff-title">
-            <span className="ripple-glyph">
-              <span className="ring" />
-            </span>
-            Login details
-          </div>
-          <div className="handoff-row">
-            <span>Login email</span>
-            <span>{handoff.loginEmail}</span>
-          </div>
-          <div className="handoff-row">
-            <span>Temporary password</span>
-            <span>{handoff.tempPassword}</span>
-          </div>
-          <div className="handoff-row">
-            <span>Card type</span>
-            <span>{handoff.cardType}</span>
-          </div>
-          <div className="handoff-row">
-            <span>Their card page</span>
-            <span>{handoff.publicUrl}</span>
-          </div>
-          {handoff.quantity > 1 && (
-            <div className="handoff-row">
-              <span>Physical cards to encode</span>
-              <span>{handoff.quantity} (same profile)</span>
-            </div>
-          )}
-        </div>
-        <button
-          style={{ marginTop: 20 }}
-          onClick={() => {
-            setHandoff(null);
-            setForSomeoneElse(false);
-          }}
-        >
-          Done
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div>
+    <div className={homeTheme === 'orange' ? 'theme-orange' : undefined}>
       <h1 className="section-heading" style={{ marginTop: 0 }}>
-        {forSomeoneElse ? 'Buy a card for someone else' : loggedIn ? (hasCard ? 'Upgrade your card' : 'Get your card') : 'Choose your card'}
+        {loggedIn ? (hasCard ? 'Upgrade your card' : 'Get your card') : 'Choose your card'}
       </h1>
       <p className="section-subheading">
-        {forSomeoneElse
-          ? 'Creates a separate account for them — pick a plan, enter their details, pay.'
-          : loggedIn
+        {loggedIn
           ? hasCard
             ? `You're currently on ${myProfile.cardType}.`
             : "You don't have a card yet — pick a plan below."
           : "Browse freely — you'll need an account to actually buy."}
       </p>
-
-      {loggedIn && (
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            justifyContent: 'center',
-            marginBottom: 24,
-            fontSize: 13,
-            color: 'var(--text-dim)',
-            cursor: 'pointer',
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={forSomeoneElse}
-            onChange={(e) => {
-              setForSomeoneElse(e.target.checked);
-              setSelectedKey('');
-              setError('');
-              setHandoff(null);
-            }}
-            style={{ width: 'auto' }}
-          />
-          Buying this for someone else?
-        </label>
-      )}
 
       {upgraded && !error && (
         <p className="section-subheading" style={{ color: 'var(--holo-cyan)', fontWeight: 600 }}>
@@ -529,7 +444,7 @@ export default function Shop() {
 
           {selectedPlan && (
             <div className={`checkout-panel plan-detail-panel${hasVariantImages || selectedPlan.images?.length ? ' checkout-modal-card-wide' : ''}`}>
-            <div className="card">
+            <div className="card shop-detail-card">
             <div className="plan-detail-header">
               {isCurrentPlan(selectedPlan) && <span className="current-plan-badge">Current Plan</span>}
               <h2 className="plan-detail-name">{selectedPlan.name}</h2>
@@ -728,25 +643,6 @@ export default function Shop() {
                   </div>
                 </div>
               )}
-              {forSomeoneElse && (
-                <>
-                  <div className="field">
-                    <label htmlFor="fullName">Card owner's full name</label>
-                    <input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-                  </div>
-                  <div className="field">
-                    <label htmlFor="loginEmail">Card owner's login email</label>
-                    <input
-                      id="loginEmail"
-                      type="email"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      required
-                    />
-                    <p className="hint" style={{ marginBottom: 0 }}>Must be different from your own login.</p>
-                  </div>
-                </>
-              )}
               <button type="submit" disabled={submitting || !selectedPlan.chargeAmount || !variantOk || !designOk}>
                 {submitting
                   ? 'Waiting for payment…'
@@ -774,7 +670,7 @@ export default function Shop() {
         </>
       )}
 
-      {loggedIn && !forSomeoneElse && requests.length > 0 && (
+      {loggedIn && requests.length > 0 && (
         <div className="checkout-panel" style={{ marginTop: 32 }}>
           <p className="hint" style={{ marginBottom: 8 }}>Your purchase history</p>
           {requests.map((r) => (

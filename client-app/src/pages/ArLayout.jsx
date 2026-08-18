@@ -33,24 +33,25 @@ import { clampHeight, clampPercent } from '../lib/arProjection.js';
 
 export default function ArLayout() {
   const [profile, setProfile] = useState(null);
+  // This client's own physical cards (see backend/models/Card.js) -- a
+  // client can own several, each on a different plan/variant, so each
+  // gets its OWN AR Layout arrangement + a locked shape derived from
+  // whatever was actually purchased for it (see utils/cardVariant.js).
+  // null while loading; [] once loaded (even if empty).
+  const [cards, setCards] = useState(null);
+  const [selectedCardNumber, setSelectedCardNumber] = useState(null);
   const [layout, setLayout] = useState(null);
   const [arComponents, setArComponents] = useState([]); // AR-flagged attributes (AttributeDefinition.arComponent) -- extra AR Layout panel elements
   const [error, setError] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
+
   useEffect(() => {
+    api.getProfile().then(setProfile).catch((err) => setError(err.message));
     api
-      .getProfile()
-      .then((profileData) => {
-        setProfile(profileData);
-        if (profileData.arEnabled) {
-          // Custom AR component positions come back nested under
-          // customElements (see ArLayout model) -- flattened onto the
-          // layout's own top level here so every existing position
-          // handler works on a custom component's key exactly like a
-          // built-in one, with zero changes to that logic. Reassembled
-          // back into customElements on save, see handleSave below.
-          return api.getMyArLayout().then((raw) => setLayout({ ...raw, ...(raw.customElements || {}) }));
-        }
+      .getMyCards()
+      .then((list) => {
+        setCards(list);
+        if (list.length > 0) setSelectedCardNumber(list[0].cardNumber);
       })
       .catch((err) => setError(err.message));
     api
@@ -58,6 +59,25 @@ export default function ArLayout() {
       .then((all) => setArComponents(all.filter((a) => a.arComponent)))
       .catch(() => {});
   }, []);
+
+  const selectedCard = cards?.find((c) => c.cardNumber === selectedCardNumber) || null;
+
+  useEffect(() => {
+    if (!selectedCard) return;
+    setLayout(null);
+    if (!selectedCard.arEnabled) return;
+    // Custom AR component positions come back nested under customElements
+    // (see ArLayout model) -- flattened onto the layout's own top level
+    // here so every existing position handler works on a custom
+    // component's key exactly like a built-in one, with zero changes to
+    // that logic. Reassembled back into customElements on save, see
+    // handleSave below.
+    api
+      .getMyArLayout(selectedCardNumber)
+      .then((raw) => setLayout({ ...raw, ...(raw.customElements || {}) }))
+      .catch((err) => setError(err.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCardNumber, selectedCard?.arEnabled]);
 
   const MODEL_SCALE_MIN = 0.3;
   const MODEL_SCALE_MAX = 2.5;
@@ -179,26 +199,41 @@ export default function ArLayout() {
       for (const c of arComponents) {
         if (layout[c.key]) customElements[c.key] = layout[c.key];
       }
-      const updated = await api.saveMyArLayout({
-        qr,
-        video,
-        contact,
-        portfolio,
-        social,
-        huntsworld,
-        model,
-        modelRotationX,
-        modelRotationY,
-        modelRotationZ,
-        modelScale,
-        videoRotationX,
-        videoRotationY,
-        videoRotationZ,
-        videoScaleX,
-        videoScaleY,
-        customElements,
-      });
+      const updated = await api.saveMyArLayout(
+        {
+          qr,
+          video,
+          contact,
+          portfolio,
+          social,
+          huntsworld,
+          model,
+          modelRotationX,
+          modelRotationY,
+          modelRotationZ,
+          modelScale,
+          videoRotationX,
+          videoRotationY,
+          videoRotationZ,
+          videoScaleX,
+          videoScaleY,
+          customElements,
+        },
+        selectedCardNumber
+      );
       setLayout({ ...updated, ...(updated.customElements || {}) });
+      // Mirrors into Magic Business Card's own QR position for THIS SAME
+      // physical card -- the reverse direction of the mirror
+      // MagicBusinessCard.jsx's own handleSaveQrPosition already does.
+      // One QR placement, not two separately-set ones that can drift
+      // apart: whichever page the AR video/image/effect gets projected
+      // against, it needs to line up with wherever the QR is actually
+      // printed, and that's a single shared fact, not a per-page one.
+      // Best-effort, same reasoning as the other direction -- Magic
+      // Business Card isn't necessarily available for every plan, so a
+      // failure here shouldn't block the AR Layout save that already
+      // succeeded above.
+      if (qr) api.saveMyMagicCardQrPosition(qr.x, qr.y, selectedCardNumber).catch(() => {});
       setSaveStatus('Saved -- this is how your card will look in HuntsAR World.');
     } catch (err) {
       setError(err.message);
@@ -207,17 +242,53 @@ export default function ArLayout() {
   }
 
 
+  // Small pill row -- "Card 1 · Front desk (Apex · Horizontal)" -- same
+  // idea as Track.jsx/Settings.jsx's own per-card lists, just picking
+  // which card's AR Layout is being edited rather than showing status.
+  function CardPicker() {
+    if (!cards || cards.length < 2) return null; // nothing to pick between with 0-1 cards
+    return (
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '0 0 20px' }}>
+        {cards.map((c) => (
+          <button
+            key={c.cardNumber}
+            type="button"
+            className={c.cardNumber === selectedCardNumber ? undefined : 'secondary'}
+            style={{ width: 'auto', fontSize: 13, padding: '8px 14px' }}
+            onClick={() => setSelectedCardNumber(c.cardNumber)}
+          >
+            Card {c.cardNumber}
+            {c.label ? ` · ${c.label}` : c.variantName ? ` · ${c.variantName}` : ''}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
   if (error && !profile) {
     return <div className="error-banner">{error}</div>;
   }
-  if (!profile) {
+  if (!profile || !cards) {
     return <p className="subtitle">Loading…</p>;
   }
 
-  if (!profile.arEnabled) {
+  if (cards.length === 0) {
     return (
       <div>
         <h1 className="page-title">AR Layout</h1>
+        <p className="subtitle">You don't have a card yet -- pick a plan to get started.</p>
+        <a href="/shop">
+          <button style={{ width: 'auto' }}>See plans</button>
+        </a>
+      </div>
+    );
+  }
+
+  if (!selectedCard?.arEnabled) {
+    return (
+      <div>
+        <h1 className="page-title">AR Layout</h1>
+        <CardPicker />
         <div
           style={{
             border: '1px solid var(--border)',
@@ -227,8 +298,8 @@ export default function ArLayout() {
           }}
         >
           <p style={{ fontSize: 15, marginBottom: 8 }}>
-            {profile.cardType
-              ? <>AR isn't included in your current plan (<strong>{profile.cardType}</strong>).</>
+            {selectedCard?.planName
+              ? <>AR isn't included in this card's plan (<strong>{selectedCard.planName}</strong>).</>
               : "AR isn't included until you've got a card plan."}
           </p>
           <p className="subtitle" style={{ marginBottom: 24 }}>
@@ -244,7 +315,13 @@ export default function ArLayout() {
   }
 
   if (!layout) {
-    return <p className="subtitle">Loading…</p>;
+    return (
+      <div>
+        <h1 className="page-title">AR Layout</h1>
+        <CardPicker />
+        <p className="subtitle">Loading…</p>
+      </div>
+    );
   }
 
   // No &engine=mindar -- this deliberately opens ArView.jsx (QR-corner/
@@ -253,7 +330,38 @@ export default function ArLayout() {
   // design/color is free to be anything. &transparent=1 -- no opaque
   // white box behind the QR modules, so it sits cleanly on whatever the
   // card design actually is.
-  const qrUrl = `${API_URL}/api/public/qr/${profile.clientId}?type=ar&transparent=1`;
+  // card=N -- which PHYSICAL card this QR resolves to when scanned (see
+  // backend's GET /api/public/qr/:clientId). Without this every card
+  // would encode the identical QR, always landing on card #1 no matter
+  // which physical card was actually tapped.
+  const qrUrl = `${API_URL}/api/public/qr/${profile.clientId}?type=ar&transparent=1&card=${selectedCardNumber}`;
+  // ArScanPreview reads profile.cardShape to size its 3D card mockup --
+  // that field on the raw profile is really just Client.cardVariantId's
+  // shape (card #1's, per the legacy mirror), so it's overridden here
+  // with the SELECTED card's own locked shape instead of always showing
+  // card #1's regardless of which card is actually being edited.
+  //
+  // Same story for the card's backdrop image: ArScanPreview reads
+  // profile.cardDesignUrl (see public.js's GET /profile/:clientId, which
+  // the real live scan resolves the same way) -- never profile.bannerUrl,
+  // the client's own unrelated cover-photo upload. selectedCard.cardDesignUrl
+  // is already THIS card's fully resolved image (its own Magic Business
+  // Card override if it has one, else the checkout design, else -- for
+  // every other plan -- the purchased variant's own image), same
+  // resolution GET /cards worked out. Reading it straight from the
+  // selected card (not re-deriving it here) is what makes two Custom
+  // Cards with different Magic Business Card images actually show
+  // differently in AR Layout too, instead of both falling back to the
+  // one shared checkout design.
+  const previewProfile = {
+    ...profile,
+    cardShape: selectedCard.shape,
+    cardDesignUrl: selectedCard.cardDesignUrl,
+    // So ArScanPreview's own QR texture (cosmetic mockup only, see that
+    // file's comment) matches the SELECTED card too, not whatever
+    // profile.cardNumber happened to be on the raw account-level profile.
+    cardNumber: selectedCardNumber,
+  };
 
   const panelBtnStyle = {
     width: 26,
@@ -284,12 +392,13 @@ export default function ArLayout() {
     );
   }
 
-  const hasVideoContent = Boolean(profile?.arBannerUrl || profile?.arVideoUrl || profile?.photoUrl);
+  const hasVideoContent = Boolean(profile?.arBannerUrl || profile?.arVideoUrl);
   const hasModel = Boolean(profile?.arModelUrl);
 
   return (
     <div>
       <h1 className="page-title">AR Layout</h1>
+      <CardPicker />
       <p className="subtitle">
         The QR code (amber ring) is the anchor a phone locks onto when scanning -- drag it to match where
         it's actually printed on your card; this also controls where it's placed in your downloadable AR
@@ -304,7 +413,7 @@ export default function ArLayout() {
             Drag empty space to rotate the view -- drag an icon or handle to reposition it.
           </p>
           <ArScanPreview
-            profile={profile}
+            profile={previewProfile}
             layout={layout}
             arComponents={arComponents}
             editable
@@ -323,7 +432,7 @@ export default function ArLayout() {
             here too -- both panels stay in sync either way.
           </p>
           <ArScanPreview
-            profile={profile}
+            profile={previewProfile}
             layout={layout}
             arComponents={arComponents}
             editable

@@ -120,19 +120,34 @@ function EntryRowStacked({ entry }) {
           [entry.frontImageUrl, entry.backImageUrl]
             .filter(Boolean)
             .map((img, i) => (
-              <img
+              // Fixed landscape aspect ratio + object-fit: cover -- this
+              // "horizontal" layout's photos are horizontal card designs,
+              // and several uploads have visible white margin baked into
+              // the file around the actual card art. Letting the image
+              // render at its own natural size (the old behavior) showed
+              // that margin as-is; cover crops it away and fills the box
+              // with just the card itself, same fix as the side-by-side
+              // layout above already got.
+              <div
                 key={i}
-                src={img}
-                alt=""
-                style={{ width: '100%', maxWidth: 260, borderRadius: 12, display: 'block', background: 'var(--panel-raised)' }}
-              />
+                style={{
+                  width: '100%',
+                  maxWidth: 260,
+                  aspectRatio: '8 / 5',
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  background: 'var(--panel-raised)',
+                }}
+              >
+                <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              </div>
             ))
         ) : (
           <div
             style={{
               width: '100%',
               maxWidth: 260,
-              aspectRatio: '4 / 3',
+              aspectRatio: '8 / 5',
               borderRadius: 12,
               background: 'var(--panel-raised)',
               display: 'flex',
@@ -173,7 +188,7 @@ function EntryRowSideBySide({ entry }) {
         <EntryDetails entry={entry} />
       </div>
 
-      <div style={{ flex: '0 0 420px', display: 'flex', gap: 14 }}>
+      <div style={{ flex: '0 0 420px', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
         {images.length > 0 ? (
           images.map((img, i) => (
             // Fixed portrait aspect ratio + object-fit: cover -- without
@@ -181,7 +196,12 @@ function EntryRowSideBySide({ entry }) {
             // natural pixel dimensions imply once scaled to fit the flex
             // width, which for a tall/differently-cropped source photo
             // can balloon the image far taller than the card-mockup-sized
-            // look every other layout on this page has.
+            // look every other layout on this page has. alignItems:
+            // flex-start on the row above matters just as much -- flex's
+            // default 'stretch' was forcing both images to match whichever
+            // one's natural size made the row tallest, stretching the
+            // other one out of its own aspect ratio instead of letting
+            // each size itself from aspectRatio + width alone.
             <img
               key={i}
               src={img}

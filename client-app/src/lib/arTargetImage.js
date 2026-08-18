@@ -10,14 +10,21 @@ import { CARD_ASPECT } from './arProjection.js';
 // <canvas> -- callers that need a loaded <img> (the mind-ar compiler) or
 // a downloadable file (the dashboard button) each convert it themselves,
 // see buildArTargetImageEl / canvasToDownloadUrl below.
-export async function buildArTargetCanvas(profile, layout) {
-  const bannerUrl = profile?.bannerUrl || profile?.customDesignFrontUrl || null;
+export async function buildArTargetCanvas(profile, layout, cardNumber) {
+  // The actual purchased card design (see public.js's GET /profile/:clientId)
+  // -- NOT profile.bannerUrl, which is a separate cover-photo upload most
+  // plans (Apex included) don't even let the client set, and isn't the
+  // client's real card design in any case.
+  const bannerUrl = profile?.cardDesignUrl || profile?.customDesignFrontUrl || null;
   // &engine=mindar so scanning this specific printed/on-screen target's QR
   // (as a REAL QR code, not just as an AR tracking target) lands back on
   // this same engine -- otherwise it opens the default ArView.jsx, which
   // is exactly the mix-up that caused confusing "still unstable" reports
-  // earlier while actually testing the wrong page.
-  const qrUrl = `${API_URL}/api/public/qr/${profile.clientId}?type=ar&transparent=1&engine=mindar`;
+  // earlier while actually testing the wrong page. &card=N -- which
+  // PHYSICAL card this baked-in QR resolves to; without it every card's
+  // downloaded/printed target encodes the same QR, always landing on
+  // card #1 no matter which physical card was actually scanned.
+  const qrUrl = `${API_URL}/api/public/qr/${profile.clientId}?type=ar&transparent=1&engine=mindar${cardNumber ? `&card=${cardNumber}` : ''}`;
 
   function loadImage(src) {
     return new Promise((resolve, reject) => {
@@ -93,8 +100,8 @@ export async function buildArTargetCanvas(profile, layout) {
 // mind-ar's Compiler wants a loaded <img>, not a <canvas> -- same
 // dataURL round-trip ArViewMindAR.jsx always did, just factored out so
 // both callers share it.
-export async function buildArTargetImageEl(profile, layout) {
-  const canvas = await buildArTargetCanvas(profile, layout);
+export async function buildArTargetImageEl(profile, layout, cardNumber) {
+  const canvas = await buildArTargetCanvas(profile, layout, cardNumber);
   const composited = new Image();
   composited.src = canvas.toDataURL('image/png');
   await new Promise((resolve, reject) => {

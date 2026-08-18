@@ -147,7 +147,7 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
   }, [profile, layout]);
 
   async function start() {
-    const targetImg = await buildArTargetImageEl(profile, layout);
+    const targetImg = await buildArTargetImageEl(profile, layout, cardNumber);
 
     const compiler = new Compiler();
     await compiler.compileImageTargets([targetImg], () => {});
@@ -357,9 +357,10 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
       }
     }
 
+    // No profile-photo fallback here -- see the matching note in ArView.jsx.
     const bannerUrl = profile.arBannerUrl || profile.arVideoUrl;
-    const bannerType = profile.arBannerUrl ? profile.arBannerType : profile.arVideoUrl ? 'video' : profile.photoUrl ? 'image' : null;
-    const resolvedBannerUrl = bannerUrl || profile.photoUrl;
+    const bannerType = profile.arBannerUrl ? profile.arBannerType : profile.arVideoUrl ? 'video' : null;
+    const resolvedBannerUrl = bannerUrl;
     const VIDEO_BASE_W = VIDEO_BASE_FRACTION; // see the MODEL_BASE_W comment above -- shared with arProjection.js, not hardcoded
     const VIDEO_BASE_H = VIDEO_BASE_W / cardAspectFor(profile.cardShape); // shaped like the client's actual purchased card, not always landscape
     if (resolvedBannerUrl) {

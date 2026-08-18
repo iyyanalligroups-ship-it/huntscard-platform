@@ -193,7 +193,7 @@ export default function ArView({ clientId, cardNumber }) {
   const threeRef = useRef(null); // { renderer, scene, camera, modelGroup }, created once the canvas is sized
   const loadedModelRef = useRef(null); // the loaded gltf.scene, kept here in case it arrives before threeRef does
   const autoFitScaleRef = useRef(1); // baseline targetSize/maxDim computed once at load -- lets the transform effect below re-apply modelScale without re-deriving it from an already-scaled bounding box
-  const videoPlaneRef = useRef(null); // the THREE.Mesh for the AR Video/Photo 3D card, once arVideoUrl/photoUrl exists
+  const videoPlaneRef = useRef(null); // the THREE.Mesh for the AR Video/Photo 3D card, once arBannerUrl/arVideoUrl exists
   const mixerRef = useRef(null); // AnimationMixer for the loaded model, if it has any clips
   const clockRef = useRef(null); // shared THREE.Clock, created once the camera effect starts ticking
   const arContentVideoRef = useRef(null); // off-DOM <video> element feeding the VideoTexture, if arVideoUrl is set (not the camera-feed video -- that's videoRef)
@@ -251,7 +251,7 @@ export default function ArView({ clientId, cardNumber }) {
   // already-open AR view self-heals without a manual reload.
   useEffect(() => {
     function refetchLayout() {
-      api.getPublicArLayout(clientId).then(setLayout).catch(() => {});
+      api.getPublicArLayout(clientId, cardNumber).then(setLayout).catch(() => {});
     }
     function onVisible() {
       if (document.visibilityState === 'visible') refetchLayout();
@@ -262,7 +262,7 @@ export default function ArView({ clientId, cardNumber }) {
       clearInterval(id);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [clientId]);
+  }, [clientId, cardNumber]);
 
   // Applies the CURRENT saved rotation/scale to whatever model is already
   // loaded -- separate from the loading effect below so a layout re-fetch
@@ -445,11 +445,12 @@ export default function ArView({ clientId, cardNumber }) {
     // Resolution order: the new one-slot "HuntsAR World Banner" field
     // (video or image, arBannerType says which), else the legacy
     // video-only field for clients who uploaded before the banner slot
-    // existed (implicitly 'video'), else the general profile photo as a
-    // last resort (implicitly 'image').
+    // existed (implicitly 'video'). Deliberately no further fallback to
+    // the profile photo -- that's a different field for a different
+    // purpose, and showing it here made an un-set banner look configured.
     const bannerUrl = profile?.arBannerUrl || profile?.arVideoUrl;
-    const bannerType = profile?.arBannerUrl ? profile?.arBannerType : profile?.arVideoUrl ? 'video' : profile?.photoUrl ? 'image' : null;
-    const resolvedUrl = bannerUrl || profile?.photoUrl;
+    const bannerType = profile?.arBannerUrl ? profile?.arBannerType : profile?.arVideoUrl ? 'video' : null;
+    const resolvedUrl = bannerUrl;
 
     if (resolvedUrl && bannerType === 'video') {
       const videoEl = document.createElement('video');
@@ -472,7 +473,7 @@ export default function ArView({ clientId, cardNumber }) {
     return () => {
       cancelled = true;
     };
-  }, [profile?.arBannerUrl, profile?.arBannerType, profile?.arVideoUrl, profile?.photoUrl, profile?.cardShape]);
+  }, [profile?.arBannerUrl, profile?.arBannerType, profile?.arVideoUrl, profile?.cardShape]);
 
   useEffect(() => {
     let stream;
@@ -826,13 +827,12 @@ export default function ArView({ clientId, cardNumber }) {
             const proj = projectLocalPoint(pose, focalPxRef.current, canvas.width / 2, canvas.height / 2, local);
             if (!proj) return null;
             // Once there's real media -- the new one-slot banner (video or
-            // image), the legacy video-only field, or the general profile
-            // photo as a last resort -- the AR Video/Photo panel is a real
-            // 3D card rendered by the Three.js layer below (see
-            // videoGroup/updateVideoPlane), not a flat HTML billboard --
-            // same split 'model' already has between this flat loop and
-            // its own Three.js layer.
-            const hasBannerMedia = el.key === 'video' && (profile.arBannerUrl || profile.arVideoUrl || profile.photoUrl);
+            // image) or the legacy video-only field -- the AR Video/Photo
+            // panel is a real 3D card rendered by the Three.js layer below
+            // (see videoGroup/updateVideoPlane), not a flat HTML billboard
+            // -- same split 'model' already has between this flat loop and
+            // its own Three.js layer. No profile-photo fallback here.
+            const hasBannerMedia = el.key === 'video' && (profile.arBannerUrl || profile.arVideoUrl);
             if (hasBannerMedia) return null;
             // Admin-uploaded logo (see ArIcon model) -- only relevant once
             // neither real photo/video content applies, same as the plain

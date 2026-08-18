@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { Compiler } from 'mind-ar/src/image-target/compiler.js';
 import { Controller } from 'mind-ar/src/image-target/controller.js';
@@ -129,6 +129,12 @@ export default function MagicCamera() {
   // compile/track just that one client's card instead of the full
   // gallery-wide target list the bare /magic-camera route below still uses.
   const { clientId } = useParams();
+  // Which of this client's PHYSICAL cards was actually tapped (see
+  // PublicProfile.jsx's ?card=N -> here). Different cards can have
+  // different Magic Business Card content/layout, so this has to reach
+  // the fetch below, not just default to "whichever one's active."
+  const [searchParams] = useSearchParams();
+  const cardNumber = searchParams.get('card') || undefined;
   const [pieces, setPieces] = useState(null); // MagicArt[] | null while loading -- unscoped mode only
   const [cards, setCards] = useState(null); // MagicBusinessCard[] | null while loading -- unscoped mode only
   const [scopedCard, setScopedCard] = useState(undefined); // this client's own card object | null (none active) | undefined (still loading) -- scoped mode only
@@ -188,7 +194,7 @@ export default function MagicCamera() {
   const cameraAbortedRef = useRef(false); // set if scopedCard turns out to have no active card, so a permission grant that lands after that doesn't leave the camera running for nothing
   function ensureCameraStarted() {
     if (!cameraPromiseRef.current) {
-      cameraPromiseRef.current = (async () => {
+      const attempt = (async () => {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'environment' } });
         if (cameraAbortedRef.current) {
           stream.getTracks().forEach((t) => t.stop());
@@ -206,6 +212,17 @@ export default function MagicCamera() {
         });
         await video.play();
       })();
+      // getUserMedia (or a stuck permission prompt/camera-busy state on
+      // some Android devices) can hang indefinitely instead of ever
+      // resolving OR rejecting -- a plain try/catch in handleStart can't
+      // catch a promise that never settles, so this whole page just sat
+      // frozen on "compiling" forever with no visible error the one time
+      // this actually happened. Racing against a timeout turns that into
+      // a real, catchable rejection instead.
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Camera did not start within 20s -- it may be in use by another app/tab, or permission is stuck. Try closing other camera tabs and reloading.')), 20000)
+      );
+      cameraPromiseRef.current = Promise.race([attempt, timeout]);
     }
     return cameraPromiseRef.current;
   }
@@ -214,7 +231,7 @@ export default function MagicCamera() {
     if (clientId) {
       ensureCameraStarted();
       api
-        .getPublicMagicCard(clientId)
+        .getPublicMagicCard(clientId, cardNumber)
         .then(setScopedCard)
         // 404 (no active card for this client) isn't a page-level error --
         // just means there's nothing to scan yet, handled via `hasArt`
@@ -223,7 +240,7 @@ export default function MagicCamera() {
       // Cosmetic-only for the pill bar below -- a failure here just means
       // no contact/social pills show, not worth blocking the AR effect
       // itself over.
-      api.getPublicProfile(clientId).then(setProfile).catch(() => {});
+      api.getPublicProfile(clientId, cardNumber).then(setProfile).catch(() => {});
       api
         .getAttributeDefinitions()
         .then((all) => setMagicComponentDefs(all.filter((a) => a.magicComponent)))
@@ -244,7 +261,7 @@ export default function MagicCamera() {
         setLoadError(err.message);
         setCards([]);
       });
-  }, [clientId]);
+  }, [clientId, cardNumber]);
 
   useEffect(() => {
     return () => cleanup();

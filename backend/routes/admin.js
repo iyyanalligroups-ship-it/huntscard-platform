@@ -21,8 +21,13 @@ const Contact = require('../models/Contact');
 const CatalogVideo = require('../models/CatalogVideo');
 const Card = require('../models/Card');
 const CardTicket = require('../models/CardTicket');
+const ChatMessage = require('../models/ChatMessage');
 const CardInventory = require('../models/CardInventory');
+const MagicLayoutDefault = require('../models/MagicLayoutDefault');
+const { getGlobalMagicLayoutDefault } = require('../utils/magicLayout');
+const { buildVariantMap, resolveCardVariant } = require('../utils/cardVariant');
 const SiteSetting = require('../models/SiteSetting');
+const FaqEntry = require('../models/FaqEntry');
 const cardCrypto = require('../utils/crypto'); // named apart from the built-in `crypto` above (line 4)
 const { getChargeAmount } = require('../utils/pricing');
 
@@ -212,12 +217,107 @@ router.patch('/site-settings', requireAdmin, async (req, res) => {
 });
 
 // -----------------------------------------------------------------------
+// FAQ (see models/FaqEntry.js) -- feeds the public FAQ page
+// (client-app's Faq.jsx), previously a hardcoded array there.
+// -----------------------------------------------------------------------
+
+// GET /api/admin/faq -- every entry, including inactive ones, sorted for
+// editing (not just the public-facing subset GET /api/public/faq returns).
+router.get('/faq', requireAdmin, async (req, res) => {
+  try {
+    const entries = await FaqEntry.find({}).sort({ order: 1, createdAt: 1 });
+    res.json(entries);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/faq -- appended to the end of the current order by
+// default (highest existing order + 1), so a new question shows up last
+// rather than jumping to the top.
+router.post('/faq', requireAdmin, async (req, res) => {
+  try {
+    const { question, answer } = req.body || {};
+    if (!question?.trim() || !answer?.trim()) {
+      return res.status(400).json({ error: 'question and answer are both required' });
+    }
+    const last = await FaqEntry.findOne({}).sort({ order: -1 }).select('order');
+    const entry = await FaqEntry.create({
+      question: question.trim(),
+      answer: answer.trim(),
+      order: (last?.order ?? -1) + 1,
+    });
+    res.status(201).json(entry);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/admin/faq/:id -- edit question/answer text and/or active flag.
+router.put('/faq/:id', requireAdmin, async (req, res) => {
+  try {
+    const { question, answer, active } = req.body || {};
+    const updates = {};
+    if (question !== undefined) {
+      if (!question.trim()) return res.status(400).json({ error: 'question cannot be empty' });
+      updates.question = question.trim();
+    }
+    if (answer !== undefined) {
+      if (!answer.trim()) return res.status(400).json({ error: 'answer cannot be empty' });
+      updates.answer = answer.trim();
+    }
+    if (active !== undefined) updates.active = Boolean(active);
+    const entry = await FaqEntry.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
+    if (!entry) return res.status(404).json({ error: 'FAQ entry not found' });
+    res.json(entry);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/faq/:id/move -- swaps this entry's order with its
+// immediate neighbor (direction 'up' or 'down'), the simplest reordering
+// scheme that doesn't need a full drag-and-drop editor.
+router.post('/faq/:id/move', requireAdmin, async (req, res) => {
+  try {
+    const { direction } = req.body || {};
+    if (!['up', 'down'].includes(direction)) {
+      return res.status(400).json({ error: 'direction must be "up" or "down"' });
+    }
+    const entry = await FaqEntry.findById(req.params.id);
+    if (!entry) return res.status(404).json({ error: 'FAQ entry not found' });
+    const neighbor = await FaqEntry.findOne({
+      order: direction === 'up' ? { $lt: entry.order } : { $gt: entry.order },
+    }).sort({ order: direction === 'up' ? -1 : 1 });
+    if (!neighbor) return res.json(await FaqEntry.find({}).sort({ order: 1, createdAt: 1 })); // already at that end -- no-op
+    const entryOrder = entry.order;
+    entry.order = neighbor.order;
+    neighbor.order = entryOrder;
+    await Promise.all([entry.save(), neighbor.save()]);
+    res.json(await FaqEntry.find({}).sort({ order: 1, createdAt: 1 }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/faq/:id
+router.delete('/faq/:id', requireAdmin, async (req, res) => {
+  try {
+    const entry = await FaqEntry.findByIdAndDelete(req.params.id);
+    if (!entry) return res.status(404).json({ error: 'FAQ entry not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// -----------------------------------------------------------------------
 // Dashboard stats
 // -----------------------------------------------------------------------
 
 // GET /api/admin/stats
 router.get('/stats', requireAdmin, async (req, res) => {
-  const [totalClients, paid, encoded, adminCount, planCount, latestClient, monthlyAgg, pendingRequests, cardsByPlanAgg, recentClients, unclaimedOrders, unreadMessages, openCardTickets] = await Promise.all([
+  const [totalClients, paid, encoded, adminCount, planCount, latestClient, monthlyAgg, pendingRequests, cardsByPlanAgg, recentClients, unclaimedOrders, unreadMessages, openCardTickets, unreadChats] = await Promise.all([
     Client.countDocuments({}),
     Client.countDocuments({ paid: true }),
     Client.countDocuments({ chipEncoded: true }),
@@ -251,6 +351,11 @@ router.get('/stats', requireAdmin, async (req, res) => {
     Client.countDocuments({ paid: true, claimedBy: null }),
     ContactMessage.countDocuments({ read: false }),
     CardTicket.countDocuments({ status: 'open' }),
+    // Distinct clients with at least one unread client->admin chat
+    // message -- a badge count of conversations needing a reply, not a
+    // raw message count (one chatty client shouldn't inflate this past
+    // "1 conversation waiting").
+    ChatMessage.distinct('clientId', { sender: 'client', read: false }).then((ids) => ids.length),
   ]);
 
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -285,6 +390,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
     unclaimedOrders,
     unreadMessages,
     openCardTickets,
+    unreadChats,
   };
 
   // Revenue -- Admin Prime only (see models/Admin.js's role comment).
@@ -998,21 +1104,17 @@ router.get('/fulfillment', requireAdmin, async (req, res) => {
   const clients = await Client.find({ clientId: { $in: clientIds } }).select('clientId fullName');
   const nameMap = Object.fromEntries(clients.map((c) => [c.clientId, c.fullName]));
 
-  // Resolve each card's cardVariantId into a real name/shape, same join
-  // pattern GET /requests already uses for CardRequest.variantBreakdown.
-  const planKeys = [...new Set(cards.map((c) => c.cardType).filter(Boolean))];
-  const plans = await CardPlan.find({ key: { $in: planKeys } }).select('key variants');
-  const variantMap = {}; // `${planKey}:${variantId}` -> { name, shape }
-  plans.forEach((p) => {
-    p.variants.forEach((v) => {
-      variantMap[`${p.key}:${v._id.toString()}`] = { name: v.name, shape: v.shape };
-    });
-  });
+  // Resolve each card's cardVariantId into a real name/shape -- same join
+  // pattern GET /requests already uses for CardRequest.variantBreakdown,
+  // now shared via utils/cardVariant.js. Read variantByKey directly here
+  // (rather than resolveCardVariant's opinionated 'horizontal' fallback)
+  // to keep this table's existing null-for-unknown display unchanged.
+  const { variantByKey } = await buildVariantMap(cards);
 
   const byClient = {};
   for (const c of cards) {
     const obj = c.toObject();
-    const variant = c.cardVariantId ? variantMap[`${c.cardType}:${String(c.cardVariantId)}`] : null;
+    const variant = c.cardVariantId ? variantByKey[`${c.cardType}:${String(c.cardVariantId)}`] : null;
     (byClient[c.clientId] ||= []).push({
       cardId: obj._id,
       cardNumber: obj.cardNumber,
@@ -1352,6 +1454,24 @@ router.patch('/requests/:id', requireAdmin, async (req, res) => {
 
     if (status === 'approved' && request.type === 'upgrade') {
       await Client.findOneAndUpdate({ clientId: request.clientId }, { $set: { cardType: request.requestedPlan } });
+      // Same "only one plan at a time" rule as the paid self-service path
+      // (routes/profile.js's /upgrade-confirm) -- old Card(s) of a
+      // different plan, and their AR Layout / Magic Business Card
+      // customizations, are permanently deleted, not archived. A repeat
+      // approval for the SAME plan the client is already on leaves
+      // everything untouched.
+      const oldCards = await Card.find({
+        clientId: request.clientId,
+        cardType: { $ne: request.requestedPlan },
+      }).select('cardNumber');
+      if (oldCards.length > 0) {
+        const oldCardNumbers = oldCards.map((c) => c.cardNumber);
+        await Promise.all([
+          Card.deleteMany({ clientId: request.clientId, cardNumber: { $in: oldCardNumbers } }),
+          ArLayout.deleteMany({ clientId: request.clientId, cardNumber: { $in: oldCardNumbers } }),
+          MagicBusinessCard.deleteMany({ clientId: request.clientId, cardNumber: { $in: oldCardNumbers } }),
+        ]);
+      }
     }
 
     request.status = status;
@@ -1402,6 +1522,72 @@ router.delete('/contact-messages/:id', requireAdmin, async (req, res) => {
   const message = await ContactMessage.findByIdAndDelete(req.params.id);
   if (!message) return res.status(404).json({ error: 'Message not found' });
   res.json({ ok: true });
+});
+
+// -----------------------------------------------------------------------
+// Chat support -- real two-way conversations with logged-in clients
+// (client-app's ChatSupport.jsx), kept separate from the one-way
+// ContactMessage submissions above. One thread per clientId, derived
+// from ChatMessage.clientId rather than its own document -- same
+// "group by shared key" approach CardTicket.clientId already uses.
+// -----------------------------------------------------------------------
+
+// GET /api/admin/chats -- one row per client with an unread-first
+// ordering, newest activity first within that.
+router.get('/chats', requireAdmin, async (req, res) => {
+  const threads = await ChatMessage.aggregate([
+    { $sort: { createdAt: -1 } },
+    {
+      $group: {
+        _id: '$clientId',
+        lastMessage: { $first: '$text' },
+        lastSender: { $first: '$sender' },
+        lastAt: { $first: '$createdAt' },
+        unread: { $sum: { $cond: [{ $and: [{ $eq: ['$sender', 'client'] }, { $eq: ['$read', false] }] }, 1, 0] } },
+      },
+    },
+    { $sort: { unread: -1, lastAt: -1 } },
+  ]);
+
+  const clients = await Client.find({ clientId: { $in: threads.map((t) => t._id) } }).select('clientId fullName loginEmail cardType');
+  const clientById = Object.fromEntries(clients.map((c) => [c.clientId, c]));
+
+  res.json(
+    threads.map((t) => ({
+      clientId: t._id,
+      fullName: clientById[t._id]?.fullName || t._id,
+      loginEmail: clientById[t._id]?.loginEmail || '',
+      cardType: clientById[t._id]?.cardType || null,
+      lastMessage: t.lastMessage,
+      lastSender: t.lastSender,
+      lastAt: t.lastAt,
+      unread: t.unread,
+    }))
+  );
+});
+
+// GET /api/admin/chats/:clientId -- full conversation, oldest first.
+// Marks every client message in it as read, since fetching the thread IS
+// admin viewing it.
+router.get('/chats/:clientId', requireAdmin, async (req, res) => {
+  const messages = await ChatMessage.find({ clientId: req.params.clientId }).sort({ createdAt: 1 });
+  await ChatMessage.updateMany(
+    { clientId: req.params.clientId, sender: 'client', read: false },
+    { $set: { read: true } }
+  );
+  res.json(messages);
+});
+
+// POST /api/admin/chats/:clientId { text } -- admin's reply.
+router.post('/chats/:clientId', requireAdmin, async (req, res) => {
+  const text = (req.body.text || '').toString().trim();
+  if (!text) return res.status(400).json({ error: 'Message cannot be empty.' });
+
+  const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId');
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  const message = await ChatMessage.create({ clientId: req.params.clientId, sender: 'admin', text, read: false });
+  res.status(201).json(message);
 });
 
 // -----------------------------------------------------------------------
@@ -1503,6 +1689,45 @@ router.put('/ar-layout', requireAdmin, async (req, res) => {
       { $set: updates },
       { new: true, upsert: true }
     );
+    res.json(layout);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/magic-layout -- the DEFAULT arrangement for Magic
+// Business Card's floating components, used as the starting point for any
+// client who hasn't customized their own (see utils/magicLayout.js and
+// models/MagicLayoutDefault.js). Same "create on first access" pattern as
+// GET /api/admin/ar-layout above -- true singleton, no key/clientId filter
+// needed here since this collection never holds anything else.
+router.get('/magic-layout', requireAdmin, async (req, res) => {
+  try {
+    const layout = await getGlobalMagicLayoutDefault();
+    res.json(layout);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/admin/magic-layout -- save new positions from the admin's
+// drag-and-drop editor. Each field is optional so the editor can send
+// only what actually changed, same convention PUT /api/admin/ar-layout
+// above already uses.
+router.put('/magic-layout', requireAdmin, async (req, res) => {
+  try {
+    const { contact, portfolio, social, huntsworld, customElements } = req.body || {};
+    const updates = { updatedBy: req.admin?.email || 'unknown' };
+    if (contact) updates.contact = contact;
+    if (portfolio) updates.portfolio = portfolio;
+    if (social) updates.social = social;
+    if (huntsworld) updates.huntsworld = huntsworld;
+    // Positions for Magic-flagged attributes (see AttributeDefinition.magicComponent)
+    // -- a whole-map replace, same as every other field here being
+    // "whatever the editor actually sent," not a per-key merge.
+    if (customElements && typeof customElements === 'object') updates.customElements = customElements;
+
+    const layout = await MagicLayoutDefault.findOneAndUpdate({}, { $set: updates }, { new: true, upsert: true });
     res.json(layout);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1843,12 +2068,37 @@ const magicCardVideoUpload = multer({
     cb(null, true);
   },
 });
-function serializeMagicCard(doc) {
+// Async -- resolves the derived image (Custom Card's checkout design, or
+// the purchased variant's own front image, see utils/cardVariant.js) the
+// same way routes/profile.js's serializeMyMagicCard does, so admin's view
+// of a card matches exactly what the client (and the live AR view) sees.
+// `card` is the Card doc (cardType/cardVariantId) this doc belongs to.
+async function serializeMagicCard(doc, card) {
+  const resolved = card ? await resolveCardVariant(card) : null;
+  let imageUrl = null;
+  if (resolved?.requiresDesignUpload) {
+    // Custom Card only -- a client- or admin-set image here takes
+    // priority over the checkout design, same order routes/profile.js's
+    // serializeMyMagicCard uses so admin's view matches the client's own.
+    imageUrl = doc.imageUrl || null;
+    if (!imageUrl) {
+      const client = await Client.findOne({ clientId: doc.clientId }).select('customDesignFrontUrl');
+      imageUrl = client?.customDesignFrontUrl || null;
+    }
+  } else if (resolved?.hasVariant) {
+    imageUrl = resolved.frontImageUrl || doc.imageUrl || null; // doc.imageUrl here is admin's own override escape hatch
+  } else {
+    imageUrl = doc.imageUrl || null; // no resolvable variant -- admin-set fallback escape hatch
+  }
+
   return {
     _id: doc._id,
     clientId: doc.clientId,
-    cardType: doc.cardType,
-    imageUrl: doc.imageUrl,
+    cardNumber: doc.cardNumber,
+    cardType: resolved?.shape || doc.cardType || null,
+    available: Boolean(imageUrl),
+    requiresDesignUpload: Boolean(resolved?.requiresDesignUpload),
+    imageUrl,
     imageWidth: doc.imageWidth,
     imageHeight: doc.imageHeight,
     videoUrl: doc.videoUrl,
@@ -1861,62 +2111,68 @@ function serializeMagicCard(doc) {
   };
 }
 
-// One doc per client, implicitly created on first touch -- there's no
-// separate "+ Add" step like Magic Art has, since every client gets
-// exactly one (empty until admin uploads into it). Every route below
-// upserts rather than 404ing on a missing doc.
-async function findOrCreateMagicCard(clientId) {
+// One doc per (clientId, cardNumber) pair, implicitly created on first
+// touch -- there's no separate "+ Add" step like Magic Art has, since
+// every physical card gets exactly one (empty until admin uploads a
+// video into it). Every route below upserts rather than 404ing on a
+// missing doc.
+async function findOrCreateMagicCard(clientId, cardNumber) {
   return MagicBusinessCard.findOneAndUpdate(
-    { clientId },
-    { $setOnInsert: { clientId } },
+    { clientId, cardNumber },
+    { $setOnInsert: { clientId, cardNumber } },
     { upsert: true, new: true }
   );
 }
 
-// GET /api/admin/clients/:clientId/magic-card
+// Shared by every /clients/:clientId/magic-card* route below -- resolves
+// which of that client's physical cards is being edited (query param for
+// GET, body field for POST/DELETE, including multipart bodies since
+// multer parses non-file fields into req.body too), defaulting to card
+// #1, and loads the actual Card doc it refers to. Writes the 404 itself
+// and returns null when that card doesn't exist.
+async function loadAdminCard(req, res) {
+  const cardNumber = Number(req.query.card ?? req.body?.cardNumber) || 1;
+  const card = await Card.findOne({ clientId: req.params.clientId, cardNumber }).select('cardType cardVariantId');
+  if (!card) {
+    res.status(404).json({ error: 'Card not found' });
+    return null;
+  }
+  return { cardNumber, card };
+}
+
+// GET /api/admin/clients/:clientId/magic-card?card=N
 router.get('/clients/:clientId/magic-card', requireAdmin, async (req, res) => {
   try {
-    const doc = await findOrCreateMagicCard(req.params.clientId);
-    res.json(serializeMagicCard(doc));
+    const loaded = await loadAdminCard(req, res);
+    if (!loaded) return;
+    const doc = await findOrCreateMagicCard(req.params.clientId, loaded.cardNumber);
+    res.json(await serializeMagicCard(doc, loaded.card));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/admin/clients/:clientId/magic-card/card-type -- 'vertical' or
-// 'horizontal' (85x55mm either way, just rotated). Saved independently of
-// the image upload so the choice persists even before an image exists --
-// the admin UI gates image upload on this being set first.
-router.post('/clients/:clientId/magic-card/card-type', requireAdmin, async (req, res) => {
-  try {
-    const { cardType } = req.body;
-    if (cardType !== 'vertical' && cardType !== 'horizontal') {
-      return res.status(400).json({ error: "cardType must be 'vertical' or 'horizontal'" });
-    }
-    const doc = await findOrCreateMagicCard(req.params.clientId);
-    doc.cardType = cardType;
-    doc.updatedBy = req.admin?.email || 'unknown';
-    await doc.save();
-    res.json(serializeMagicCard(doc));
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// POST /clients/:clientId/magic-card/card-type removed -- shape is
+// derived from the card's own purchased variant now (see
+// utils/cardVariant.js), never admin/client-settable.
 
-// POST /api/admin/clients/:clientId/magic-card/activate -- requires an
-// image plus EITHER a video or a 3D model (no name field here, unlike
-// Magic Art -- a personal card doesn't need one). Model is optional/
-// additive, not a replacement for video -- see MagicBusinessCard.js.
+// POST /api/admin/clients/:clientId/magic-card/activate -- requires a
+// video AND a resolvable image (variant/checkout design/admin fallback --
+// see serializeMagicCard), not a raw doc.imageUrl check anymore, since
+// most cards never have their own uploaded image field populated at all.
 router.post('/clients/:clientId/magic-card/activate', requireAdmin, async (req, res) => {
   try {
-    const doc = await findOrCreateMagicCard(req.params.clientId);
-    if (!doc.imageUrl || !doc.videoUrl) {
-      return res.status(400).json({ error: 'This card needs both an image and a video before it can be activated.' });
+    const loaded = await loadAdminCard(req, res);
+    if (!loaded) return;
+    const doc = await findOrCreateMagicCard(req.params.clientId, loaded.cardNumber);
+    const serialized = await serializeMagicCard(doc, loaded.card);
+    if (!serialized.available || !doc.videoUrl) {
+      return res.status(400).json({ error: 'This card needs a video (and a resolvable design) before it can be activated.' });
     }
     doc.active = true;
     doc.updatedBy = req.admin?.email || 'unknown';
     await doc.save();
-    res.json(serializeMagicCard(doc));
+    res.json(await serializeMagicCard(doc, loaded.card));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1925,17 +2181,22 @@ router.post('/clients/:clientId/magic-card/activate', requireAdmin, async (req, 
 // POST /api/admin/clients/:clientId/magic-card/deactivate
 router.post('/clients/:clientId/magic-card/deactivate', requireAdmin, async (req, res) => {
   try {
-    const doc = await findOrCreateMagicCard(req.params.clientId);
+    const loaded = await loadAdminCard(req, res);
+    if (!loaded) return;
+    const doc = await findOrCreateMagicCard(req.params.clientId, loaded.cardNumber);
     doc.active = false;
     doc.updatedBy = req.admin?.email || 'unknown';
     await doc.save();
-    res.json(serializeMagicCard(doc));
+    res.json(await serializeMagicCard(doc, loaded.card));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/admin/clients/:clientId/magic-card/image
+// POST /api/admin/clients/:clientId/magic-card/image -- kept as an
+// admin-only escape hatch (see models/MagicBusinessCard.js's own comment)
+// for a card with no resolvable variant/checkout design -- not exposed in
+// the normal admin UI flow, which now shows the derived image read-only.
 router.post(
   '/clients/:clientId/magic-card/image',
   requireAdmin,
@@ -1943,7 +2204,9 @@ router.post(
   async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-      const doc = await findOrCreateMagicCard(req.params.clientId);
+      const loaded = await loadAdminCard(req, res);
+      if (!loaded) return;
+      const doc = await findOrCreateMagicCard(req.params.clientId, loaded.cardNumber);
       const previousUrl = doc.imageUrl;
       doc.imageUrl = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
       doc.imageWidth = Number(req.body.width) || undefined;
@@ -1953,7 +2216,7 @@ router.post(
       if (previousUrl) {
         fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(previousUrl)), () => {});
       }
-      res.json(serializeMagicCard(doc));
+      res.json(await serializeMagicCard(doc, loaded.card));
     } catch (err) {
       const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 50MB.' : err.message;
       res.status(400).json({ error: message });
@@ -1969,7 +2232,9 @@ router.post(
   async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-      const doc = await findOrCreateMagicCard(req.params.clientId);
+      const loaded = await loadAdminCard(req, res);
+      if (!loaded) return;
+      const doc = await findOrCreateMagicCard(req.params.clientId, loaded.cardNumber);
       const previousUrl = doc.videoUrl;
       doc.videoUrl = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
       doc.videoCropX = Number(req.body.cropX) || 0;
@@ -1981,7 +2246,7 @@ router.post(
       if (previousUrl) {
         fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(previousUrl)), () => {});
       }
-      res.json(serializeMagicCard(doc));
+      res.json(await serializeMagicCard(doc, loaded.card));
     } catch (err) {
       const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 80MB.' : err.message;
       res.status(400).json({ error: message });
@@ -1989,14 +2254,16 @@ router.post(
   }
 );
 
-// DELETE /api/admin/clients/:clientId/magic-card/:field
+// DELETE /api/admin/clients/:clientId/magic-card/:field?card=N
 router.delete('/clients/:clientId/magic-card/:field', requireAdmin, async (req, res) => {
   try {
     const { field } = req.params;
     if (field !== 'image' && field !== 'video') {
       return res.status(400).json({ error: 'Unknown field' });
     }
-    const doc = await findOrCreateMagicCard(req.params.clientId);
+    const loaded = await loadAdminCard(req, res);
+    if (!loaded) return;
+    const doc = await findOrCreateMagicCard(req.params.clientId, loaded.cardNumber);
     if (field === 'image') {
       if (doc.imageUrl) fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(doc.imageUrl)), () => {});
       doc.imageUrl = undefined;
@@ -2012,7 +2279,83 @@ router.delete('/clients/:clientId/magic-card/:field', requireAdmin, async (req, 
     }
     doc.updatedBy = req.admin?.email || 'unknown';
     await doc.save();
-    res.json(serializeMagicCard(doc));
+    res.json(await serializeMagicCard(doc, loaded.card));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/magic-layout/image -- optional reference image for the
+// Magic Layout drag editor's backdrop (see models/MagicLayoutDefault.js's
+// own comment on why this is preview-only, not a real client's card).
+// Reuses the same magic-cards upload dir/multer instances the per-client
+// routes above already set up.
+function layoutShapeFromReq(req) {
+  return req.query.shape === 'vertical' ? 'Vertical' : 'Horizontal';
+}
+
+router.post('/magic-layout/image', requireAdmin, magicCardImageUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const shape = layoutShapeFromReq(req);
+    const layout = await getGlobalMagicLayoutDefault();
+    const previousUrl = layout[`previewImageUrl${shape}`];
+    layout[`previewImageUrl${shape}`] = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
+    layout[`previewImageWidth${shape}`] = Number(req.body.width) || undefined;
+    layout[`previewImageHeight${shape}`] = Number(req.body.height) || undefined;
+    layout.updatedBy = req.admin?.email || 'unknown';
+    await layout.save();
+    if (previousUrl) fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(previousUrl)), () => {});
+    res.json(layout);
+  } catch (err) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 50MB.' : err.message;
+    res.status(400).json({ error: message });
+  }
+});
+
+// POST /api/admin/magic-layout/video -- same preview-only reasoning as
+// the image route above.
+router.post('/magic-layout/video', requireAdmin, magicCardVideoUpload.single('video'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const shape = layoutShapeFromReq(req);
+    const layout = await getGlobalMagicLayoutDefault();
+    const previousUrl = layout[`previewVideoUrl${shape}`];
+    layout[`previewVideoUrl${shape}`] = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
+    layout.updatedBy = req.admin?.email || 'unknown';
+    await layout.save();
+    if (previousUrl) fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(previousUrl)), () => {});
+    res.json(layout);
+  } catch (err) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 80MB.' : err.message;
+    res.status(400).json({ error: message });
+  }
+});
+
+// DELETE /api/admin/magic-layout/:field -- 'image' or 'video', for
+// whichever shape ?shape= names (defaults to horizontal).
+router.delete('/magic-layout/:field', requireAdmin, async (req, res) => {
+  try {
+    const { field } = req.params;
+    if (field !== 'image' && field !== 'video') {
+      return res.status(400).json({ error: 'Unknown field' });
+    }
+    const shape = layoutShapeFromReq(req);
+    const layout = await getGlobalMagicLayoutDefault();
+    if (field === 'image') {
+      const url = layout[`previewImageUrl${shape}`];
+      if (url) fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(url)), () => {});
+      layout[`previewImageUrl${shape}`] = undefined;
+      layout[`previewImageWidth${shape}`] = undefined;
+      layout[`previewImageHeight${shape}`] = undefined;
+    } else {
+      const url = layout[`previewVideoUrl${shape}`];
+      if (url) fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(url)), () => {});
+      layout[`previewVideoUrl${shape}`] = undefined;
+    }
+    layout.updatedBy = req.admin?.email || 'unknown';
+    await layout.save();
+    res.json(layout);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

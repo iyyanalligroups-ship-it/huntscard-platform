@@ -46,6 +46,9 @@ const ICONS = {
   menu: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
   ),
+  chat: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+  ),
 };
 
 const NAV_ITEMS = [
@@ -70,6 +73,11 @@ const NAV_ITEMS = [
   { to: '/dashboard/magic-business-card', label: 'Magic Business Card', icon: 'magicArt' },
   { to: '/dashboard/upgrade', label: 'Shop', icon: 'shop' },
   { to: '/dashboard/track', label: 'Track', icon: 'track' },
+  // Same "points outside /dashboard" precedent as Magic Camera above --
+  // ChatSupport.jsx lives on the public site (App.jsx's PublicLayout
+  // routes) since it needs that layout's header/footer, not the
+  // dashboard chrome.
+  { to: '/chat', label: 'Chat Support', icon: 'chat' },
   { to: '/dashboard/account-settings', label: 'Settings', icon: 'settings' },
   { to: '/dashboard/contacts', label: 'Contacts', icon: 'contacts' },
 ];

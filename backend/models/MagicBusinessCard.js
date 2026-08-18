@@ -27,14 +27,29 @@ const magicElementPositionSchema = new mongoose.Schema(
 // proven pattern exactly.
 const magicBusinessCardSchema = new mongoose.Schema(
   {
-    clientId: { type: String, required: true, unique: true, trim: true },
+    clientId: { type: String, required: true, trim: true },
+    // Which of that client's PHYSICAL cards this doc belongs to (see
+    // models/Card.js's own cardNumber) -- a client with several physical
+    // cards (different purchased variants/shapes/videos) gets one Magic
+    // Business Card doc per card, not one shared arrangement for all of
+    // them. See the schema-level unique index below.
+    cardNumber: { type: Number, default: null },
     // A real physical business card is 85x55mm -- 'horizontal' (85mm
-    // wide, 55mm tall) or 'vertical' (55mm wide, 85mm tall). Chosen
-    // BEFORE the image, since it determines the crop aspect ratio the
-    // image gets locked to (see admin's ClientDetail.jsx) -- changing it
-    // after an image is already uploaded doesn't retroactively re-crop
-    // the existing file, admin just re-uploads to match.
+    // wide, 55mm tall) or 'vertical' (55mm wide, 85mm tall). No longer
+    // client-settable -- routes/utils/cardVariant.js resolves this from
+    // whatever the client actually purchased for THIS specific card
+    // (Card.cardVariantId -> CardPlan.variants[].shape) and the response
+    // always overrides this stored value with that resolved shape. Kept
+    // as a real field (not computed-only) since the existing crop-sizing
+    // math in MagicBusinessCard.jsx/ClientDetail.jsx reads it directly.
     cardType: { type: String, enum: ['vertical', 'horizontal'] },
+    // No longer a client upload for most plans -- see utils/cardVariant.js.
+    // Custom Card reuses the design uploaded at checkout
+    // (Client.customDesignFrontUrl/backDesignUrl); every other plan uses
+    // its purchased variant's own frontImageUrl (CardPlan.variants[]).
+    // These raw fields stay in the schema as an admin-only escape hatch
+    // (never exposed to a client upload route) rather than being removed
+    // outright.
     imageUrl: { type: String, trim: true },
     imageWidth: Number,
     imageHeight: Number,
@@ -97,9 +112,22 @@ const magicBusinessCardSchema = new mongoose.Schema(
     // AttributeDefinition.magicComponent) -- same idea as the named
     // fields above, but for a set that can grow without a schema change.
     magicElements: { type: Map, of: magicElementPositionSchema, default: {} },
+    // Flips true the first time this client ever saves a component
+    // position of their own (see routes/profile.js's component-position
+    // route). Until then, the fields above sit at their hardcoded schema
+    // defaults, which routes/utils/magicLayout.js's merge helper ignores
+    // in favor of admin's own MagicLayoutDefault -- so an untouched
+    // client starts from whatever admin most recently set as the shared
+    // default, not a value nobody actually chose.
+    layoutCustomized: { type: Boolean, default: false },
     updatedBy: { type: String, trim: true },
   },
   { timestamps: true }
 );
+
+// One doc per (clientId, cardNumber) pair -- replaces the old bare
+// clientId-unique constraint now that a client can have several physical
+// cards, each with their own arrangement.
+magicBusinessCardSchema.index({ clientId: 1, cardNumber: 1 }, { unique: true });
 
 module.exports = mongoose.model('MagicBusinessCard', magicBusinessCardSchema);

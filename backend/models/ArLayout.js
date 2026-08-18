@@ -39,7 +39,14 @@ const arLayoutSchema = new mongoose.Schema(
     // Set ONLY on the one global default doc.
     key: { type: String, unique: true, sparse: true },
     // Set on every per-client doc; absent on the global default doc.
-    clientId: { type: String, unique: true, sparse: true },
+    clientId: { type: String },
+    // Which of that client's PHYSICAL cards this doc belongs to (see
+    // models/Card.js's own cardNumber) -- set on every per-client doc
+    // alongside clientId, absent on the global default doc. A client with
+    // several physical cards (different purchased variants/shapes) gets
+    // one AR Layout doc per card, not one shared arrangement for all of
+    // them -- see the schema-level unique index below.
+    cardNumber: { type: Number, default: null },
     // The QR's own position -- NOT always dead-center, since the real
     // printed QR might not be. Every other element's position is
     // interpreted relative to this, not to a fixed 50/50 assumption.
@@ -84,5 +91,13 @@ const arLayoutSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// One doc per (clientId, cardNumber) pair -- replaces the old bare
+// clientId-unique index now that a client can have several physical
+// cards, each with their own arrangement. Sparse so the key:'global'
+// singleton (neither field set) never collides with anything -- Mongo's
+// sparse-compound semantics only exclude a doc from the index when ALL
+// indexed fields are absent.
+arLayoutSchema.index({ clientId: 1, cardNumber: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('ArLayout', arLayoutSchema);

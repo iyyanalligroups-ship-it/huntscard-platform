@@ -137,55 +137,46 @@ export const api = {
   // Every ACTIVE Magic Business Card -- scanned by MagicCamera.jsx
   // alongside Magic Art, merged into one target list there.
   getPublicMagicCards: () => request('/api/public/magic-cards', { auth: false }),
-  // ONE specific client's own ACTIVE Magic Business Card -- feeds
-  // MagicCamera.jsx's client-scoped mode (reached via a specific client's
+  // ONE specific PHYSICAL card's ACTIVE Magic Business Card -- feeds
+  // MagicCamera.jsx's client-scoped mode (reached via a specific card's
   // own AR QR -> "choose AR or Magic" screen), instead of the full
-  // gallery-wide target list the two calls above feed.
-  getPublicMagicCard: (clientId) => request(`/api/public/magic-card/${clientId}`, { auth: false }),
+  // gallery-wide target list the two calls above feed. Same cardNumber
+  // convention as getPublicProfile/getPublicArLayout above.
+  getPublicMagicCard: (clientId, cardNumber) =>
+    request(`/api/public/magic-card/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`, { auth: false }),
   // Which homepage design to render (see HomeSwitch.jsx) -- toggled from
   // the admin app's topbar switch.
   getSiteSettings: () => request('/api/public/site-settings', { auth: false }),
-  // The logged-in client's own personal Magic Business Card (admin-
-  // uploaded per client, distinct from the shared Magic Art gallery
-  // above). Read-only here -- only returns data once admin has activated
-  // it, otherwise a null-safe empty shape.
-  getMyMagicCard: () => request('/api/profile/magic-card'),
-  // Self-service editing -- client can now design their own Magic
-  // Business Card, same underlying doc/files admin's ClientDetail.jsx
-  // can also edit. Card type first (locks the image crop's aspect
-  // ratio), then image, then video.
-  setMyMagicCardType: (cardType) => request('/api/profile/magic-card/card-type', { method: 'POST', body: { cardType } }),
+  // Admin-managed FAQ entries (see admin-app's Faq.jsx), active ones only,
+  // in admin's chosen order -- feeds pages/Faq.jsx.
+  getPublicFaq: () => request('/api/public/faq', { auth: false }),
+  // The logged-in client's own Magic Business Card for ONE specific
+  // physical card (see backend/models/MagicBusinessCard.js) -- admin-
+  // uploaded video + a design image derived from what was actually
+  // purchased (see utils/cardVariant.js), distinct from the shared Magic
+  // Art gallery above. Read-only here -- only returns data once admin has
+  // activated it, otherwise a null-safe empty shape. Omit cardNumber to
+  // default to card #1.
+  getMyMagicCard: (cardNumber) => request(`/api/profile/magic-card${cardNumber ? `?card=${cardNumber}` : ''}`),
   // Where the client dragged the AR QR onto their own card design --
   // percentages (0-100), composited into the printable download.
-  saveMyMagicCardQrPosition: (x, y) =>
-    request('/api/profile/magic-card/qr-position', { method: 'POST', body: { x, y } }),
+  saveMyMagicCardQrPosition: (x, y, cardNumber) =>
+    request('/api/profile/magic-card/qr-position', { method: 'POST', body: { x, y, cardNumber } }),
   // Where one AR component (contact/portfolio/social) is placed relative
   // to this card in MagicCamera.jsx's own 3D scene -- independent of the
   // main AR Layout system's positions (see that route's own comment).
-  saveMyMagicCardComponentPosition: (key, x, y, z, rotation) =>
-    request('/api/profile/magic-card/component-position', { method: 'POST', body: { key, x, y, z, rotation } }),
-  activateMyMagicCard: () => request('/api/profile/magic-card/activate', { method: 'POST' }),
-  deactivateMyMagicCard: () => request('/api/profile/magic-card/deactivate', { method: 'POST' }),
-  uploadMyMagicCardImage: async (blob, width, height) => {
-    const formData = new FormData();
-    formData.append('image', blob, 'image.jpg');
-    formData.append('width', width);
-    formData.append('height', height);
-    const token = getToken();
-    const res = await fetch(`${API_URL}/api/profile/magic-card/image`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: formData,
-    });
-    return parseUploadResponse(res);
-  },
-  uploadMyMagicCardVideo: async (file, crop) => {
+  saveMyMagicCardComponentPosition: (key, x, y, z, rotation, cardNumber) =>
+    request('/api/profile/magic-card/component-position', { method: 'POST', body: { key, x, y, z, rotation, cardNumber } }),
+  activateMyMagicCard: (cardNumber) => request('/api/profile/magic-card/activate', { method: 'POST', body: { cardNumber } }),
+  deactivateMyMagicCard: (cardNumber) => request('/api/profile/magic-card/deactivate', { method: 'POST', body: { cardNumber } }),
+  uploadMyMagicCardVideo: async (file, crop, cardNumber) => {
     const formData = new FormData();
     formData.append('video', file);
     formData.append('cropX', crop.x);
     formData.append('cropY', crop.y);
     formData.append('cropWidth', crop.width);
     formData.append('cropHeight', crop.height);
+    if (cardNumber) formData.append('cardNumber', cardNumber);
     const token = getToken();
     const res = await fetch(`${API_URL}/api/profile/magic-card/video`, {
       method: 'POST',
@@ -194,8 +185,28 @@ export const api = {
     });
     return parseUploadResponse(res);
   },
-  removeMyMagicCardImage: () => request('/api/profile/magic-card/image', { method: 'DELETE' }),
-  removeMyMagicCardVideo: () => request('/api/profile/magic-card/video', { method: 'DELETE' }),
+  removeMyMagicCardVideo: (cardNumber) =>
+    request(`/api/profile/magic-card/video${cardNumber ? `?card=${cardNumber}` : ''}`, { method: 'DELETE' }),
+  // Custom Card only -- backend 403s for every other plan, see
+  // routes/profile.js's own gate on this route. Overrides the checkout
+  // design for the Magic Camera effect specifically, without touching
+  // what's used elsewhere (e.g. the printed card).
+  uploadMyMagicCardImage: async (file, width, height, cardNumber) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('width', width);
+    formData.append('height', height);
+    if (cardNumber) formData.append('cardNumber', cardNumber);
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/profile/magic-card/image`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    return parseUploadResponse(res);
+  },
+  removeMyMagicCardImage: (cardNumber) =>
+    request(`/api/profile/magic-card/image${cardNumber ? `?card=${cardNumber}` : ''}`, { method: 'DELETE' }),
   // Admin-defined extra profile fields (see AttributeDefinition) -- used
   // by both Profile Settings (to know which extra inputs to render) and
   // the public profile page (to know which extra rows to render).
@@ -224,6 +235,10 @@ export const api = {
   unsubscribePush: (endpoint) => request('/api/profile/push/unsubscribe', { method: 'POST', body: { endpoint } }),
   submitRequest: (payload) => request('/api/profile/requests', { method: 'POST', body: payload }),
   listMyRequests: () => request('/api/profile/requests'),
+
+  // Chat Support -- two-way conversation with admin (ChatSupport.jsx).
+  getChat: () => request('/api/profile/chat'),
+  sendChatMessage: (text) => request('/api/profile/chat', { method: 'POST', body: { text } }),
 
   // `variants` (only for a plan that has any): array of {variantId,
   // quantity} for a mixed order (e.g. 1x "White Night" + 1x "Revenge
@@ -320,8 +335,12 @@ export const api = {
   },
   removeArModel: () => request('/api/profile/ar-model', { method: 'DELETE' }),
 
-  getMyArLayout: () => request('/api/profile/ar-layout'),
-  saveMyArLayout: (updates) => request('/api/profile/ar-layout', { method: 'PUT', body: updates }),
+  // cardNumber: which of the client's own physical cards -- each can have
+  // its own arrangement (see backend/models/ArLayout.js). Omit to default
+  // to card #1, same convention every per-card route uses.
+  getMyArLayout: (cardNumber) => request(`/api/profile/ar-layout${cardNumber ? `?card=${cardNumber}` : ''}`),
+  saveMyArLayout: (updates, cardNumber) =>
+    request('/api/profile/ar-layout', { method: 'PUT', body: { ...updates, cardNumber } }),
 
   // Phone-contacts backup (import from this phone, export to restore on a
   // new one). See pages/Contacts.jsx.

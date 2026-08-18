@@ -3,6 +3,8 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, clearSession, isLoggedIn } from '../api.js';
 import AuthModal from './AuthModal.jsx';
 import NotificationBell from './NotificationBell.jsx';
+import Footer from './Footer.jsx';
+import WhyChooseHuntsworld from './WhyChooseHuntsworld.jsx';
 
 export default function PublicLayout() {
   const loggedIn = isLoggedIn();
@@ -11,9 +13,12 @@ export default function PublicLayout() {
   const [authMode, setAuthMode] = useState(null); // 'login' | 'register' | null
   const [menuOpen, setMenuOpen] = useState(false);
   // Same admin-toggled setting HomeSwitch reads for which hero to render
-  // -- here it just adds/removes .theme-orange on the header (see the
-  // "Header theme override" block in styles.css), so the nav's colors
-  // and background effects follow the same switch.
+  // -- here it adds/removes .theme-orange on the header and (via a prop)
+  // the footer. Deliberately NOT toggled on <body> the way the dashboard's
+  // Layout.jsx does it -- .theme-orange has a `body.theme-orange` rule
+  // meant only for the logged-in dashboard (flips it to a light cream
+  // layout); doing the same here would repaint the whole public site's
+  // dark background, not just swap accent colors.
   const [homeTheme, setHomeTheme] = useState('default');
   const navRef = useRef(null);
   const spotlightRef = useRef(null);
@@ -211,6 +216,9 @@ export default function PublicLayout() {
       <main className="public-page-shell">
         <Outlet />
       </main>
+
+      <WhyChooseHuntsworld />
+      <Footer homeTheme={homeTheme} />
 
       {authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} />}
     </div>

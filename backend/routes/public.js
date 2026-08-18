@@ -23,7 +23,10 @@ const MagicBusinessCard = require('../models/MagicBusinessCard');
 const AttributeDefinition = require('../models/AttributeDefinition');
 const CatalogVideo = require('../models/CatalogVideo');
 const SiteSetting = require('../models/SiteSetting');
+const FaqEntry = require('../models/FaqEntry');
 const { getChargeAmount } = require('../utils/pricing');
+const { getGlobalMagicLayoutDefault, mergeMagicLayout } = require('../utils/magicLayout');
+const { buildVariantMap, resolveCardVariant } = require('../utils/cardVariant');
 
 const router = express.Router();
 
@@ -326,7 +329,7 @@ router.get('/profile/:clientId', async (req, res) => {
     { $inc: { tapCount: 1 } }, // simple tap analytics, per the report's spec -- kept even while paused, harmless
     { new: true }
   ).select(
-    'fullName jobTitle bio photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType cardVariantId clientId cardActive'
+    'fullName jobTitle bio photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType cardVariantId clientId cardActive customDesignFrontUrl'
   );
 
   if (!client) {
@@ -342,19 +345,34 @@ router.get('/profile/:clientId', async (req, res) => {
     return res.json({ paused: true, reason: blockReason });
   }
 
-  // Whether this client's plan includes the AR feature -- decides
-  // whether the tap page shows a second QR (AR) alongside the regular
-  // profile QR every client gets.
-  const plan = await CardPlan.findOne({ key: client.cardType }).select('arEnabled variants');
   const clientObj = client.toObject();
-  clientObj.arEnabled = !!plan?.arEnabled;
   // The physical card's actual shape -- picked at purchase time (see
   // CardPlanVariantSchema.shape) and needed by the AR layout system to
   // size/orient itself to match instead of always assuming landscape.
-  // Falls back to 'horizontal' for a client with no variant chosen (older
-  // accounts from before variants existed, or a plan with none configured).
-  const variant = plan?.variants?.find((v) => v._id.toString() === String(client.cardVariantId));
-  clientObj.cardShape = variant?.shape || 'horizontal';
+  // Resolved from the SPECIFIC card that was tapped (?card=N) when
+  // present -- a client can own several physical cards on different
+  // plans/variants (see models/Card.js), so Client.cardType/cardVariantId
+  // (which really just mirrors card #1) would silently show the wrong
+  // shape/AR-enabled flag for any other card. No ?card= at all (a legacy
+  // tap URL predating per-card tracking) falls back to the old
+  // Client-level fields unchanged.
+  const cardNumberParam = Number(req.query.card);
+  const tappedCard = Number.isFinite(cardNumberParam)
+    ? await Card.findOne({ clientId: client.clientId, cardNumber: cardNumberParam }).select('cardType cardVariantId')
+    : null;
+  const resolved = await resolveCardVariant(tappedCard || client);
+  clientObj.arEnabled = resolved.arEnabled;
+  clientObj.cardShape = resolved.shape;
+  // The actual purchased design for the tapped card -- deliberately its
+  // OWN field, not a repurposed clientObj.bannerUrl, since bannerUrl is a
+  // genuine separate cover-photo upload shown elsewhere on this same
+  // profile (see PublicProfile.jsx). Most plans (Apex included) don't let
+  // the client upload their own card image at all, so the AR tracking
+  // target (see arTargetImage.js) needs to come from here instead: the
+  // checkout-uploaded design for Custom Card, or the purchased variant's
+  // own image for every other plan -- same resolution Magic Business
+  // Card's derived image already uses (see GET /magic-card below).
+  clientObj.cardDesignUrl = resolved.requiresDesignUpload ? client.customDesignFrontUrl || null : resolved.frontImageUrl;
   // client.toObject() does NOT flatten Map-type fields the way a Mongoose
   // document's own toJSON() would -- left as-is, customAttributes would
   // silently serialize as {} below, since a plain Map instance nested in a
@@ -531,7 +549,13 @@ router.get('/ar-layout/:clientId', async (req, res) => {
       // wording is user-facing as-is, not just a log message.
       return res.status(403).json({ error: 'This card has been deactivated', reason: arBlockReason });
     }
-    let layout = await ArLayout.findOne({ clientId: req.params.clientId });
+    // Which of this client's physical cards was actually tapped -- each
+    // can have its own saved arrangement (see models/ArLayout.js's own
+    // cardNumber comment). No ?card= at all (a legacy tap URL predating
+    // this feature) defaults to card #1, same convention cardBlockReason
+    // already uses.
+    const cardNumber = Number(req.query.card) || 1;
+    let layout = await ArLayout.findOne({ clientId: req.params.clientId, cardNumber });
     if (!layout) {
       layout = (await ArLayout.findOne({ key: 'global' })) || new ArLayout({ key: 'global' }); // defaults only if truly nothing saved anywhere
     }
@@ -606,21 +630,55 @@ router.get('/magic-art', async (req, res) => {
 });
 
 // GET /api/public/magic-cards -- every ACTIVE Magic Business Card (see
-// backend/models/MagicBusinessCard.js) with both an image and a video.
-// Read-only, no auth, no clientId in the response -- not needed for the
-// AR effect itself. Scanned by client-app's MagicCamera.jsx alongside
-// Magic Art, both merged into one target list there.
+// backend/models/MagicBusinessCard.js) with both a resolvable image and a
+// video. Read-only, no auth, no clientId in the response -- not needed
+// for the AR effect itself. Scanned by client-app's MagicCamera.jsx
+// alongside Magic Art, both merged into one target list there.
+//
+// Same image-sourcing rule as the singular /magic-card/:clientId route
+// (see its own comment) -- resolved per (clientId, cardNumber) pair in
+// one batch rather than looped, so this stays a handful of queries
+// regardless of how many active cards exist.
 router.get('/magic-cards', async (req, res) => {
   try {
-    const docs = await MagicBusinessCard.find({
-      active: true,
-      imageUrl: { $ne: null },
-      videoUrl: { $ne: null },
-    });
-    res.set('Cache-Control', 'no-store');
-    res.json(
-      docs.map((doc) => ({
-        imageUrl: doc.imageUrl,
+    const docs = await MagicBusinessCard.find({ active: true, videoUrl: { $ne: null } });
+    if (docs.length === 0) {
+      res.set('Cache-Control', 'no-store');
+      return res.json([]);
+    }
+
+    const cards = await Card.find({ $or: docs.map((d) => ({ clientId: d.clientId, cardNumber: d.cardNumber })) })
+      .select('clientId cardNumber cardType cardVariantId');
+    const cardByKey = Object.fromEntries(cards.map((c) => [`${c.clientId}:${c.cardNumber}`, c]));
+    const maps = await buildVariantMap(cards);
+
+    const customDesignClientIds = [...new Set(
+      cards.filter((c) => maps.planByKey[c.cardType]?.requiresDesignUpload).map((c) => c.clientId)
+    )];
+    const customDesignClients = customDesignClientIds.length
+      ? await Client.find({ clientId: { $in: customDesignClientIds } }).select('clientId customDesignFrontUrl')
+      : [];
+    const customDesignByClientId = Object.fromEntries(customDesignClients.map((c) => [c.clientId, c.customDesignFrontUrl]));
+
+    const results = [];
+    for (const doc of docs) {
+      const card = cardByKey[`${doc.clientId}:${doc.cardNumber}`];
+      if (!card) continue;
+      const resolved = await resolveCardVariant(card, maps);
+      // Same priority order as the singular GET /magic-card/:clientId
+      // route -- this card's own client-set override (doc.imageUrl)
+      // wins over the checkout design for Custom Card, since that design
+      // is shared across ALL of an account's Custom Card purchases and
+      // would otherwise show the wrong one once a client owns more than one.
+      const imageUrl = resolved.requiresDesignUpload
+        ? doc.imageUrl || customDesignByClientId[card.clientId] || null
+        : resolved.hasVariant
+        ? resolved.frontImageUrl || doc.imageUrl || null
+        : doc.imageUrl || null; // admin-set fallback escape hatch
+      if (!imageUrl) continue; // nothing resolvable -- not shown, same as "no active card" today
+
+      results.push({
+        imageUrl,
         imageWidth: doc.imageWidth,
         imageHeight: doc.imageHeight,
         videoUrl: doc.videoUrl,
@@ -630,32 +688,72 @@ router.get('/magic-cards', async (req, res) => {
           width: doc.videoCropWidth ?? 1,
           height: doc.videoCropHeight ?? 1,
         },
-      }))
-    );
+      });
+    }
+
+    res.set('Cache-Control', 'no-store');
+    res.json(results);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/public/magic-card/:clientId -- ONE specific client's ACTIVE
-// Magic Business Card, same field shape as the plural /magic-cards above.
-// Read-only, no auth. Feeds MagicCamera.jsx's client-scoped mode (reached
-// via the "choose AR or Magic" screen off a specific client's own AR QR,
-// see PublicProfile.jsx) -- compiling and tracking just this one image
-// instead of every active client's card gallery-wide is both faster and
-// less prone to false-matching against a similar-looking design.
+// GET /api/public/magic-card/:clientId?card=N -- ONE specific PHYSICAL
+// card's ACTIVE Magic Business Card, same field shape as the plural
+// /magic-cards above. Read-only, no auth. Feeds MagicCamera.jsx's
+// client-scoped mode (reached via the "choose AR or Magic" screen off a
+// specific card's own AR QR, see PublicProfile.jsx) -- compiling and
+// tracking just this one image instead of every active client's card
+// gallery-wide is both faster and less prone to false-matching against a
+// similar-looking design. No ?card= (a legacy link) defaults to card #1.
+//
+// The image is no longer a Magic-Business-Card-specific upload for most
+// plans -- see utils/cardVariant.js. Custom Card reuses the design
+// uploaded at checkout (Client.customDesignFrontUrl); every other plan
+// uses its purchased variant's own frontImageUrl. A card with neither
+// (no variant resolvable, e.g. legacy data) simply has no Magic Business
+// Card available -- same 404 as "not active" today, not a broken preview.
 router.get('/magic-card/:clientId', async (req, res) => {
   try {
+    const cardNumber = Number(req.query.card) || 1;
     const doc = await MagicBusinessCard.findOne({
       clientId: req.params.clientId,
+      cardNumber,
       active: true,
-      imageUrl: { $ne: null },
       videoUrl: { $ne: null },
     });
-    if (!doc) return res.status(404).json({ error: 'No active Magic Business Card for this client' });
+    if (!doc) return res.status(404).json({ error: 'No active Magic Business Card for this card' });
+
+    const card = await Card.findOne({ clientId: req.params.clientId, cardNumber }).select('cardType cardVariantId');
+    const resolved = card ? await resolveCardVariant(card) : null;
+
+    let imageUrl = null;
+    if (resolved?.requiresDesignUpload) {
+      // Custom Card only -- this card's own client-set override (see
+      // POST /api/profile/magic-card/image) takes priority over the
+      // checkout design, same order profile.js's serializeMyMagicCard
+      // uses, so what a live scan shows matches the client's own
+      // dashboard exactly instead of always falling back to whichever
+      // checkout most recently overwrote Client.customDesignFrontUrl.
+      imageUrl = doc.imageUrl || null;
+      if (!imageUrl) {
+        const client = await Client.findOne({ clientId: req.params.clientId }).select('customDesignFrontUrl');
+        imageUrl = client?.customDesignFrontUrl || null;
+      }
+    } else if (resolved?.hasVariant) {
+      imageUrl = resolved.frontImageUrl || doc.imageUrl || null; // doc.imageUrl here is an admin-only escape hatch
+    } else {
+      imageUrl = doc.imageUrl || null; // no resolvable variant -- admin-set fallback escape hatch
+    }
+    if (!imageUrl) return res.status(404).json({ error: 'Magic Business Card is not available for this card yet' });
+
     res.set('Cache-Control', 'no-store');
+    // Falls back to admin's global Magic Layout default for a card that
+    // hasn't been customized yet -- see utils/magicLayout.js's
+    // mergeMagicLayout for the precedence rule.
+    const { componentPositions, magicElements } = mergeMagicLayout(doc, await getGlobalMagicLayoutDefault());
     res.json({
-      imageUrl: doc.imageUrl,
+      imageUrl,
       imageWidth: doc.imageWidth,
       imageHeight: doc.imageHeight,
       videoUrl: doc.videoUrl,
@@ -668,14 +766,9 @@ router.get('/magic-card/:clientId', async (req, res) => {
       // Only meaningful (and only sent) for this single-client route --
       // the gallery-wide /magic-cards above deliberately omits these,
       // see MagicCamera.jsx's own scoped-mode-only AR component bar.
-      componentPositions: {
-        contact: { x: doc.contactX ?? 20, y: doc.contactY ?? 120, z: doc.contactZ ?? 0, rotation: doc.contactRotation ?? 0 },
-        portfolio: { x: doc.portfolioX ?? 50, y: doc.portfolioY ?? 120, z: doc.portfolioZ ?? 0, rotation: doc.portfolioRotation ?? 0 },
-        social: { x: doc.socialX ?? 80, y: doc.socialY ?? 120, z: doc.socialZ ?? 0, rotation: doc.socialRotation ?? 0 },
-        huntsworld: { x: doc.huntsworldX ?? 50, y: doc.huntsworldY ?? 145, z: doc.huntsworldZ ?? 0, rotation: doc.huntsworldRotation ?? 0 },
-      },
+      componentPositions,
       // Admin-defined custom components (see AttributeDefinition.magicComponent).
-      magicElements: Object.fromEntries(doc.magicElements || []),
+      magicElements,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -691,6 +784,18 @@ router.get('/site-settings', async (req, res) => {
     const doc = await SiteSetting.findOne({ key: 'global' });
     res.set('Cache-Control', 'no-store');
     res.json({ homeTheme: doc?.homeTheme || 'default' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/public/faq -- active entries only, in admin's chosen order
+// (see models/FaqEntry.js). Feeds client-app's Faq.jsx, which used to
+// hardcode this list.
+router.get('/faq', async (req, res) => {
+  try {
+    const entries = await FaqEntry.find({ active: true }).sort({ order: 1, createdAt: 1 }).select('question answer');
+    res.json(entries);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -767,7 +872,19 @@ router.get('/qr/:clientId', async (req, res) => {
     // raw, so this can't be used to inject arbitrary query params into
     // the encoded URL.
     const engine = req.query.engine === 'mindar' ? '&engine=mindar' : '';
-    const url = type === 'ar' ? `${base}/c/${client.clientId}?ar=1${engine}` : `${base}/c/${client.clientId}`;
+    // Which PHYSICAL card this QR is actually for -- a client can own
+    // several (see models/Card.js), each needing its own printed QR so
+    // scanning it resolves that specific card's shape/AR layout/Magic
+    // Business Card instead of always landing on card #1's. Opt-in (a
+    // legacy caller that never passes ?card= still gets the old
+    // card-less URL, which PublicProfile.jsx already treats as "card #1,
+    // pre-per-card-tracking" -- see its own comment).
+    const cardParam = Number(req.query.card);
+    const cardSuffix = Number.isFinite(cardParam) ? `card=${cardParam}` : '';
+    const url =
+      type === 'ar'
+        ? `${base}/c/${client.clientId}?ar=1${engine}${cardSuffix ? `&${cardSuffix}` : ''}`
+        : `${base}/c/${client.clientId}${cardSuffix ? `?${cardSuffix}` : ''}`;
 
     const dark = hexColorParam(req.query.fg, '#000000');
     let light = hexColorParam(req.query.bg, '#ffffff');

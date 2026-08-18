@@ -1,8 +1,48 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Local-only mkcert certificate (see .certs/, gitignored) -- only needed
+// for testing a real phone over the LAN, where camera access
+// (getUserMedia) requires a secure context and a plain LAN IP over HTTP
+// doesn't qualify. Opt-in via VITE_DEV_HTTPS=1 -- the USB/adb-reverse
+// route (see host below) is the default now, and THAT needs plain HTTP:
+// adb reverse maps the phone's own "localhost" to this dev server, and
+// localhost is automatically a secure context regardless of protocol, so
+// forcing HTTPS there just adds an extra (currently-untrusted-on-device)
+// cert prompt for no benefit.
+const certPath = path.join(__dirname, '.certs', 'cert.pem');
+const keyPath = path.join(__dirname, '.certs', 'key.pem');
+const httpsConfig =
+  process.env.VITE_DEV_HTTPS === '1' && fs.existsSync(certPath) && fs.existsSync(keyPath)
+    ? { cert: fs.readFileSync(certPath), key: fs.readFileSync(keyPath) }
+    : undefined;
+
+// Serves the mkcert root CA (public/huntstag-dev-ca.crt) with the MIME
+// type Android's cert installer actually looks for -- Vite's static
+// middleware doesn't know a .crt extension and serves it with no
+// Content-Type at all otherwise, which is why Chrome on Android just
+// showed the raw PEM text / failed the download instead of offering to
+// install it as a trusted certificate.
+function caCertMimePlugin() {
+  return {
+    name: 'ca-cert-mime',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.startsWith('/huntstag-dev-ca.crt')) {
+          res.setHeader('Content-Type', 'application/x-x509-ca-cert');
+        }
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), caCertMimePlugin()],
   optimizeDeps: {
     // mind-ar's own source uses Vite-specific `?worker&inline` imports
     // internally (compiler.js/controller.js) -- esbuild's dependency
@@ -44,5 +84,6 @@ export default defineConfig({
     proxy: {
       '/uploads': 'http://localhost:4000',
     },
+    https: httpsConfig,
   },
 });

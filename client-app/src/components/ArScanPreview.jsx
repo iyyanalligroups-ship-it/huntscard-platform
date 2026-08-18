@@ -54,6 +54,18 @@ function makeGuideLine() {
 
 // Points `line` from (lx, ly, lz) down to its (lx, ly, 0) footprint, or
 // hides it entirely when lz is ~0 (flat on the card -- the common case).
+// Real QR size shown here should match MagicBusinessCard.jsx's own
+// preview -- 21.2mm on a 55mm card short side. The QR mesh's geometry
+// itself is a fixed MODEL_SIZE=1 square (that number is load-bearing
+// elsewhere -- ArView.jsx's real POSIT tracking uses it as its marker
+// size unit, so it can't just be changed) -- scaled per-instance instead,
+// in positionCard() below, against whichever axis is actually this
+// card's short side for its shape. Previously left unscaled entirely, so
+// the QR rendered far smaller here than in Magic Business Card despite
+// being the exact same physical size.
+const QR_REAL_MM = 21.2;
+const CARD_SHORT_SIDE_MM = 55;
+
 function updateGuideLine(line, lx, ly, lz) {
   if (!line) return;
   if (lz <= 0.0001) {
@@ -66,6 +78,42 @@ function updateGuideLine(line, lx, ly, lz) {
   positions.needsUpdate = true;
   line.computeLineDistances(); // required for LineDashedMaterial to render dashes at all -- a Line method, not a BufferGeometry one
   line.visible = true;
+}
+
+// Same standard card-corner radius ratio as MagicBusinessCard.jsx's
+// CARD_CORNER_MM / CARD_MM.width (3.2mm on an 85mm-wide card) -- the card
+// here is a WebGL-textured plane, not a DOM element, so CSS border-radius
+// can't round it (and the panel's own border-radius only rounds the whole
+// tan background, not the card sitting inside it at whatever angle it's
+// rotated to). Baking a rounded-rect alpha clip into the texture itself
+// keeps the corners rounded at any camera angle.
+const CARD_CORNER_RATIO = 3.2 / 85;
+
+function roundedCardTexture(image) {
+  const width = image ? image.naturalWidth || image.width : 850;
+  const height = image ? image.naturalHeight || image.height : 550;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  const radius = width * CARD_CORNER_RATIO;
+  ctx.beginPath();
+  ctx.moveTo(radius, 0);
+  ctx.arcTo(width, 0, width, height, radius);
+  ctx.arcTo(width, height, 0, height, radius);
+  ctx.arcTo(0, height, 0, 0, radius);
+  ctx.arcTo(0, 0, width, 0, radius);
+  ctx.closePath();
+  ctx.clip();
+  if (image) {
+    ctx.drawImage(image, 0, 0, width, height);
+  } else {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 const ELEMENTS = [
@@ -373,6 +421,10 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
     three.cardMesh.position.x = (x0 + x1) / 2;
     three.cardMesh.position.y = (y0 + y1) / 2;
     three.cardMesh.scale.y = cardHUnitsFor(cardAspect) / CARD_W_UNITS;
+    // QR mesh -- see QR_REAL_MM's own comment above.
+    const shortSideUnits = Math.min(CARD_W_UNITS, cardHUnitsFor(cardAspect));
+    const qrScale = (QR_REAL_MM / CARD_SHORT_SIDE_MM) * shortSideUnits;
+    three.qrMesh.scale.set(qrScale, qrScale, 1);
   }
 
   // Load the QR code texture -- same URL the old DOM <img> overlay used,
@@ -384,7 +436,7 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
   useEffect(() => {
     if (!profile?.clientId) return;
     let cancelled = false;
-    new THREE.TextureLoader().load(`${API_URL}/api/public/qr/${profile.clientId}?type=ar&transparent=1`, (texture) => {
+    new THREE.TextureLoader().load(`${API_URL}/api/public/qr/${profile.clientId}?type=ar&transparent=1${profile.cardNumber ? `&card=${profile.cardNumber}` : ''}`, (texture) => {
       if (cancelled || !threeRef.current) return;
       texture.colorSpace = THREE.SRGBColorSpace;
       const material = threeRef.current.qrMesh.material;
@@ -396,7 +448,7 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
     return () => {
       cancelled = true;
     };
-  }, [profile?.clientId, size.w, size.h]);
+  }, [profile?.clientId, profile?.cardNumber, size.w, size.h]);
 
   // Load the client's own card design (front artwork) as the card mesh's
   // texture -- same image arTargetImage.js composites the QR onto for
@@ -409,31 +461,42 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
   useEffect(() => {
     const three = threeRef.current;
     if (!three) return;
-    const bannerUrl = profile?.bannerUrl || profile?.customDesignFrontUrl || null;
+    // The actual purchased design (see public.js's GET /profile/:clientId
+    // and ArLayout.jsx's previewProfile) -- deliberately NOT
+    // profile.bannerUrl, which is an unrelated cover-photo field most
+    // plans don't even let the client set.
+    const bannerUrl = profile?.cardDesignUrl || profile?.customDesignFrontUrl || null;
+    const material = three.cardMesh.material;
     if (!bannerUrl) {
-      three.cardMesh.material.map = null;
-      three.cardMesh.material.color.set(0xffffff);
-      three.cardMesh.material.needsUpdate = true;
+      const texture = roundedCardTexture(null);
+      material.map = texture;
+      material.color.set(0xffffff);
+      material.transparent = true;
+      material.needsUpdate = true;
       renderThree();
       return;
     }
     let cancelled = false;
-    new THREE.TextureLoader().load(bannerUrl, (texture) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous'; // needed so the canvas it gets drawn into isn't tainted for WebGL upload
+    img.onload = () => {
       if (cancelled || !threeRef.current) return;
-      texture.colorSpace = THREE.SRGBColorSpace;
-      const material = threeRef.current.cardMesh.material;
-      material.map = texture;
+      const texture = roundedCardTexture(img);
+      const liveMaterial = threeRef.current.cardMesh.material;
+      liveMaterial.map = texture;
       // A textured mesh still tints by its own color -- white is neutral
       // (shows the texture as-is); leaving whatever color was last set
       // (e.g. from a previous no-banner fallback) would otherwise tint it.
-      material.color.set(0xffffff);
-      material.needsUpdate = true;
+      liveMaterial.color.set(0xffffff);
+      liveMaterial.transparent = true;
+      liveMaterial.needsUpdate = true;
       renderThree();
-    });
+    };
+    img.src = bannerUrl;
     return () => {
       cancelled = true;
     };
-  }, [profile?.bannerUrl, profile?.customDesignFrontUrl, size.w, size.h]);
+  }, [profile?.cardDesignUrl, profile?.customDesignFrontUrl, size.w, size.h]);
 
   // Load the 3D model (GLB, FBX, or flat image, see arModelType) -- same
   // branches as ArView.jsx's own loading effect.
@@ -510,13 +573,16 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
   }, [profile?.arModelUrl, profile?.arModelType, size.w, size.h]);
 
   // Load the AR Video/Photo banner -- same resolution order as ArView.jsx
-  // (one-slot banner field, else legacy video field, else plain photo).
+  // (one-slot banner field, else legacy video field). Deliberately does
+  // NOT fall back to the client's profile picture -- that's a different
+  // field for a different purpose, and showing it here when no banner was
+  // uploaded made it look like a banner had been set when it hadn't.
   useEffect(() => {
     videoPlaneRef.current = null;
     if (threeRef.current) threeRef.current.videoGroup.clear();
     const bannerUrl = profile?.arBannerUrl || profile?.arVideoUrl;
-    const bannerType = profile?.arBannerUrl ? profile?.arBannerType : profile?.arVideoUrl ? 'video' : profile?.photoUrl ? 'image' : null;
-    const resolvedUrl = bannerUrl || profile?.photoUrl;
+    const bannerType = profile?.arBannerUrl ? profile?.arBannerType : profile?.arVideoUrl ? 'video' : null;
+    const resolvedUrl = bannerUrl;
     if (!resolvedUrl) {
       renderThree();
       return;
@@ -556,7 +622,7 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.arBannerUrl, profile?.arBannerType, profile?.arVideoUrl, profile?.photoUrl, profile?.cardShape, size.w, size.h]);
+  }, [profile?.arBannerUrl, profile?.arBannerType, profile?.arVideoUrl, profile?.cardShape, size.w, size.h]);
 
   // Re-apply transform/position whenever the saved layout values change --
   // this is what makes the preview update live as you drag things in the
@@ -598,7 +664,7 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
     ? projectWorldPoint(...toLocalOffset(modelPos, qrPos, cardAspect), heightToLocalZ(modelPos.z, cardAspect))
     : null;
   const videoPos = layout?.video || { x: 50, y: 20 };
-  const hasVideoContent = Boolean(profile?.arBannerUrl || profile?.arVideoUrl || profile?.photoUrl);
+  const hasVideoContent = Boolean(profile?.arBannerUrl || profile?.arVideoUrl);
   const videoProj = hasVideoContent
     ? projectWorldPoint(...toLocalOffset(videoPos, qrPos, cardAspect), heightToLocalZ(videoPos.z, cardAspect))
     : null;

@@ -23,6 +23,10 @@ import Appointments from './pages/Appointments.jsx';
 import PublicProfile from './pages/PublicProfile.jsx';
 import MagicArt from './pages/MagicArt.jsx';
 import MagicBusinessCard from './pages/MagicBusinessCard.jsx';
+import Faq from './pages/Faq.jsx';
+import AboutUs from './pages/AboutUs.jsx';
+import WhatIsHuntsworld from './pages/WhatIsHuntsworld.jsx';
+import ChatSupport from './pages/ChatSupport.jsx';
 
 // Lazy-loaded ("Mark 1" experiment) -- pulls in mind-ar/@tensorflow/tfjs,
 // a heavy and still-unproven dependency. Loading it eagerly like every
@@ -105,6 +109,10 @@ export default function App() {
         <Route path="catalog" element={<Catalog />} />
         <Route path="contact" element={<ContactUs />} />
         <Route path="magic-art" element={<MagicArt />} />
+        <Route path="faq" element={<Faq />} />
+        <Route path="about" element={<AboutUs />} />
+        <Route path="huntsworld" element={<WhatIsHuntsworld />} />
+        <Route path="chat" element={<ChatSupport />} />
       </Route>
 
       {/* Public tap page -- what a stranger sees when they tap the physical

@@ -3,8 +3,8 @@ import { api, API_URL } from '../api.js';
 import CropBox from '../components/CropBox.jsx';
 import MagicHoverPreview from '../components/MagicHoverPreview.jsx';
 
-const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 80 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
 
 // Real physical business card, 85 x 55mm either way -- 'vertical' is the
 // exact same card turned 90°, not an independent shape. Pixel target at
@@ -68,9 +68,6 @@ const COMPONENT_DEFS = [
   { key: 'huntsworld', label: 'Huntsworld' },
 ];
 
-function cardUploadSize(cardType) {
-  return CARD_UPLOAD_SIZES[cardType] || CARD_UPLOAD_SIZES.horizontal;
-}
 // `imageWidth`/`imageHeight` (the ACTUAL uploaded image's real pixel
 // size, if one exists) take priority over the assumed 85x55mm shape --
 // mind-ar tracks the real image's own real proportions, whatever they
@@ -87,6 +84,24 @@ function cardBoxSize(cardType, imageWidth, imageHeight) {
   return { width, height, borderRadius: Math.round(width * (3.2 / CARD_MM.width)) };
 }
 
+// The card's design image is derived now (a purchased variant's own
+// front image, or Custom Card's checkout design -- see
+// backend/utils/cardVariant.js), never a client upload here, so there's
+// no File to read natural dimensions from anymore. Loads them from the
+// resolved URL instead -- needed for the preview box's true aspect ratio
+// and for locking the video crop to match it (mind-ar tracks the real
+// image's real proportions live, not an assumed card shape).
+function loadImageDimsFromUrl(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => reject(new Error('Could not read the card image'));
+    img.src = url;
+  });
+}
+
+// Custom Card only (see card.requiresDesignUpload) -- every other plan's
+// image is derived, never a client upload, see backend/utils/cardVariant.js.
 function loadImageFromFile(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -94,6 +109,34 @@ function loadImageFromFile(file) {
     img.onload = () => resolve({ img, url, width: img.naturalWidth, height: img.naturalHeight });
     img.onerror = () => reject(new Error('Could not read that image'));
     img.src = url;
+  });
+}
+
+// Crops to the SAME print-resolution target CARD_UPLOAD_SIZES already
+// defines for this card's shape, same idea as handleDownloadImage's own
+// rounded-corner canvas redraw just without the rounding (that's applied
+// on download, not on the stored upload).
+function cropImageToBlob(img, crop, targetWidth, targetHeight) {
+  return new Promise((resolve, reject) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(
+      img,
+      crop.x * img.naturalWidth,
+      crop.y * img.naturalHeight,
+      crop.width * img.naturalWidth,
+      crop.height * img.naturalHeight,
+      0,
+      0,
+      targetWidth,
+      targetHeight
+    );
+    canvas.toBlob((blob) => {
+      if (!blob) return reject(new Error('Could not process that image'));
+      resolve(blob);
+    }, 'image/jpeg', 0.92);
   });
 }
 
@@ -106,18 +149,6 @@ function loadVideoFromFile(file) {
     video.onerror = () => reject(new Error('Could not read that video'));
     video.src = url;
   });
-}
-
-function cropImageToBlob(img, crop, naturalWidth, naturalHeight, targetWidth, targetHeight) {
-  const sx = Math.round(crop.x * naturalWidth);
-  const sy = Math.round(crop.y * naturalHeight);
-  const sw = Math.round(crop.width * naturalWidth);
-  const sh = Math.round(crop.height * naturalHeight);
-  const canvas = document.createElement('canvas');
-  canvas.width = targetWidth;
-  canvas.height = targetHeight;
-  canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight);
-  return new Promise((resolve) => canvas.toBlob((blob) => resolve({ blob, width: targetWidth, height: targetHeight }), 'image/jpeg', 0.92));
 }
 
 function initialCropForAspect(naturalWidth, naturalHeight, aspectRatio) {
@@ -138,11 +169,21 @@ function initialCropForAspect(naturalWidth, naturalHeight, aspectRatio) {
 // which scans the shared, admin-curated Magic Art gallery, not this
 // personal card.
 export default function MagicBusinessCard() {
-  const [card, setCard] = useState(null); // null while loading
+  // This client's own physical cards (see backend/models/Card.js) -- a
+  // client can own several, each on a different plan/variant, so each
+  // gets its OWN Magic Business Card (video + AR component layout).
+  // null while loading; [] once loaded (even if empty).
+  const [cards, setCards] = useState(null);
+  const [selectedCardNumber, setSelectedCardNumber] = useState(null);
+  const [card, setCard] = useState(null); // the selected card's MagicBusinessCard doc -- null while (re)loading
+  // Natural pixel size of card.imageUrl, loaded client-side once it
+  // resolves -- see loadImageDimsFromUrl's own comment for why this
+  // replaced reading card.imageWidth/imageHeight directly.
+  const [imageDims, setImageDims] = useState(null);
   const [clientId, setClientId] = useState(null); // this client's own id -- fetched, not read from localStorage, so it's never stale
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [cropSession, setCropSession] = useState(null); // { field, url, naturalWidth, naturalHeight, aspectRatio, crop, img?, file }
+  const [cropSession, setCropSession] = useState(null); // { field: 'video', url, naturalWidth, naturalHeight, aspectRatio, crop, file }
   // Admin-defined custom Magic components (see AttributeDefinition.magicComponent)
   // -- same idea as ArLayout.jsx's own arComponents, filtered for this
   // separate system instead. Their VALUES are the client's own profile
@@ -150,8 +191,8 @@ export default function MagicBusinessCard() {
   // is), only their positions are set here.
   const [magicComponents, setMagicComponents] = useState([]);
 
-  const imageInputRef = useRef(null);
   const videoInputRef = useRef(null);
+  const imageInputRef = useRef(null);
   const previewBoxRef = useRef(null); // the card-preview container the QR position is measured relative to
   const [draggingQr, setDraggingQr] = useState(false);
   const [qrSaveStatus, setQrSaveStatus] = useState('');
@@ -176,15 +217,14 @@ export default function MagicBusinessCard() {
   const [draggingComponentKey, setDraggingComponentKey] = useState(null);
   const [componentSaveStatus, setComponentSaveStatus] = useState('');
 
-  function load() {
-    return api
-      .getMyMagicCard()
-      .then(setCard)
-      .catch((err) => setError(err.message));
-  }
-
   useEffect(() => {
-    load();
+    api
+      .getMyCards()
+      .then((list) => {
+        setCards(list);
+        if (list.length > 0) setSelectedCardNumber(list[0].cardNumber);
+      })
+      .catch((err) => setError(err.message));
     api
       .getProfile()
       .then((p) => setClientId(p.clientId))
@@ -195,18 +235,32 @@ export default function MagicBusinessCard() {
       .catch(() => {});
   }, []);
 
-  async function handleSetCardType(cardType) {
-    setBusy(true);
-    setError('');
-    try {
-      const updated = await api.setMyMagicCardType(cardType);
-      setCard((prev) => ({ ...prev, ...updated }));
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
+  useEffect(() => {
+    if (!selectedCardNumber) return;
+    setCard(null);
+    api
+      .getMyMagicCard(selectedCardNumber)
+      .then(setCard)
+      .catch((err) => setError(err.message));
+  }, [selectedCardNumber]);
+
+  // Loads the resolved design image's real pixel size once it's known --
+  // needed both for the preview box's true aspect ratio and for locking
+  // the video crop to match it. Re-runs whenever the selected card (and
+  // therefore its image) changes.
+  useEffect(() => {
+    if (!card?.imageUrl) {
+      setImageDims(null);
+      return;
     }
-  }
+    let cancelled = false;
+    loadImageDimsFromUrl(card.imageUrl)
+      .then((dims) => { if (!cancelled) setImageDims(dims); })
+      .catch(() => { if (!cancelled) setImageDims(null); });
+    return () => {
+      cancelled = true;
+    };
+  }, [card?.imageUrl]);
 
   // Plain 2D pointer drag over the flat preview image (not the 3D
   // raycasting drag the AR Layout editor needs) -- this is just a
@@ -241,17 +295,17 @@ export default function MagicBusinessCard() {
     setQrSaveStatus('Saving...');
     setError('');
     try {
-      const updatedQr = await api.saveMyMagicCardQrPosition(qrPos.x, qrPos.y);
+      const updatedQr = await api.saveMyMagicCardQrPosition(qrPos.x, qrPos.y, selectedCardNumber);
       setCard((prev) => ({ ...prev, ...updatedQr }));
-      // Also mirrors into the main AR Layout system's own qr position
-      // (see ArLayout.jsx / arTargetImage.js) -- one QR placement, not
-      // two separately-set ones that can drift apart. Sent as a partial
-      // update (just the qr field), so it can't clobber any of that
-      // client's other saved AR Layout positions. Best-effort: AR Layout
-      // isn't necessarily part of every plan, so a failure here (e.g. AR
-      // not included) shouldn't block the Magic Business Card save that
-      // already succeeded above.
-      api.saveMyArLayout({ qr: { x: qrPos.x, y: qrPos.y } }).catch(() => {});
+      // Also mirrors into the main AR Layout system's own qr position for
+      // THIS SAME physical card (see ArLayout.jsx / arTargetImage.js) --
+      // one QR placement, not two separately-set ones that can drift
+      // apart. Sent as a partial update (just the qr field), so it can't
+      // clobber any of that card's other saved AR Layout positions.
+      // Best-effort: AR Layout isn't necessarily part of every plan, so a
+      // failure here (e.g. AR not included) shouldn't block the Magic
+      // Business Card save that already succeeded above.
+      api.saveMyArLayout({ qr: { x: qrPos.x, y: qrPos.y } }, selectedCardNumber).catch(() => {});
       setQrSaveStatus('Saved.');
     } catch (err) {
       setQrSaveStatus('');
@@ -337,7 +391,7 @@ export default function MagicBusinessCard() {
       await Promise.all(
         allKeys.map((key) => {
           const pos = getComponentPosition(key);
-          return api.saveMyMagicCardComponentPosition(key, pos.x ?? 50, pos.y ?? 120, pos.z ?? 0, pos.rotation ?? 0);
+          return api.saveMyMagicCardComponentPosition(key, pos.x ?? 50, pos.y ?? 120, pos.z ?? 0, pos.rotation ?? 0, selectedCardNumber);
         })
       );
       setComponentSaveStatus('Saved.');
@@ -350,18 +404,14 @@ export default function MagicBusinessCard() {
   async function handlePickImage(file) {
     if (!file) return;
     setError('');
-    if (!card?.cardType) {
-      setError('Choose a card type above first.');
-      return;
-    }
     if (file.size > MAX_IMAGE_BYTES) {
       setError('That image is over 50MB -- pick a smaller one.');
       return;
     }
     try {
       const { img, url, width, height } = await loadImageFromFile(file);
-      const { width: targetW, height: targetH } = cardUploadSize(card.cardType);
-      const aspectRatio = targetW / targetH;
+      const targetSize = CARD_UPLOAD_SIZES[card?.cardType === 'vertical' ? 'vertical' : 'horizontal'];
+      const aspectRatio = targetSize.width / targetSize.height;
       setCropSession({
         field: 'image',
         url,
@@ -369,6 +419,7 @@ export default function MagicBusinessCard() {
         naturalHeight: height,
         aspectRatio,
         crop: initialCropForAspect(width, height, aspectRatio),
+        file,
         img,
       });
     } catch (err) {
@@ -383,13 +434,13 @@ export default function MagicBusinessCard() {
       setError('That video is over 80MB -- pick a smaller one.');
       return;
     }
-    if (!card?.imageWidth || !card?.imageHeight) {
-      setError('Upload the image first -- the video crop matches its dimensions.');
+    if (!imageDims) {
+      setError('This card has no design image to match yet.');
       return;
     }
     try {
       const { url, width, height } = await loadVideoFromFile(file);
-      const aspectRatio = card.imageWidth / card.imageHeight;
+      const aspectRatio = imageDims.width / imageDims.height;
       setCropSession({
         field: 'video',
         url,
@@ -415,30 +466,22 @@ export default function MagicBusinessCard() {
     setBusy(true);
     setError('');
     try {
+      let updated;
       if (session.field === 'image') {
-        const { width: targetW, height: targetH } = cardUploadSize(card?.cardType);
-        const { blob, width, height } = await cropImageToBlob(
-          session.img,
-          session.crop,
-          session.naturalWidth,
-          session.naturalHeight,
-          targetW,
-          targetH
-        );
-        const updated = await api.uploadMyMagicCardImage(blob, width, height);
-        // Merge onto the existing state rather than replacing it wholesale
-        // -- the server always returns the full current card, so this is
-        // normally a no-op, but it means a response that's ever missing a
-        // field it didn't actually touch (a stray/overlapping request, a
-        // flaky connection) can't silently wipe already-known-good data
-        // like `imageUrl`, which several OTHER sections on this page key
-        // their visibility off of (see the "AR components" section
-        // vanishing after a video crop -- same defensive fix below).
-        setCard((prev) => ({ ...prev, ...updated }));
+        const targetSize = CARD_UPLOAD_SIZES[card?.cardType === 'vertical' ? 'vertical' : 'horizontal'];
+        const blob = await cropImageToBlob(session.img, session.crop, targetSize.width, targetSize.height);
+        updated = await api.uploadMyMagicCardImage(blob, targetSize.width, targetSize.height, selectedCardNumber);
       } else {
-        const updated = await api.uploadMyMagicCardVideo(session.file, session.crop);
-        setCard((prev) => ({ ...prev, ...updated }));
+        updated = await api.uploadMyMagicCardVideo(session.file, session.crop, selectedCardNumber);
       }
+      // Merge onto the existing state rather than replacing it wholesale
+      // -- the server always returns the full current card, so this is
+      // normally a no-op, but it means a response that's ever missing a
+      // field it didn't actually touch (a stray/overlapping request, a
+      // flaky connection) can't silently wipe already-known-good data
+      // like `imageUrl`, which several OTHER sections on this page key
+      // their visibility off of.
+      setCard((prev) => ({ ...prev, ...updated }));
       closeCropSession();
     } catch (err) {
       setError(err.message);
@@ -451,7 +494,9 @@ export default function MagicBusinessCard() {
     setBusy(true);
     setError('');
     try {
-      const updated = card?.active ? await api.deactivateMyMagicCard() : await api.activateMyMagicCard();
+      const updated = card?.active
+        ? await api.deactivateMyMagicCard(selectedCardNumber)
+        : await api.activateMyMagicCard(selectedCardNumber);
       setCard((prev) => ({ ...prev, ...updated }));
     } catch (err) {
       setError(err.message);
@@ -551,12 +596,11 @@ export default function MagicBusinessCard() {
     }
   }
 
-  async function handleRemoveField(field) {
+  async function handleRemoveVideo() {
     setBusy(true);
     setError('');
     try {
-      const remove = field === 'image' ? api.removeMyMagicCardImage : api.removeMyMagicCardVideo;
-      const updated = await remove();
+      const updated = await api.removeMyMagicCardVideo(selectedCardNumber);
       setCard((prev) => ({ ...prev, ...updated }));
     } catch (err) {
       setError(err.message);
@@ -565,10 +609,71 @@ export default function MagicBusinessCard() {
     }
   }
 
-  if (!card && !error) return <p className="subtitle">Loading…</p>;
+  // Custom Card only -- clears this override, falling back to the
+  // checkout design again (see backend/routes/profile.js's
+  // serializeMyMagicCard), not to no image outright.
+  async function handleRemoveImage() {
+    setBusy(true);
+    setError('');
+    try {
+      const updated = await api.removeMyMagicCardImage(selectedCardNumber);
+      setCard((prev) => ({ ...prev, ...updated }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
-  const box = cardBoxSize(card?.cardType, card?.imageWidth, card?.imageHeight);
-  const canActivate = Boolean(card?.imageUrl && card?.videoUrl);
+  // Small pill row -- "Card 1 · Front desk (Apex · Horizontal)" -- same
+  // idea as ArLayout.jsx's own picker, just choosing which card's Magic
+  // Business Card is being edited.
+  function CardPicker() {
+    if (!cards || cards.length < 2) return null; // nothing to pick between with 0-1 cards
+    return (
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '0 0 20px' }}>
+        {cards.map((c) => (
+          <button
+            key={c.cardNumber}
+            type="button"
+            className={c.cardNumber === selectedCardNumber ? undefined : 'secondary'}
+            style={{ width: 'auto', fontSize: 13, padding: '8px 14px' }}
+            onClick={() => setSelectedCardNumber(c.cardNumber)}
+          >
+            Card {c.cardNumber}
+            {c.label ? ` · ${c.label}` : c.variantName ? ` · ${c.variantName}` : ''}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  if (!cards) return <p className="subtitle">Loading…</p>;
+
+  if (cards.length === 0) {
+    return (
+      <div>
+        <h1>Magic Business Card</h1>
+        <p className="subtitle">You don't have a card yet -- pick a plan to get started.</p>
+        <a href="/shop">
+          <button style={{ width: 'auto' }}>See plans</button>
+        </a>
+      </div>
+    );
+  }
+
+  if (!card && !error) {
+    return (
+      <div>
+        <h1>Magic Business Card</h1>
+        <CardPicker />
+        <p className="subtitle">Loading…</p>
+      </div>
+    );
+  }
+
+  const box = cardBoxSize(card?.cardType, imageDims?.width, imageDims?.height);
+  const canActivate = Boolean(card?.available && card?.videoUrl);
   // Built-in (Call/Portfolio/Social) + admin-defined custom Magic
   // components, merged into one list for the editor below.
   const allComponentDefs = [...COMPONENT_DEFS, ...magicComponents.map((c) => ({ key: c.key, label: c.label }))];
@@ -578,7 +683,13 @@ export default function MagicBusinessCard() {
   // solid by default (not transparent) so the QR stays scannable
   // regardless of how busy the card design underneath it is.
   const qrColorParams = `fg=${qrFg.slice(1)}&bg=${qrBg.slice(1)}${qrTransparentBg ? '&transparent=1' : ''}`;
-  const qrUrl = clientId ? `${API_URL}/api/public/qr/${clientId}?type=ar&${qrColorParams}` : null;
+  // card=N -- which PHYSICAL card this QR actually resolves to when
+  // scanned (see backend's GET /api/public/qr/:clientId). Without this
+  // every one of a client's cards would print/show the exact same QR,
+  // which would always land on card #1 regardless of which physical
+  // card was actually tapped -- the bug that made scanning Card 2/3 show
+  // "no Magic effect set up" even after activating the right one.
+  const qrUrl = clientId ? `${API_URL}/api/public/qr/${clientId}?type=ar&card=${selectedCardNumber}&${qrColorParams}` : null;
   const qrPos = card?.qrPosition || { x: 82, y: 82 };
   // ~21.2mm real QR size (see arTargetImage.js's own derivation), as a
   // fraction of THIS card's short side (55mm) -- same "N% of the card's
@@ -589,7 +700,12 @@ export default function MagicBusinessCard() {
   return (
     <div>
       <h1>Magic Business Card</h1>
-      <p className="subtitle">Design your own personal AR effect -- an image people scan, and a video that plays on it.</p>
+      <CardPicker />
+      <p className="subtitle">
+        {card?.available
+          ? "Your card's design, an AR video that plays on it, and where the AR buttons float."
+          : "Magic Business Card isn't available for this card yet."}
+      </p>
 
       {error && <div className="error-banner">{error}</div>}
 
@@ -666,28 +782,12 @@ export default function MagicBusinessCard() {
 
         <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Card type</p>
         <p className="hint" style={{ margin: '0 0 8px' }}>
-          Real business card size either way (85 x 55mm) -- choose this first, it sets the image crop shape below.
+          Real business card size either way (85 x 55mm) -- locked to whatever you actually purchased for this
+          card, not something you choose here.
         </p>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-          <button
-            type="button"
-            className={card?.cardType === 'horizontal' ? undefined : 'secondary'}
-            disabled={busy}
-            style={{ width: 'auto', fontSize: 13, padding: '8px 16px' }}
-            onClick={() => handleSetCardType('horizontal')}
-          >
-            Horizontal
-          </button>
-          <button
-            type="button"
-            className={card?.cardType === 'vertical' ? undefined : 'secondary'}
-            disabled={busy}
-            style={{ width: 'auto', fontSize: 13, padding: '8px 16px' }}
-            onClick={() => handleSetCardType('vertical')}
-          >
-            Vertical
-          </button>
-        </div>
+        <p style={{ margin: '0 0 20px', fontSize: 13, fontWeight: 700, textTransform: 'capitalize' }}>
+          {card?.cardType || '—'}
+        </p>
 
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: cropSession ? 20 : 0 }}>
           <div style={{ width: box.width }}>
@@ -764,8 +864,10 @@ export default function MagicBusinessCard() {
             )}
             {!card?.imageUrl && (
               <div style={{ position: 'relative', width: box.width, height: box.height, borderRadius: box.borderRadius, overflow: 'hidden', background: '#000' }}>
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <span className="hint" style={{ margin: 0 }}>No image yet</span>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 12 }}>
+                  <span className="hint" style={{ margin: 0 }}>
+                    Magic Business Card isn't available for this card yet.
+                  </span>
                 </div>
               </div>
             )}
@@ -773,9 +875,7 @@ export default function MagicBusinessCard() {
 
           {cropSession && (
             <div style={{ border: '2px solid var(--holo-cyan)', borderRadius: 'var(--radius)', padding: 16 }}>
-              <p style={{ margin: '0 0 10px', fontWeight: 700 }}>
-                {cropSession.field === 'image' ? 'Crop the image (card shape)' : 'Crop the video'}
-              </p>
+              <p style={{ margin: '0 0 10px', fontWeight: 700 }}>{cropSession.field === 'image' ? 'Crop the image' : 'Crop the video'}</p>
               <CropBox
                 naturalWidth={cropSession.naturalWidth}
                 naturalHeight={cropSession.naturalHeight}
@@ -964,38 +1064,49 @@ export default function MagicBusinessCard() {
         </div>
       )}
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
-          <div style={{ flex: 1 }}>
-            <p style={{ margin: 0, fontWeight: 700 }}>Image</p>
-            <p className="hint" style={{ margin: '2px 0 0' }}>
-              {card?.cardType ? `Max 50MB. Cropped to the ${card.cardType} card shape.` : 'Choose a card type above first.'}
-            </p>
-          </div>
-          <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={(e) => handlePickImage(e.target.files?.[0])} />
-          <button type="button" className="secondary" disabled={busy || !card?.cardType} title={!card?.cardType ? 'Choose a card type first' : undefined} style={{ width: 'auto' }} onClick={() => imageInputRef.current?.click()}>
-            {card?.imageUrl ? 'Replace' : 'Upload'}
-          </button>
-          {card?.imageUrl && (
-            <button type="button" className="secondary" disabled={busy} style={{ width: 'auto' }} onClick={() => handleRemoveField('image')}>
-              Remove
+      {card?.requiresDesignUpload && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontWeight: 700 }}>Image</p>
+              <p className="hint" style={{ margin: '2px 0 0' }}>
+                Max 50MB. Overrides the design uploaded at checkout just for this Magic effect -- cropped to
+                the {card?.cardType || 'card'} shape.
+              </p>
+            </div>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              style={{ display: 'none' }}
+              onChange={(e) => handlePickImage(e.target.files?.[0])}
+            />
+            <button type="button" className="secondary" disabled={busy} style={{ width: 'auto' }} onClick={() => imageInputRef.current?.click()}>
+              {card?.imageUrl ? 'Replace' : 'Upload'}
             </button>
-          )}
+            {card?.imageUrl && (
+              <button type="button" className="secondary" disabled={busy} style={{ width: 'auto' }} onClick={handleRemoveImage}>
+                Remove
+              </button>
+            )}
+          </div>
         </div>
+      )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderTop: '1px solid var(--panel-border)', paddingTop: 16 }}>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ flex: 1 }}>
             <p style={{ margin: 0, fontWeight: 700 }}>Video</p>
             <p className="hint" style={{ margin: '2px 0 0' }}>
-              {card?.imageUrl ? 'MP4/MOV, up to 80MB. Crop is locked to the image’s aspect ratio.' : 'Upload the image first.'}
+              {card?.available ? 'MP4/MOV, up to 80MB. Crop is locked to the design image’s aspect ratio.' : 'This card has no design image to match yet.'}
             </p>
           </div>
           <input ref={videoInputRef} type="file" accept="video/mp4,video/quicktime" style={{ display: 'none' }} onChange={(e) => handlePickVideo(e.target.files?.[0])} />
-          <button type="button" className="secondary" disabled={busy || !card?.imageUrl} style={{ width: 'auto' }} onClick={() => videoInputRef.current?.click()}>
+          <button type="button" className="secondary" disabled={busy || !card?.available} style={{ width: 'auto' }} onClick={() => videoInputRef.current?.click()}>
             {card?.videoUrl ? 'Replace' : 'Upload'}
           </button>
           {card?.videoUrl && (
-            <button type="button" className="secondary" disabled={busy} style={{ width: 'auto' }} onClick={() => handleRemoveField('video')}>
+            <button type="button" className="secondary" disabled={busy} style={{ width: 'auto' }} onClick={handleRemoveVideo}>
               Remove
             </button>
           )}

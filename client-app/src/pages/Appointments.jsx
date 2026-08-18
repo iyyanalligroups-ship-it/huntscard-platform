@@ -91,7 +91,7 @@ function MiniMonthCalendar({ shownMonth, onShownMonthChange, selectedDay, onSele
   }
 
   return (
-    <div className="card" style={{ padding: 14 }}>
+    <div className="card solid-black-card" style={{ padding: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <strong style={{ fontSize: 13 }}>{shownMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</strong>
         <div style={{ display: 'flex', gap: 4 }}>
@@ -224,7 +224,7 @@ function WeekScheduleGrid({ weekStart, onWeekChange, onToday, appointments, inte
   const nowLineTop = ((nowMinutes - windowStart) / intervalMinutes) * SLOT_ROW_HEIGHT;
 
   return (
-    <div className="card" style={{ marginBottom: 20, overflowX: 'auto' }}>
+    <div className="card solid-black-card" style={{ marginBottom: 20, overflowX: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button type="button" className="secondary" style={{ width: 'auto', padding: '6px 14px', fontSize: 12, fontWeight: 700 }} onClick={onToday}>

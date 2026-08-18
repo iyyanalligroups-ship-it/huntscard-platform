@@ -61,14 +61,20 @@ export function videoPlaneBaseHFor(aspect) {
 // autofit case.
 export const MODEL_IMAGE_BASE_W = CARD_W_UNITS * MODEL_IMAGE_BASE_FRACTION;
 
-export const ASSUMED_FOV_DEG = 62; // typical phone rear-camera vertical FOV -- not a real calibration
+export const ASSUMED_FOV_DEG = 55; // typical phone MAIN (non-ultrawide) rear-camera vertical FOV -- not a real calibration, tune against a real device if the gap is still off
 // Assumed real-world viewing distance (in QR-side-length units) used by
 // anything that needs to simulate a camera without a live tracked pose
-// (the tilt-preview slider and ArScanPreview's static render) -- not a
-// real calibration either (ArView.jsx tracks the actual live distance
-// instead), just close enough to look plausible for typical close-up
-// phone photography of a card-sized object.
-export const ASSUMED_PREVIEW_DISTANCE = 18;
+// (the tilt-preview slider and ArScanPreview's static render) -- ArView.jsx
+// tracks the actual live distance instead, this is only for the editor's
+// own mockup. Calibrated against a real measured live scan (a phone held
+// at a natural, comfortable scanning distance measured pose.translation[2]
+// at 6.4 QR-units) -- previously 18, nearly 3x too far, which made the
+// editor's preview render everything (the 3D model especially, since it's
+// a real mesh with size dependent on perspective, unlike the flat
+// fixed-CSS-size element pills) noticeably SMALLER than a real scan would
+// show, so a model sized to "look right" in the editor came out
+// oversized on an actual phone.
+export const ASSUMED_PREVIEW_DISTANCE = 6.4;
 
 // Elements aren't confined to the printed card -- in AR they can float in
 // the space around it too, so drag ranges extend well past the card's own

@@ -8,3 +8,4 @@ uploads/banners/*
 !uploads/banners/.gitkeep
 encode-tool/local-config.json
 encode-tool/dist-electron/
+client-app/.certs/

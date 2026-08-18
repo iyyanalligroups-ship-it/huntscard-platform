@@ -15,6 +15,8 @@ const Card = require('../models/Card');
 const AttributeDefinition = require('../models/AttributeDefinition');
 const { getChargeAmount } = require('../utils/pricing');
 const { sendEmail } = require('../utils/email');
+const { getGlobalMagicLayoutDefault, mergeMagicLayout } = require('../utils/magicLayout');
+const { buildVariantMap, resolveCardVariant } = require('../utils/cardVariant');
 
 const router = express.Router();
 
@@ -497,11 +499,6 @@ router.get('/me', requireAuth, async (req, res) => {
 // SAME makeStorage() helper this file already uses for photo/banner/etc.
 const MAGIC_CARDS_DIR = path.join(__dirname, '..', 'uploads', 'magic-cards');
 fs.mkdirSync(MAGIC_CARDS_DIR, { recursive: true });
-const magicCardImageUpload = multer({
-  storage: makeStorage(MAGIC_CARDS_DIR),
-  limits: { fileSize: 50 * 1024 * 1024 },
-  fileFilter: imageFileFilter,
-});
 const magicCardVideoUpload = multer({
   storage: makeStorage(MAGIC_CARDS_DIR),
   limits: { fileSize: 80 * 1024 * 1024 },
@@ -512,10 +509,64 @@ const magicCardVideoUpload = multer({
     cb(null, true);
   },
 });
-function serializeMyMagicCard(doc) {
+// Custom Card only (see the requiresDesignUpload gate on the route below)
+// -- every other plan's design comes from the purchased variant, not a
+// client upload, see utils/cardVariant.js.
+const magicCardImageUpload = multer({
+  storage: makeStorage(MAGIC_CARDS_DIR),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      return cb(new Error('Only JPEG, PNG, or WEBP images are allowed'));
+    }
+    cb(null, true);
+  },
+});
+// Async because it needs admin's global Magic Layout default to fall back
+// to for a card that hasn't been customized yet (see utils/magicLayout.js's
+// mergeMagicLayout), AND the derived image source -- neither Custom
+// Card's checkout design nor a purchased variant's own front image is a
+// plain doc field anymore, see utils/cardVariant.js. `card` is the
+// resolved Card doc (cardType/cardVariantId) this MagicBusinessCard doc
+// belongs to; null only for the rare case its own physical card was
+// since deleted.
+async function serializeMyMagicCard(doc, card) {
+  const globalDefault = await getGlobalMagicLayoutDefault();
+  const { componentPositions, magicElements } = mergeMagicLayout(doc, globalDefault);
+  const resolved = card ? await resolveCardVariant(card) : null;
+
+  let imageUrl = null;
+  if (resolved?.requiresDesignUpload) {
+    // Custom Card only -- a client-set image here (see POST
+    // /magic-card/image below) takes priority over the checkout design,
+    // so they can use something different for the Magic Camera effect
+    // without touching the design used elsewhere (e.g. the printed card).
+    imageUrl = doc.imageUrl || null;
+    if (!imageUrl) {
+      const client = await Client.findOne({ clientId: doc.clientId }).select('customDesignFrontUrl');
+      imageUrl = client?.customDesignFrontUrl || null;
+    }
+  } else if (resolved?.hasVariant) {
+    imageUrl = resolved.frontImageUrl || doc.imageUrl || null; // doc.imageUrl here is an admin-only escape hatch -- clients on this plan can't upload their own
+  } else {
+    imageUrl = doc.imageUrl || null; // no resolvable variant -- admin-set fallback escape hatch
+  }
+
   return {
-    cardType: doc.cardType || null,
-    imageUrl: doc.imageUrl || null,
+    cardNumber: doc.cardNumber,
+    // Derived from the card's own purchased variant, never client-set --
+    // see models/MagicBusinessCard.js's own cardType comment.
+    cardType: resolved?.shape || doc.cardType || null,
+    // False when there's genuinely no design to track yet (no resolvable
+    // variant/checkout design and no admin-set fallback) -- the frontend
+    // hides the whole Magic Business Card section for this card rather
+    // than showing a broken/blank preview.
+    available: Boolean(imageUrl),
+    // Custom Card only -- lets the frontend show the Image upload control
+    // (POST /magic-card/image) just for this plan, matching the 403 the
+    // route itself enforces.
+    requiresDesignUpload: Boolean(resolved?.requiresDesignUpload),
+    imageUrl,
     imageWidth: doc.imageWidth,
     imageHeight: doc.imageHeight,
     videoUrl: doc.videoUrl || null,
@@ -527,74 +578,74 @@ function serializeMyMagicCard(doc) {
     },
     active: Boolean(doc.active),
     qrPosition: { x: doc.qrX ?? 82, y: doc.qrY ?? 82 },
-    componentPositions: {
-      contact: { x: doc.contactX ?? 20, y: doc.contactY ?? 120, z: doc.contactZ ?? 0, rotation: doc.contactRotation ?? 0 },
-      portfolio: { x: doc.portfolioX ?? 50, y: doc.portfolioY ?? 120, z: doc.portfolioZ ?? 0, rotation: doc.portfolioRotation ?? 0 },
-      social: { x: doc.socialX ?? 80, y: doc.socialY ?? 120, z: doc.socialZ ?? 0, rotation: doc.socialRotation ?? 0 },
-      huntsworld: { x: doc.huntsworldX ?? 50, y: doc.huntsworldY ?? 145, z: doc.huntsworldZ ?? 0, rotation: doc.huntsworldRotation ?? 0 },
-    },
-    // Admin-defined custom components (see AttributeDefinition.magicComponent)
-    // -- flattened from the Map the same way ArLayout.customElements is
-    // for the main AR Layout system.
-    magicElements: Object.fromEntries(doc.magicElements || []),
+    componentPositions,
+    // Admin-defined custom components (see AttributeDefinition.magicComponent).
+    magicElements,
   };
 }
 
-async function findOrCreateMyMagicCard(clientId) {
+async function findOrCreateMyMagicCard(clientId, cardNumber) {
   return MagicBusinessCard.findOneAndUpdate(
-    { clientId },
-    { $setOnInsert: { clientId } },
+    { clientId, cardNumber },
+    { $setOnInsert: { clientId, cardNumber } },
     { upsert: true, new: true }
   );
 }
 
-// GET /api/profile/magic-card -- the logged-in client's own Magic
-// Business Card (see backend/models/MagicBusinessCard.js). Returns the
-// CURRENT state regardless of active/draft status -- this used to filter
-// to active-only back when only admin could edit (hiding an in-progress
-// admin draft from a client who had no way to affect it), but now the
-// client is an editor of their own card too, so hiding their own draft
-// from themselves makes no sense. `active` in the response drives the
-// dashboard's publish/unpublish control instead.
+// Shared by every /magic-card* route below -- resolves which of the
+// client's own physical cards is being edited (query param for GET, body
+// field for POST/DELETE, including multipart bodies since multer parses
+// non-file fields into req.body too) and loads the actual Card doc it
+// refers to. Writes the 404 itself and returns null when that card
+// doesn't exist, so callers just need `const loaded = await loadMyCard(req, res); if (!loaded) return;`.
+async function loadMyCard(req, res) {
+  const cardNumber = Number(req.query.card ?? req.body?.cardNumber) || 1;
+  const card = await Card.findOne({ clientId: req.user.clientId, cardNumber }).select('cardType cardVariantId');
+  if (!card) {
+    res.status(404).json({ error: 'Card not found' });
+    return null;
+  }
+  return { cardNumber, card };
+}
+
+// GET /api/profile/magic-card?card=N -- the logged-in client's own Magic
+// Business Card for THAT specific physical card (see
+// backend/models/MagicBusinessCard.js). Returns the CURRENT state
+// regardless of active/draft status -- this used to filter to active-only
+// back when only admin could edit (hiding an in-progress admin draft from
+// a client who had no way to affect it), but now the client is an editor
+// of their own card too, so hiding their own draft from themselves makes
+// no sense. `active` in the response drives the dashboard's
+// publish/unpublish control instead.
 router.get('/magic-card', requireAuth, async (req, res) => {
-  const doc = await findOrCreateMyMagicCard(req.user.clientId);
-  res.json(serializeMyMagicCard(doc));
+  const loaded = await loadMyCard(req, res);
+  if (!loaded) return;
+  const doc = await findOrCreateMyMagicCard(req.user.clientId, loaded.cardNumber);
+  res.json(await serializeMyMagicCard(doc, loaded.card));
 });
 
-// POST /api/profile/magic-card/card-type -- 'vertical' or 'horizontal'
-// (85x55mm either way, just rotated). Chosen before the image, since it
-// determines the crop aspect ratio the image gets locked to.
-router.post('/magic-card/card-type', requireAuth, async (req, res) => {
-  try {
-    const { cardType } = req.body;
-    if (cardType !== 'vertical' && cardType !== 'horizontal') {
-      return res.status(400).json({ error: "cardType must be 'vertical' or 'horizontal'" });
-    }
-    const doc = await findOrCreateMyMagicCard(req.user.clientId);
-    doc.cardType = cardType;
-    await doc.save();
-    res.json(serializeMyMagicCard(doc));
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// POST /magic-card/card-type removed -- shape is derived from the card's
+// own purchased variant now (see utils/cardVariant.js), never
+// client-settable.
 
 // POST /api/profile/magic-card/qr-position -- where the client dragged
 // the AR QR onto their own card design (see MagicBusinessCard.jsx),
 // percentages 0-100 on each axis. Composited into the printable download
 // at this spot, so this can be saved/changed independently of (and more
-// often than) the image/video themselves.
+// often than) the video itself.
 router.post('/magic-card/qr-position', requireAuth, async (req, res) => {
   try {
+    const loaded = await loadMyCard(req, res);
+    if (!loaded) return;
     const { x, y } = req.body;
     if (typeof x !== 'number' || typeof y !== 'number' || x < 0 || x > 100 || y < 0 || y > 100) {
       return res.status(400).json({ error: 'x and y must be numbers between 0 and 100' });
     }
-    const doc = await findOrCreateMyMagicCard(req.user.clientId);
+    const doc = await findOrCreateMyMagicCard(req.user.clientId, loaded.cardNumber);
     doc.qrX = x;
     doc.qrY = y;
     await doc.save();
-    res.json(serializeMyMagicCard(doc));
+    res.json(await serializeMyMagicCard(doc, loaded.card));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -613,6 +664,8 @@ const MAGIC_CARD_BUILTIN_COMPONENT_KEYS = ['contact', 'portfolio', 'social', 'hu
 // between its own named fields and ArLayout.customElements.
 router.post('/magic-card/component-position', requireAuth, async (req, res) => {
   try {
+    const loaded = await loadMyCard(req, res);
+    if (!loaded) return;
     const { key, x, y, z, rotation } = req.body;
     if (typeof x !== 'number' || typeof y !== 'number') {
       return res.status(400).json({ error: 'x and y must be numbers' });
@@ -623,7 +676,7 @@ router.post('/magic-card/component-position', requireAuth, async (req, res) => {
     if (rotation !== undefined && (typeof rotation !== 'number' || rotation < -180 || rotation > 180)) {
       return res.status(400).json({ error: 'rotation must be a number between -180 and 180' });
     }
-    const doc = await findOrCreateMyMagicCard(req.user.clientId);
+    const doc = await findOrCreateMyMagicCard(req.user.clientId, loaded.cardNumber);
     if (MAGIC_CARD_BUILTIN_COMPONENT_KEYS.includes(key)) {
       doc[`${key}X`] = x;
       doc[`${key}Y`] = y;
@@ -641,24 +694,32 @@ router.post('/magic-card/component-position', requireAuth, async (req, res) => {
         rotation: rotation ?? existing?.rotation ?? 0,
       });
     }
+    // From this point on, this client's OWN saved positions win over
+    // admin's global default -- see utils/magicLayout.js's mergeMagicLayout.
+    doc.layoutCustomized = true;
     await doc.save();
-    res.json(serializeMyMagicCard(doc));
+    res.json(await serializeMyMagicCard(doc, loaded.card));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/profile/magic-card/activate -- requires both an image and a
-// video (same rule as admin's version of this route).
+// POST /api/profile/magic-card/activate -- requires a video AND a
+// resolvable image (variant/checkout design/admin fallback -- see
+// serializeMyMagicCard), not a raw doc.imageUrl check anymore, since most
+// cards never have their own uploaded image field populated at all now.
 router.post('/magic-card/activate', requireAuth, async (req, res) => {
   try {
-    const doc = await findOrCreateMyMagicCard(req.user.clientId);
-    if (!doc.imageUrl || !doc.videoUrl) {
-      return res.status(400).json({ error: 'Add both an image and a video before activating.' });
+    const loaded = await loadMyCard(req, res);
+    if (!loaded) return;
+    const doc = await findOrCreateMyMagicCard(req.user.clientId, loaded.cardNumber);
+    const serialized = await serializeMyMagicCard(doc, loaded.card);
+    if (!serialized.available || !doc.videoUrl) {
+      return res.status(400).json({ error: 'This card needs a video (and a resolvable design) before activating.' });
     }
     doc.active = true;
     await doc.save();
-    res.json(serializeMyMagicCard(doc));
+    res.json(await serializeMyMagicCard(doc, loaded.card));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -666,36 +727,70 @@ router.post('/magic-card/activate', requireAuth, async (req, res) => {
 
 router.post('/magic-card/deactivate', requireAuth, async (req, res) => {
   try {
-    const doc = await findOrCreateMyMagicCard(req.user.clientId);
+    const loaded = await loadMyCard(req, res);
+    if (!loaded) return;
+    const doc = await findOrCreateMyMagicCard(req.user.clientId, loaded.cardNumber);
     doc.active = false;
     await doc.save();
-    res.json(serializeMyMagicCard(doc));
+    res.json(await serializeMyMagicCard(doc, loaded.card));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+// POST /api/profile/magic-card/image?card=N -- Custom Card only. Every
+// other plan's design comes from the purchased variant (see
+// utils/cardVariant.js) and isn't client-uploadable; this route 403s for
+// those instead of silently accepting a file nothing will ever show.
 router.post('/magic-card/image', requireAuth, magicCardImageUpload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    const doc = await findOrCreateMyMagicCard(req.user.clientId);
+    const loaded = await loadMyCard(req, res);
+    if (!loaded) return;
+    const resolved = await resolveCardVariant(loaded.card);
+    if (!resolved.requiresDesignUpload) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(403).json({ error: 'Only Custom Card can upload an image here.' });
+    }
+    const doc = await findOrCreateMyMagicCard(req.user.clientId, loaded.cardNumber);
     const previousUrl = doc.imageUrl;
     doc.imageUrl = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
     doc.imageWidth = Number(req.body.width) || undefined;
     doc.imageHeight = Number(req.body.height) || undefined;
     await doc.save();
     if (previousUrl) fs.unlink(path.join(MAGIC_CARDS_DIR, path.basename(previousUrl)), () => {});
-    res.json(serializeMyMagicCard(doc));
+    res.json(await serializeMyMagicCard(doc, loaded.card));
   } catch (err) {
     const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 50MB.' : err.message;
     res.status(400).json({ error: message });
   }
 });
 
+// DELETE /api/profile/magic-card/image?card=N -- clears the client's own
+// override, falling back to the checkout design again (see
+// serializeMyMagicCard above), not to "no image" outright.
+router.delete('/magic-card/image', requireAuth, async (req, res) => {
+  try {
+    const loaded = await loadMyCard(req, res);
+    if (!loaded) return;
+    const doc = await findOrCreateMyMagicCard(req.user.clientId, loaded.cardNumber);
+    if (doc.imageUrl) fs.unlink(path.join(MAGIC_CARDS_DIR, path.basename(doc.imageUrl)), () => {});
+    doc.imageUrl = undefined;
+    doc.imageWidth = undefined;
+    doc.imageHeight = undefined;
+    await doc.save();
+    res.json(await serializeMyMagicCard(doc, loaded.card));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/magic-card/video', requireAuth, magicCardVideoUpload.single('video'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    const doc = await findOrCreateMyMagicCard(req.user.clientId);
+    const loaded = await loadMyCard(req, res);
+    if (!loaded) return;
+    const doc = await findOrCreateMyMagicCard(req.user.clientId, loaded.cardNumber);
     const previousUrl = doc.videoUrl;
     doc.videoUrl = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
     doc.videoCropX = Number(req.body.cropX) || 0;
@@ -704,35 +799,27 @@ router.post('/magic-card/video', requireAuth, magicCardVideoUpload.single('video
     doc.videoCropHeight = Number(req.body.cropHeight) || 1;
     await doc.save();
     if (previousUrl) fs.unlink(path.join(MAGIC_CARDS_DIR, path.basename(previousUrl)), () => {});
-    res.json(serializeMyMagicCard(doc));
+    res.json(await serializeMyMagicCard(doc, loaded.card));
   } catch (err) {
     const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 80MB.' : err.message;
     res.status(400).json({ error: message });
   }
 });
 
-router.delete('/magic-card/:field', requireAuth, async (req, res) => {
+// DELETE /api/profile/magic-card/video?card=N
+router.delete('/magic-card/video', requireAuth, async (req, res) => {
   try {
-    const { field } = req.params;
-    if (field !== 'image' && field !== 'video') {
-      return res.status(400).json({ error: 'Unknown field' });
-    }
-    const doc = await findOrCreateMyMagicCard(req.user.clientId);
-    if (field === 'image') {
-      if (doc.imageUrl) fs.unlink(path.join(MAGIC_CARDS_DIR, path.basename(doc.imageUrl)), () => {});
-      doc.imageUrl = undefined;
-      doc.imageWidth = undefined;
-      doc.imageHeight = undefined;
-    } else {
-      if (doc.videoUrl) fs.unlink(path.join(MAGIC_CARDS_DIR, path.basename(doc.videoUrl)), () => {});
-      doc.videoUrl = undefined;
-      doc.videoCropX = undefined;
-      doc.videoCropY = undefined;
-      doc.videoCropWidth = undefined;
-      doc.videoCropHeight = undefined;
-    }
+    const loaded = await loadMyCard(req, res);
+    if (!loaded) return;
+    const doc = await findOrCreateMyMagicCard(req.user.clientId, loaded.cardNumber);
+    if (doc.videoUrl) fs.unlink(path.join(MAGIC_CARDS_DIR, path.basename(doc.videoUrl)), () => {});
+    doc.videoUrl = undefined;
+    doc.videoCropX = undefined;
+    doc.videoCropY = undefined;
+    doc.videoCropWidth = undefined;
+    doc.videoCropHeight = undefined;
     await doc.save();
-    res.json(serializeMyMagicCard(doc));
+    res.json(await serializeMyMagicCard(doc, loaded.card));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -859,9 +946,54 @@ router.post('/unpause-card', requireAuth, async (req, res) => {
 router.get('/cards', requireAuth, async (req, res) => {
   try {
     const cards = await Card.find({ clientId: req.user.clientId })
-      .select('cardNumber cardType active encoded')
+      .select('cardNumber cardType active encoded label cardVariantId')
       .sort({ cardNumber: 1 });
-    res.json(cards);
+    // Resolved variant name/shape so the AR Layout/Magic Business Card
+    // dashboard pages' card pickers can show "Card 1 · Front desk ·
+    // Apex · Horizontal" without doing their own plan lookup.
+    const maps = await buildVariantMap(cards);
+    // Custom Card's own image can now differ PER CARD (a client-set
+    // override on that card's own MagicBusinessCard doc, see
+    // POST /magic-card/image), not just once per account -- batched here
+    // so AR Layout's card backdrop resolves the exact same image Magic
+    // Business Card actually shows for each card, instead of always
+    // falling back to the one shared Client.customDesignFrontUrl.
+    const magicDocs = await MagicBusinessCard.find({ clientId: req.user.clientId }).select('cardNumber imageUrl');
+    const magicImageByCardNumber = Object.fromEntries(magicDocs.map((d) => [d.cardNumber, d.imageUrl || null]));
+    const client = await Client.findOne({ clientId: req.user.clientId }).select('customDesignFrontUrl');
+    const withVariant = await Promise.all(
+      cards.map(async (c) => {
+        const resolved = await resolveCardVariant(c, maps);
+        // Same priority order serializeMyMagicCard uses: this card's own
+        // override, then the checkout design, then (for every other
+        // plan) the purchased variant's own image.
+        const cardDesignUrl = resolved.requiresDesignUpload
+          ? magicImageByCardNumber[c.cardNumber] || client?.customDesignFrontUrl || null
+          : resolved.frontImageUrl;
+        return {
+          cardNumber: c.cardNumber,
+          cardType: c.cardType,
+          active: c.active,
+          encoded: c.encoded,
+          label: c.label,
+          variantName: resolved.variantName,
+          shape: resolved.shape,
+          planName: resolved.planName,
+          // So the AR Layout/Magic Business Card pages can gate per
+          // SELECTED card instead of the account-level Client.cardType,
+          // without a second round trip per card.
+          arEnabled: resolved.arEnabled,
+          magicEnabled: resolved.magicEnabled,
+          // The actual purchased/uploaded design for THIS specific card --
+          // most plans (e.g. Apex) don't let the client upload their own
+          // image at all, so the AR Layout editor's card backdrop needs
+          // to come from here, not the client's own (unrelated) profile
+          // banner.
+          cardDesignUrl,
+        };
+      })
+    );
+    res.json(withVariant);
   } catch (err) {
     console.error('[cards GET]', err);
     res.status(500).json({ error: 'Failed to load cards' });
@@ -1089,6 +1221,28 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
       quantity,
       variantBreakdown,
     });
+
+    // Only one plan is ever active at a time -- Premium/Elite/Apex/Custom/
+    // Nova don't mix. Switching plans REPLACES whatever the client had
+    // before: their old Card(s), plus those cards' own AR Layout / Magic
+    // Business Card customizations, are permanently deleted here, not
+    // archived. A repeat purchase of the SAME plan (e.g. a second Apex
+    // card) isn't affected -- only cards of a genuinely DIFFERENT type are
+    // removed, so createCardsForPurchase below still just adds another
+    // unit in that case. Deleted before createCardsForPurchase runs so its
+    // own cardNumber sequencing restarts clean when the plan actually changed.
+    const oldCards = await Card.find({
+      clientId: req.user.clientId,
+      cardType: { $ne: requestedPlan.toLowerCase() },
+    }).select('cardNumber');
+    if (oldCards.length > 0) {
+      const oldCardNumbers = oldCards.map((c) => c.cardNumber);
+      await Promise.all([
+        Card.deleteMany({ clientId: req.user.clientId, cardNumber: { $in: oldCardNumbers } }),
+        ArLayout.deleteMany({ clientId: req.user.clientId, cardNumber: { $in: oldCardNumbers } }),
+        MagicBusinessCard.deleteMany({ clientId: req.user.clientId, cardNumber: { $in: oldCardNumbers } }),
+      ]);
+    }
 
     // One trackable physical card per unit paid for -- a repeat purchase
     // against a client who already has a (possibly already-delivered) card
@@ -1368,11 +1522,17 @@ const ArLayout = require('../models/ArLayout');
 router.get('/ar-layout', requireAuth, async (req, res) => {
   try {
     const clientId = req.user.clientId;
-    let layout = await ArLayout.findOne({ clientId });
+    // Which of this client's own physical cards -- each can have its own
+    // arrangement (see models/ArLayout.js's own cardNumber comment).
+    // Defaults to card #1 when omitted, same convention every other
+    // per-card route in this file uses.
+    const cardNumber = Number(req.query.card) || 1;
+    let layout = await ArLayout.findOne({ clientId, cardNumber });
     if (!layout) {
       const fallback = (await ArLayout.findOne({ key: 'global' })) || new ArLayout({ key: 'global' });
       layout = new ArLayout({
         clientId,
+        cardNumber,
         qr: fallback.qr,
         video: fallback.video,
         contact: fallback.contact,
@@ -1401,11 +1561,17 @@ router.get('/ar-layout', requireAuth, async (req, res) => {
 router.put('/ar-layout', requireAuth, async (req, res) => {
   try {
     const clientId = req.user.clientId;
+    const cardNumber = Number(req.body.cardNumber) || 1;
 
-    const client = await Client.findOne({ clientId }).select('cardType');
-    const plan = await CardPlan.findOne({ key: client?.cardType }).select('arEnabled');
-    if (!plan?.arEnabled) {
-      return res.status(403).json({ error: 'AR Layout is not included in your current plan.' });
+    // Gate on THIS specific card's own plan, not Client.cardType -- a
+    // client's card #2 can legitimately be on a different plan than their
+    // account-level field (each Card gets its own cardType at purchase,
+    // see createCardsForPurchase above).
+    const card = await Card.findOne({ clientId, cardNumber }).select('cardType cardVariantId');
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+    const resolved = await resolveCardVariant(card);
+    if (!resolved.arEnabled) {
+      return res.status(403).json({ error: 'AR Layout is not included in this card\'s plan.' });
     }
 
     const {
@@ -1427,7 +1593,7 @@ router.put('/ar-layout', requireAuth, async (req, res) => {
       videoScaleY,
       customElements,
     } = req.body || {};
-    const updates = { clientId, updatedBy: req.user.loginEmail || clientId };
+    const updates = { clientId, cardNumber, updatedBy: req.user.loginEmail || clientId };
     if (qr) updates.qr = qr;
     if (video) updates.video = video;
     if (contact) updates.contact = contact;
@@ -1451,7 +1617,7 @@ router.put('/ar-layout', requireAuth, async (req, res) => {
     if (customElements && typeof customElements === 'object') updates.customElements = customElements;
 
     const layout = await ArLayout.findOneAndUpdate(
-      { clientId },
+      { clientId, cardNumber },
       { $set: updates },
       { new: true, upsert: true }
     );

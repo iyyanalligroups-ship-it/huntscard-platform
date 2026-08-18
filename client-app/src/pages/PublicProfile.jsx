@@ -242,7 +242,11 @@ export default function PublicProfile() {
   }
 
   if (arChoice === 'magic') {
-    return <Navigate to={`/magic-camera/${clientId}`} replace />;
+    // Carry cardNumber through -- MagicCamera.jsx needs it to fetch THIS
+    // specific physical card's Magic Business Card (image/video/layout),
+    // not just any active one for this client. Dropping it here used to
+    // mean every one of a client's cards showed the same experience.
+    return <Navigate to={`/magic-camera/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`} replace />;
   }
 
   if (useMindAR) {
