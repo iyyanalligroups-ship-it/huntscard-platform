@@ -396,7 +396,7 @@ export default function MagicCamera() {
   }
 
   async function handleStart() {
-    const targets = clientId ? (scopedCard ? [scopedCard] : []) : getActiveTargets(pieces, cards, streetArt);
+    let targets = clientId ? (scopedCard ? [scopedCard] : []) : getActiveTargets(pieces, cards, streetArt);
     if (!targets.length || !containerRef.current) return;
     setLoadError('');
     setStatus('compiling');
@@ -419,7 +419,27 @@ export default function MagicCamera() {
       // this just awaits whatever's already in flight instead of starting
       // it fresh here.
       const compilePromise = (async () => {
-        const targetImgs = await Promise.all(targets.map((p) => prepareTargetImage(p.imageUrl)));
+        // Promise.allSettled, not Promise.all -- ONE broken target (a bad
+        // stored URL, a file missing on this server, a real network
+        // blip) used to reject the whole batch and take Magic Camera
+        // down for every OTHER target too, gallery-wide, from a single
+        // bad record. Skips just the broken one(s) instead; `targets`
+        // itself is reassigned to match so every later step (dimensions
+        // indexing, targetEntries, controller.addImageTargetsFromBuffer)
+        // stays aligned with the filtered list, not the original.
+        const settled = await Promise.allSettled(targets.map((p) => prepareTargetImage(p.imageUrl)));
+        const targetImgs = [];
+        const loadedTargets = [];
+        settled.forEach((result, i) => {
+          if (result.status === 'fulfilled') {
+            targetImgs.push(result.value);
+            loadedTargets.push(targets[i]);
+          } else {
+            console.warn('[MagicCamera] Skipping a target whose image failed to load:', targets[i]?.imageUrl, result.reason);
+          }
+        });
+        if (!targetImgs.length) throw new Error('Could not load the target image');
+        targets = loadedTargets;
         const compiler = new Compiler();
         await compiler.compileImageTargets(targetImgs, (percent) => {
           setStatusMessage(`Compiling tracking data... ${Math.round(percent)}%`);
