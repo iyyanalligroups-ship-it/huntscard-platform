@@ -19,9 +19,10 @@ const { sendPushToClient } = require('../utils/push');
 const ArLayout = require('../models/ArLayout');
 const ArIcon = require('../models/ArIcon');
 const MagicArt = require('../models/MagicArt');
+const StreetArt = require('../models/StreetArt');
+const VideoShort = require('../models/VideoShort');
 const MagicBusinessCard = require('../models/MagicBusinessCard');
 const AttributeDefinition = require('../models/AttributeDefinition');
-const CatalogVideo = require('../models/CatalogVideo');
 const SiteSetting = require('../models/SiteSetting');
 const FaqEntry = require('../models/FaqEntry');
 const { getChargeAmount } = require('../utils/pricing');
@@ -83,20 +84,18 @@ router.get('/plans', async (req, res) => {
   res.json(plans.map((p) => ({ ...p.toObject(), chargeAmount: getChargeAmount(p) })));
 });
 
-// GET /api/public/catalog -- active card types that have a showcase
-// video uploaded (see admin.js), for the public Catalog page. Types
-// without a video simply don't appear -- no placeholder/blank entries.
+// GET /api/public/catalog -- every ACTIVE Video Short (see
+// admin.js/VideoShort.js) with a videoUrl actually set, for the public
+// Catalog page's "See it in motion" section. Not tied to card plans --
+// see VideoShort.js's own comment for why that coupling was removed.
 router.get('/catalog', async (req, res) => {
   try {
-    const plans = await CardPlan.find({ active: true }).select('name key').sort({ createdAt: 1 });
-    const videos = await CatalogVideo.find();
-    const videoByType = {};
-    videos.forEach((v) => { videoByType[v.cardType] = v.videoUrl; });
-
-    const result = plans
-      .filter((p) => videoByType[p.key])
-      .map((p) => ({ cardType: p.key, name: p.name, videoUrl: videoByType[p.key] }));
-    res.json(result);
+    const docs = await VideoShort.find({ active: true }).sort({ createdAt: 1 });
+    res.json(
+      docs
+        .filter((d) => d.videoUrl) // a freshly-created, still-blank clip shouldn't appear
+        .map((d) => ({ _id: d._id, title: d.title, videoUrl: d.videoUrl }))
+    );
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -690,6 +689,47 @@ router.get('/magic-cards', async (req, res) => {
         },
       });
     }
+
+    res.set('Cache-Control', 'no-store');
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/public/street-art -- every ACTIVE Street Art piece (see
+// backend/models/StreetArt.js) with an image and at least one overlay clip
+// that has its own video. Read-only, no auth -- same trust model as
+// /magic-art and /magic-cards above (this data was always effectively
+// public info, just never linked from a page). Deliberately NOT rendered
+// as a browsable gallery anywhere in client-app, unlike Magic Art --
+// scanned by MagicCamera.jsx purely as extra tracking targets, nothing
+// links to this route or lists these pieces by name/location.
+router.get('/street-art', async (req, res) => {
+  try {
+    const docs = await StreetArt.find({ active: true, imageUrl: { $ne: null } });
+    const results = docs
+      .map((doc) => ({
+        imageUrl: doc.imageUrl,
+        imageWidth: doc.imageWidth,
+        imageHeight: doc.imageHeight,
+        overlays: (doc.overlays || [])
+          .filter((o) => o.videoUrl)
+          .map((o) => ({
+            videoUrl: o.videoUrl,
+            videoCrop: {
+              x: o.videoCropX ?? 0,
+              y: o.videoCropY ?? 0,
+              width: o.videoCropWidth ?? 1,
+              height: o.videoCropHeight ?? 1,
+            },
+            x: o.x,
+            y: o.y,
+            width: o.width,
+            height: o.height,
+          })),
+      }))
+      .filter((piece) => piece.overlays.length > 0);
 
     res.set('Cache-Control', 'no-store');
     res.json(results);

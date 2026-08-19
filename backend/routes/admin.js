@@ -13,12 +13,13 @@ const CatalogEntry = require('../models/CatalogEntry');
 const ArLayout = require('../models/ArLayout');
 const ArIcon = require('../models/ArIcon');
 const MagicArt = require('../models/MagicArt');
+const StreetArt = require('../models/StreetArt');
 const MagicBusinessCard = require('../models/MagicBusinessCard');
 const AttributeDefinition = require('../models/AttributeDefinition');
 const CardRequest = require('../models/CardRequest');
 const ContactMessage = require('../models/ContactMessage');
 const Contact = require('../models/Contact');
-const CatalogVideo = require('../models/CatalogVideo');
+const VideoShort = require('../models/VideoShort');
 const Card = require('../models/Card');
 const CardTicket = require('../models/CardTicket');
 const ChatMessage = require('../models/ChatMessage');
@@ -77,33 +78,6 @@ const uploadCatalogEntryImages = multer({
   fileFilter: (req, file, cb) => {
     if (!THEME_MIME_TYPES.includes(file.mimetype)) {
       return cb(new Error('Only JPEG, PNG, or WEBP images are allowed'));
-    }
-    cb(null, true);
-  },
-});
-
-// ---------------------------------------------------------------------
-// Catalog video upload -- one showcase video per card type (Basic, Pro,
-// Elite, etc.), shown on the public Catalog page. Same size class as the
-// AR green-screen video (see profile.js) -- short clips easily run
-// 20-50MB, so this needs a much larger limit than a compressed photo.
-// ---------------------------------------------------------------------
-const CATALOG_VIDEOS_DIR = path.join(__dirname, '..', 'uploads', 'catalog');
-fs.mkdirSync(CATALOG_VIDEOS_DIR, { recursive: true });
-const ALLOWED_CATALOG_VIDEO_MIME_TYPES = ['video/mp4', 'video/quicktime'];
-const catalogVideoStorage = multer.diskStorage({
-  destination: CATALOG_VIDEOS_DIR,
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.mp4';
-    cb(null, `catalog-${req.params.cardType}-${crypto.randomBytes(6).toString('hex')}${ext}`);
-  },
-});
-const uploadCatalogVideo = multer({
-  storage: catalogVideoStorage,
-  limits: { fileSize: 80 * 1024 * 1024 }, // 80MB, matches the AR video limit
-  fileFilter: (req, file, cb) => {
-    if (!ALLOWED_CATALOG_VIDEO_MIME_TYPES.includes(file.mimetype)) {
-      return cb(new Error('Only MP4 or MOV videos are allowed'));
     }
     cb(null, true);
   },
@@ -2033,6 +2007,292 @@ router.delete('/magic-art/:id/:field', requireAdmin, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------
+// Street Art -- a separate, isolated admin-only feature (does NOT touch AR
+// QR/ArLayout, Magic Business Card, or Magic Art anywhere in this block).
+// Real-world wall art/mural photos, each with one or more positioned
+// overlay video clips (a mural can need more than one -- e.g. each wing of
+// a painted wings mural animates independently), see StreetArt.js.
+// Deliberately has NO public listing route anywhere -- unlike Magic Art's
+// public gallery, a street art piece is only ever discoverable by scanning
+// the physical wall art itself. Client-side scan consumption is a
+// follow-up step, not built yet.
+// ---------------------------------------------------------------------
+const STREET_ART_DIR = path.join(__dirname, '..', 'uploads', 'street-art');
+fs.mkdirSync(STREET_ART_DIR, { recursive: true });
+const streetArtStorage = multer.diskStorage({
+  destination: STREET_ART_DIR,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '';
+    cb(null, `${crypto.randomBytes(8).toString('hex')}${ext}`);
+  },
+});
+const streetArtImageUpload = multer({
+  storage: streetArtStorage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  fileFilter: (req, file, cb) => {
+    if (!THEME_MIME_TYPES.includes(file.mimetype)) {
+      return cb(new Error('Only JPEG, PNG, or WEBP images are allowed'));
+    }
+    cb(null, true);
+  },
+});
+// Same video mimetypes as Magic Art's overlay video upload.
+const STREET_ART_VIDEO_MIME_TYPES = ['video/mp4', 'video/quicktime'];
+const streetArtVideoUpload = multer({
+  storage: streetArtStorage,
+  limits: { fileSize: 80 * 1024 * 1024 }, // 80MB
+  fileFilter: (req, file, cb) => {
+    if (!STREET_ART_VIDEO_MIME_TYPES.includes(file.mimetype)) {
+      return cb(new Error('Only MP4 or MOV videos are allowed'));
+    }
+    cb(null, true);
+  },
+});
+
+function serializeStreetArt(doc) {
+  return {
+    _id: doc._id,
+    name: doc.name,
+    description: doc.description,
+    location: doc.location,
+    imageUrl: doc.imageUrl,
+    imageWidth: doc.imageWidth,
+    imageHeight: doc.imageHeight,
+    overlays: (doc.overlays || []).map((o) => ({
+      _id: o._id,
+      label: o.label,
+      videoUrl: o.videoUrl,
+      videoCropX: o.videoCropX,
+      videoCropY: o.videoCropY,
+      videoCropWidth: o.videoCropWidth,
+      videoCropHeight: o.videoCropHeight,
+      x: o.x,
+      y: o.y,
+      width: o.width,
+      height: o.height,
+    })),
+    active: doc.active,
+    updatedBy: doc.updatedBy,
+  };
+}
+
+// GET /api/admin/street-art -- every piece, oldest first.
+router.get('/street-art', requireAdmin, async (req, res) => {
+  try {
+    const docs = await StreetArt.find({}).sort({ createdAt: 1 });
+    res.json(docs.map(serializeStreetArt));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/street-art -- create one new empty piece ("+ Add Street Art").
+router.post('/street-art', requireAdmin, async (req, res) => {
+  try {
+    const doc = await StreetArt.create({ updatedBy: req.admin?.email || 'unknown' });
+    res.status(201).json(serializeStreetArt(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/admin/street-art/:id -- update a piece's name/description/location.
+router.patch('/street-art/:id', requireAdmin, async (req, res) => {
+  try {
+    const doc = await StreetArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    if (req.body.name !== undefined) doc.name = req.body.name;
+    if (req.body.description !== undefined) doc.description = req.body.description;
+    if (req.body.location !== undefined) doc.location = req.body.location;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeStreetArt(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/street-art/:id/activate -- requires a name, an image, at
+// least one overlay clip, and every existing overlay to have its own video
+// (a half-positioned overlay with no video would just be a dead zone).
+router.post('/street-art/:id/activate', requireAdmin, async (req, res) => {
+  try {
+    const doc = await StreetArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    const hasIncompleteOverlay = (doc.overlays || []).some((o) => !o.videoUrl);
+    if (!doc.name?.trim() || !doc.imageUrl || !doc.overlays?.length || hasIncompleteOverlay) {
+      return res.status(400).json({ error: 'This piece needs a name, an image, and at least one overlay clip -- every overlay must have a video before activating.' });
+    }
+    doc.active = true;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    const docs = await StreetArt.find({}).sort({ createdAt: 1 });
+    res.json(docs.map(serializeStreetArt));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/street-art/:id/deactivate
+router.post('/street-art/:id/deactivate', requireAdmin, async (req, res) => {
+  try {
+    const doc = await StreetArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    doc.active = false;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    const docs = await StreetArt.find({}).sort({ createdAt: 1 });
+    res.json(docs.map(serializeStreetArt));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/street-art/:id -- remove a whole piece (base image +
+// every overlay's video file + the doc).
+router.delete('/street-art/:id', requireAdmin, async (req, res) => {
+  try {
+    const doc = await StreetArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    if (doc.imageUrl) fs.unlink(path.join(STREET_ART_DIR, path.basename(doc.imageUrl)), () => {});
+    for (const o of doc.overlays || []) {
+      if (o.videoUrl) fs.unlink(path.join(STREET_ART_DIR, path.basename(o.videoUrl)), () => {});
+    }
+    await doc.deleteOne();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/street-art/:id/image -- upload/replace the base mural
+// photo. Unlike Magic Art, no fixed crop aspect -- kept as whatever shape
+// the real wall photo is, since the overlay boxes below are positioned
+// against its actual dimensions. `width`/`height` are the client's own
+// (possibly downscaled) pixel size.
+router.post('/street-art/:id/image', requireAdmin, streetArtImageUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const doc = await StreetArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    const previousUrl = doc.imageUrl;
+    doc.imageUrl = `${process.env.BACKEND_URL}/uploads/street-art/${req.file.filename}`;
+    doc.imageWidth = Number(req.body.width) || undefined;
+    doc.imageHeight = Number(req.body.height) || undefined;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    if (previousUrl) {
+      fs.unlink(path.join(STREET_ART_DIR, path.basename(previousUrl)), () => {});
+    }
+    res.json(serializeStreetArt(doc));
+  } catch (err) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 50MB.' : err.message;
+    res.status(400).json({ error: message });
+  }
+});
+
+// DELETE /api/admin/street-art/:id/image -- clear just the base photo (the
+// piece and its overlays stay put, but obviously can't be activated
+// without one).
+router.delete('/street-art/:id/image', requireAdmin, async (req, res) => {
+  try {
+    const doc = await StreetArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    if (doc.imageUrl) fs.unlink(path.join(STREET_ART_DIR, path.basename(doc.imageUrl)), () => {});
+    doc.imageUrl = undefined;
+    doc.imageWidth = undefined;
+    doc.imageHeight = undefined;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeStreetArt(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/street-art/:id/overlays -- add one new overlay clip
+// (default centered box, no video yet) -- e.g. "+ Add overlay" per wing.
+router.post('/street-art/:id/overlays', requireAdmin, async (req, res) => {
+  try {
+    const doc = await StreetArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    doc.overlays.push({ label: req.body.label || `Clip ${doc.overlays.length + 1}` });
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeStreetArt(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/admin/street-art/:id/overlays/:overlayId -- update one
+// overlay's label and/or position/size (x/y/width/height, dragged in the
+// admin's positioning canvas).
+router.patch('/street-art/:id/overlays/:overlayId', requireAdmin, async (req, res) => {
+  try {
+    const doc = await StreetArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    const overlay = doc.overlays.id(req.params.overlayId);
+    if (!overlay) return res.status(404).json({ error: 'Overlay not found' });
+    for (const field of ['label', 'x', 'y', 'width', 'height']) {
+      if (req.body[field] !== undefined) overlay[field] = req.body[field];
+    }
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeStreetArt(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/street-art/:id/overlays/:overlayId -- remove one
+// overlay clip (its video file + the sub-document).
+router.delete('/street-art/:id/overlays/:overlayId', requireAdmin, async (req, res) => {
+  try {
+    const doc = await StreetArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    const overlay = doc.overlays.id(req.params.overlayId);
+    if (!overlay) return res.status(404).json({ error: 'Overlay not found' });
+    if (overlay.videoUrl) fs.unlink(path.join(STREET_ART_DIR, path.basename(overlay.videoUrl)), () => {});
+    overlay.deleteOne();
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeStreetArt(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/street-art/:id/overlays/:overlayId/video -- upload/replace
+// one overlay clip's video. cropX/cropY/cropWidth/cropHeight (fractional
+// 0-1) describe a display-only crop, same shape as Magic Art's video
+// upload -- the file itself is stored exactly as uploaded.
+router.post('/street-art/:id/overlays/:overlayId/video', requireAdmin, streetArtVideoUpload.single('video'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const doc = await StreetArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    const overlay = doc.overlays.id(req.params.overlayId);
+    if (!overlay) return res.status(404).json({ error: 'Overlay not found' });
+    const previousUrl = overlay.videoUrl;
+    overlay.videoUrl = `${process.env.BACKEND_URL}/uploads/street-art/${req.file.filename}`;
+    overlay.videoCropX = Number(req.body.cropX) || 0;
+    overlay.videoCropY = Number(req.body.cropY) || 0;
+    overlay.videoCropWidth = Number(req.body.cropWidth) || 1;
+    overlay.videoCropHeight = Number(req.body.cropHeight) || 1;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    if (previousUrl) {
+      fs.unlink(path.join(STREET_ART_DIR, path.basename(previousUrl)), () => {});
+    }
+    res.json(serializeStreetArt(doc));
+  } catch (err) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 80MB.' : err.message;
+    res.status(400).json({ error: message });
+  }
+});
+
+// ---------------------------------------------------------------------
 // Magic Business Card -- one personal AR image+video pair PER CLIENT
 // (unlike Magic Art's shared gallery above), see MagicBusinessCard.js.
 // Admin-curated: only this route block ever writes it. Consumed by the
@@ -2484,61 +2744,57 @@ router.delete('/attributes/:id', requireAdmin, async (req, res) => {
 
 
 // ---------------------------------------------------------------------
-// Catalog -- admin picks a card type and uploads the showcase video
-// clients see on the public Catalog page.
+// Video Shorts -- a free-form list of short demo clips shown on the
+// public Catalog page's "See it in motion" section, see VideoShort.js.
+// Not tied to a specific card plan (an earlier one-per-CardPlan design
+// was replaced with this) -- the admin pastes an already-hosted video URL
+// directly, no file upload/storage here at all.
 // ---------------------------------------------------------------------
 
-// GET /api/admin/catalog -- every card type, each with its current video
-// (null if none uploaded yet), so the page can list all types in one go.
-router.get('/catalog', requireAdmin, async (req, res) => {
-  try {
-    const plans = await CardPlan.find().sort({ createdAt: 1 });
-    const videos = await CatalogVideo.find();
-    const videoByType = {};
-    videos.forEach((v) => { videoByType[v.cardType] = v; });
+function serializeVideoShort(doc) {
+  return { _id: doc._id, title: doc.title, videoUrl: doc.videoUrl, active: doc.active, updatedBy: doc.updatedBy };
+}
 
-    const result = plans.map((p) => ({
-      cardType: p.key,
-      name: p.name,
-      active: p.active,
-      video: videoByType[p.key] || null,
-    }));
-    res.json(result);
+// GET /api/admin/video-shorts -- every clip, oldest first.
+router.get('/video-shorts', requireAdmin, async (req, res) => {
+  try {
+    const docs = await VideoShort.find({}).sort({ createdAt: 1 });
+    res.json(docs.map(serializeVideoShort));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/admin/catalog/:cardType -- multipart/form-data, field name
-// "video". Upserts -- re-uploading for the same card type replaces it.
-router.post('/catalog/:cardType', requireAdmin, (req, res) => {
-  uploadCatalogVideo.single('video')(req, res, async (err) => {
-    if (err) return res.status(400).json({ error: err.message });
-    if (!req.file) return res.status(400).json({ error: 'No video file received' });
-    try {
-      const cardType = req.params.cardType.toLowerCase();
-      const plan = await CardPlan.findOne({ key: cardType });
-      if (!plan) return res.status(404).json({ error: 'No card type matches that key' });
-
-      const videoUrl = `${process.env.BACKEND_URL}/uploads/catalog/${req.file.filename}`;
-      const video = await CatalogVideo.findOneAndUpdate(
-        { cardType },
-        { $set: { videoUrl, uploadedBy: req.admin?.email || 'unknown' } },
-        { new: true, upsert: true }
-      );
-      res.json(video);
-    } catch (err2) {
-      console.error('[admin/catalog POST]', err2);
-      res.status(500).json({ error: 'Could not save the video' });
-    }
-  });
+// POST /api/admin/video-shorts -- create one new empty clip ("+ Add Video Short").
+router.post('/video-shorts', requireAdmin, async (req, res) => {
+  try {
+    const doc = await VideoShort.create({ updatedBy: req.admin?.email || 'unknown' });
+    res.status(201).json(serializeVideoShort(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// DELETE /api/admin/catalog/:cardType -- removes the video; the card
-// type just drops off the public Catalog page until a new one is added.
-router.delete('/catalog/:cardType', requireAdmin, async (req, res) => {
+// PATCH /api/admin/video-shorts/:id -- update title/videoUrl/active.
+router.patch('/video-shorts/:id', requireAdmin, async (req, res) => {
   try {
-    await CatalogVideo.deleteOne({ cardType: req.params.cardType.toLowerCase() });
+    const doc = await VideoShort.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    if (req.body.title !== undefined) doc.title = req.body.title;
+    if (req.body.videoUrl !== undefined) doc.videoUrl = req.body.videoUrl;
+    if (req.body.active !== undefined) doc.active = req.body.active;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeVideoShort(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/video-shorts/:id
+router.delete('/video-shorts/:id', requireAdmin, async (req, res) => {
+  try {
+    await VideoShort.deleteOne({ _id: req.params.id });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

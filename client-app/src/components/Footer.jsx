@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 
-const SUPPORT_EMAIL = 'infor@huntsworld.com';
+const SUPPORT_EMAIL = 'info@huntsworld.com';
 
 export default function Footer({ homeTheme }) {
   return (

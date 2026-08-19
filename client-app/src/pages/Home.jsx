@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { api, isLoggedIn } from '../api.js';
+import WhyChooseHuntsworld from '../components/WhyChooseHuntsworld.jsx';
 
 const SAMPLE_CARD_NAME = 'Alex Chen';
 const SAMPLE_CARD_ROLE = 'Founder, Studio Nine';
@@ -364,6 +365,8 @@ export default function Home() {
           Browse card plans
         </Link>
       </div>
+
+      <WhyChooseHuntsworld />
     </div>
   );
 }

@@ -24,8 +24,11 @@ const POINTS = [
 
 // Marketing section about HuntsWorld (the separate business-listing
 // platform HuntsTAG cards can link to -- see WhatIsHuntsworld.jsx),
-// rendered above the footer on every public page (PublicLayout.jsx).
-// Copy supplied directly by the business, not placeholder text.
+// rendered on the homepage only (Home.jsx / HomeD1.jsx, above their own
+// "Browse card plans" CTA) -- was previously in PublicLayout.jsx, showing
+// on every public page, which put HuntsWorld marketing copy on unrelated
+// pages like About Us. Copy supplied directly by the business, not
+// placeholder text.
 export default function WhyChooseHuntsworld() {
   return (
     <section className="why-huntsworld">

@@ -4,7 +4,6 @@ import { api, clearSession, isLoggedIn } from '../api.js';
 import AuthModal from './AuthModal.jsx';
 import NotificationBell from './NotificationBell.jsx';
 import Footer from './Footer.jsx';
-import WhyChooseHuntsworld from './WhyChooseHuntsworld.jsx';
 
 export default function PublicLayout() {
   const loggedIn = isLoggedIn();
@@ -217,7 +216,6 @@ export default function PublicLayout() {
         <Outlet />
       </main>
 
-      <WhyChooseHuntsworld />
       <Footer homeTheme={homeTheme} />
 
       {authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} />}

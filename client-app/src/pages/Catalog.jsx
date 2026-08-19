@@ -2,6 +2,22 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 
+// A pasted Video Short link is often a YouTube page URL (watch/shorts/
+// youtu.be), not a direct video file -- a plain <video src> can only play
+// an actual file, not a YouTube page, so that link needs to render as an
+// <iframe> embed instead. Returns null for anything that isn't a
+// recognizable YouTube URL, so a genuine direct file link still falls
+// through to the normal <video> tag below.
+function getYouTubeEmbedUrl(url) {
+  if (!url) return null;
+  const patterns = [/youtube\.com\/shorts\/([\w-]+)/, /youtube\.com\/watch\?v=([\w-]+)/, /youtu\.be\/([\w-]+)/, /youtube\.com\/embed\/([\w-]+)/];
+  for (const re of patterns) {
+    const m = url.match(re);
+    if (m) return `https://www.youtube.com/embed/${m[1]}?playsinline=1&rel=0`;
+  }
+  return null;
+}
+
 // The name/price/bullets/CTA block, shared by both EntryRow layouts below
 // -- only how it's arranged relative to the photo(s) differs between them,
 // not its own content.
@@ -292,42 +308,82 @@ export default function Catalog() {
       {error && <p className="error" style={{ textAlign: 'center' }}>{error}</p>}
 
       {!loading && !error && entries.length === 0 && (
-        <p className="muted" style={{ textAlign: 'center', padding: '40px 20px' }}>
-          No catalog videos yet -- check back soon.
-        </p>
+        <div className="card" style={{ maxWidth: 380, margin: '0 auto 60px', textAlign: 'center' }}>
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: '50%',
+              background: 'var(--panel-raised, rgba(255,255,255,0.06))',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 14px',
+              color: 'var(--holo-cyan, #5eead4)',
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
+              <rect x="3" y="5" width="14" height="14" rx="2" />
+              <path d="M17 9.5 21 7v10l-4-2.5" />
+            </svg>
+          </div>
+          <p className="muted" style={{ margin: 0 }}>No catalog videos yet -- check back soon.</p>
+        </div>
       )}
 
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          // Flex-wrap instead of a grid's 1fr columns -- a grid column
+          // stretches to fill the row even with just one item, which blew
+          // a single 9:16 video up to almost the full page width. A fixed
+          // card width keeps every clip a real "short"-sized card no
+          // matter how many plans have videos uploaded.
+          display: 'flex',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
           gap: 20,
           maxWidth: 1000,
           margin: '0 auto',
           padding: '0 24px 60px',
         }}
       >
-        {entries.map((entry) => (
+        {entries.map((entry) => {
+          const embedUrl = getYouTubeEmbedUrl(entry.videoUrl);
+          return (
           <div
-            key={entry.cardType}
+            key={entry._id}
             style={{
+              width: 220,
               background: 'var(--panel)',
               border: '1px solid var(--panel-border)',
               borderRadius: 'var(--radius)',
               overflow: 'hidden',
             }}
           >
-            <video
-              src={entry.videoUrl}
-              controls
-              playsInline
-              style={{ width: '100%', aspectRatio: '4 / 3', display: 'block', background: '#000' }}
-            />
-            <div style={{ padding: '14px 16px' }}>
-              <div style={{ fontWeight: 700, fontFamily: 'var(--font-display)' }}>{entry.name}</div>
-            </div>
+            {embedUrl ? (
+              <iframe
+                src={embedUrl}
+                title={entry.title || 'Video short'}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                style={{ width: '100%', aspectRatio: '9 / 16', display: 'block', background: '#000', border: 'none' }}
+              />
+            ) : (
+              <video
+                src={entry.videoUrl}
+                controls
+                playsInline
+                style={{ width: '100%', aspectRatio: '9 / 16', display: 'block', background: '#000', objectFit: 'cover' }}
+              />
+            )}
+            {entry.title && (
+              <div style={{ padding: '14px 16px' }}>
+                <div style={{ fontWeight: 700, fontFamily: 'var(--font-display)' }}>{entry.title}</div>
+              </div>
+            )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

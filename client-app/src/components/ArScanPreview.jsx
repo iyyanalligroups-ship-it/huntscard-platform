@@ -242,10 +242,48 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
       controls.minPolarAngle = 0.15;
       controls.maxPolarAngle = Math.PI - 0.15;
       controls.enabled = editable;
+      // Replaced by the wheel handler below, which does both pan and zoom
+      // itself -- OrbitControls' own default (every wheel event zooms) is
+      // what made plain two-finger trackpad scrolling only ever zoom,
+      // with no discoverable way to pan without a dedicated button.
+      controls.enableZoom = false;
       controls.update();
       controls.addEventListener('change', () => setCameraTick((t) => t + 1));
 
-      threeRef.current = { renderer, scene, camera, controls, modelGroup, videoGroup, cardMesh, qrMesh, modelGuide, videoGuide };
+      // Plain scroll pans left/right using deltaY -- a normal mouse wheel
+      // only ever reports deltaY (no deltaX axis at all), so mapping pan
+      // to deltaX (the "correct" horizontal-swipe axis on a trackpad)
+      // left mouse-wheel users with no way to pan at all. Shift+scroll
+      // pans up/down instead (deltaY under a held Shift is the standard
+      // "make it horizontal" convention, so this uses that key the other
+      // way around, deliberately, since left/right was the actually-asked-
+      // for direction). Ctrl+scroll (how Chrome/Firefox report a trackpad
+      // pinch, and also works held down with a plain wheel) zooms.
+      function handleWheel(e) {
+        e.preventDefault();
+        const three = threeRef.current;
+        if (!three) return;
+        const { camera: cam, controls: ctl } = three;
+        if (e.ctrlKey) {
+          const dir = new THREE.Vector3();
+          cam.getWorldDirection(dir);
+          const distance = cam.position.distanceTo(ctl.target);
+          const next = THREE.MathUtils.clamp(distance + e.deltaY * 0.03, ctl.minDistance, ctl.maxDistance);
+          cam.position.copy(ctl.target).sub(dir.multiplyScalar(next));
+        } else {
+          const panStep = ASSUMED_PREVIEW_DISTANCE * 0.0025;
+          const axis = e.shiftKey
+            ? new THREE.Vector3().setFromMatrixColumn(cam.matrix, 1).multiplyScalar(-e.deltaY * panStep)
+            : new THREE.Vector3().setFromMatrixColumn(cam.matrix, 0).multiplyScalar(e.deltaY * panStep);
+          cam.position.add(axis);
+          ctl.target.add(axis);
+        }
+        ctl.update();
+        setCameraTick((t) => t + 1);
+      }
+      renderer.domElement.addEventListener('wheel', handleWheel, { passive: false });
+
+      threeRef.current = { renderer, scene, camera, controls, modelGroup, videoGroup, cardMesh, qrMesh, modelGuide, videoGuide, handleWheel };
       if (loadedModelRef.current) modelGroup.add(loadedModelRef.current);
       if (videoPlaneRef.current) videoGroup.add(videoPlaneRef.current);
     }
@@ -280,6 +318,7 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
     () => () => {
       mixerRef.current?.stopAllAction();
       if (threeRef.current) {
+        threeRef.current.renderer.domElement.removeEventListener('wheel', threeRef.current.handleWheel);
         threeRef.current.controls.dispose();
         threeRef.current.renderer.dispose();
         threeRef.current = null;
@@ -919,6 +958,7 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
           Reset view
         </button>
       )}
+
     </div>
   );
 }

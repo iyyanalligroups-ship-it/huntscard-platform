@@ -1583,6 +1583,18 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   margin: 0 0 28px;
   line-height: 1.6;
 }
+/* The plain (non-split) hero-section centers its TEXT via the parent's
+   text-align:center, but the <p> above is a fixed-max-width block with
+   zero side margins -- that box itself still hugs the container's left
+   edge, so each wrapped line ends up centered around a point that isn't
+   the page center (only .hero-section-split, which explicitly wants
+   left-aligned text, should keep the left-hugging box). Auto side margins
+   center the box itself; harmless in the split layout's narrower column,
+   where the box is usually already as wide as its container. */
+.hero-section:not(.hero-section-split) p {
+  margin-left: auto;
+  margin-right: auto;
+}
 .hero-cta-row { position: relative; z-index: 1; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 .hero-cta-row a, .hero-cta-row button {
   width: auto;
@@ -3223,3 +3235,19 @@ body.theme-orange,
 }
 
 .theme-orange .zing-btn { box-shadow: 0 12px 26px -10px rgba(255, 122, 26, 0.7); }
+
+/* Magic Camera's full-screen loading spinner (see MagicCamera.jsx) --
+   shown while compiling tracking data / starting the camera, gone once
+   scanning actually begins. */
+.magic-camera-spinner {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #fff;
+  animation: magicCameraSpin 0.9s linear infinite;
+}
+@keyframes magicCameraSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .magic-camera-spinner { animation: none; }
+}

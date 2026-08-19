@@ -78,6 +78,19 @@ function buildPostMatrix(markerWidth, markerHeight) {
   return m;
 }
 
+// Starts an overlay video muted -- every target's video plays/loops in the
+// background continuously from the moment tracking starts, whether or not
+// its own target is currently being tracked (so it's already in sync, not
+// restarting, the moment tracking picks it up), but sound should only be
+// audible while its target is ACTUALLY found. Starting muted guarantees
+// autoplay succeeds (no user-gesture gamble); the per-target `onUpdate`
+// handler above then unmutes/re-mutes each target's own videos as it's
+// found/lost.
+async function startArVideo(video) {
+  video.muted = true;
+  await video.play();
+}
+
 // The admin's uploaded image could be a large photo. mind-ar's compiler
 // runs feature extraction near input resolution, so an uncapped image
 // risks slow/hung compilation on real Android hardware. Downscale via
@@ -114,12 +127,35 @@ function getActiveArt(pieces) {
   return active.length ? active : pieces.filter((p) => p.imageUrl && p.videoUrl);
 }
 
-// Merges Magic Art's active-or-fallback list with Magic Business Cards --
-// the cards array is already active-only (filtered server-side, GET
-// /api/public/magic-cards), no fallback for cards since a draft card
-// shouldn't be publicly scannable just because it has content uploaded.
-function getActiveTargets(pieces, cards) {
-  return [...getActiveArt(pieces), ...(cards || [])];
+// Merges Magic Art's active-or-fallback list with Magic Business Cards and
+// Street Art pieces -- cards and streetArt are both already active-only
+// (filtered server-side, GET /api/public/magic-cards and
+// /api/public/street-art), no fallback for either since a draft
+// card/piece shouldn't be publicly scannable just because it has content
+// uploaded.
+function getActiveTargets(pieces, cards, streetArt) {
+  return [...getActiveArt(pieces), ...(cards || []), ...(streetArt || [])];
+}
+
+// Normalizes a target into its list of overlay video boxes. Magic Art and
+// Magic Business Card are a single video covering the whole tracked image
+// (box = the full 0-100% square); Street Art pieces instead carry their
+// own `overlays` array, one positioned box per clip (see
+// backend/models/StreetArt.js) -- e.g. one box per wing of a wings mural,
+// so each animates independently instead of one video stretched across
+// the whole image.
+function getTargetOverlays(piece) {
+  if (piece.overlays) {
+    return piece.overlays.map((o) => ({
+      videoUrl: o.videoUrl,
+      crop: o.videoCrop,
+      x: o.x,
+      y: o.y,
+      width: o.width,
+      height: o.height,
+    }));
+  }
+  return [{ videoUrl: piece.videoUrl, crop: piece.videoCrop, x: 0, y: 0, width: 100, height: 100 }];
 }
 
 export default function MagicCamera() {
@@ -137,6 +173,7 @@ export default function MagicCamera() {
   const cardNumber = searchParams.get('card') || undefined;
   const [pieces, setPieces] = useState(null); // MagicArt[] | null while loading -- unscoped mode only
   const [cards, setCards] = useState(null); // MagicBusinessCard[] | null while loading -- unscoped mode only
+  const [streetArt, setStreetArt] = useState(null); // StreetArt[] | null while loading -- unscoped mode only
   const [scopedCard, setScopedCard] = useState(undefined); // this client's own card object | null (none active) | undefined (still loading) -- scoped mode only
   const [profile, setProfile] = useState(null); // this client's own contact/social info -- scoped mode only, feeds the pill bar below
   const [magicComponentDefs, setMagicComponentDefs] = useState([]); // admin-defined custom components (AttributeDefinition.magicComponent) -- scoped mode only
@@ -261,6 +298,15 @@ export default function MagicCamera() {
         setLoadError(err.message);
         setCards([]);
       });
+    api
+      .getPublicStreetArt()
+      .then(setStreetArt)
+      .catch((err) => {
+        // Same reasoning as the cards fallback above -- Street Art is the
+        // newest of the three, shouldn't block the other two if it fails.
+        setLoadError(err.message);
+        setStreetArt([]);
+      });
   }, [clientId, cardNumber]);
 
   useEffect(() => {
@@ -350,7 +396,7 @@ export default function MagicCamera() {
   }
 
   async function handleStart() {
-    const targets = clientId ? (scopedCard ? [scopedCard] : []) : getActiveTargets(pieces, cards);
+    const targets = clientId ? (scopedCard ? [scopedCard] : []) : getActiveTargets(pieces, cards, streetArt);
     if (!targets.length || !containerRef.current) return;
     setLoadError('');
     setStatus('compiling');
@@ -416,7 +462,7 @@ export default function MagicCamera() {
         anchorGroup.visible = false;
         anchorGroup.matrixAutoUpdate = false;
         scene.add(anchorGroup);
-        return { anchorGroup, postMatrix: new THREE.Matrix4() };
+        return { anchorGroup, postMatrix: new THREE.Matrix4(), videoEls: [] }; // videoEls filled in below, once compiled
       });
       const foundFlags = targets.map(() => false);
 
@@ -440,6 +486,13 @@ export default function MagicCamera() {
             entry.anchorGroup.visible = true;
             if (!foundFlags[targetIndex]) {
               foundFlags[targetIndex] = true;
+              // Sound only plays while this specific target is actually
+              // being tracked -- the video itself has been silently
+              // playing/looping in the background since compile finished
+              // (so it's already in sync once found, not restarting), but
+              // it stayed muted until now so nothing is audible before the
+              // camera actually recognizes the image.
+              entry.videoEls.forEach((v) => { v.muted = false; });
               setStatus('found');
               setStatusMessage('Found -- being tracked.');
             }
@@ -447,6 +500,7 @@ export default function MagicCamera() {
             entry.anchorGroup.visible = false;
             if (foundFlags[targetIndex]) {
               foundFlags[targetIndex] = false;
+              entry.videoEls.forEach((v) => { v.muted = true; });
               // Only drop back to "scanning" once NOTHING is tracked --
               // avoids flicker if tracking briefly overlaps while
               // switching between two nearby pieces.
@@ -466,58 +520,78 @@ export default function MagicCamera() {
       camera.projectionMatrix.fromArray(controller.getProjectionMatrix());
       camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
 
-      // ---- Per-target overlay video plane, sized to cover the FULL
-      // target image ---- buildPostMatrix scales all three axes uniformly
-      // by markerWidth, so a child's local-space X spans exactly 1 unit
-      // for the full image width, but Y must span markerHeight/markerWidth
-      // units to represent the full image height. Centered at local
-      // (0,0,0), which buildPostMatrix maps to the image's true center --
-      // no offset group needed.
+      // ---- Per-target overlay video plane(s) ---- buildPostMatrix scales
+      // all three axes uniformly by markerWidth, so a child's local-space
+      // X spans exactly 1 unit for the full image width, but Y must span
+      // markerHeight/markerWidth units to represent the full image height.
+      // A full-bleed box (Magic Art / Magic Business Card, see
+      // getTargetOverlays) is centered at local (0,0,0), which
+      // buildPostMatrix maps to the image's true center -- no offset
+      // needed. A Street Art piece's own positioned sub-boxes instead each
+      // get their own offset mesh.position, converted from the saved
+      // top-left percentage box into this same local-unit space.
       const arVideoEls = [];
       targets.forEach((piece, i) => {
         const entry = targetEntries[i];
         const [markerWidth, markerHeight] = dimensions[i];
         entry.postMatrix = buildPostMatrix(markerWidth, markerHeight);
+        const fullHeightUnits = markerHeight / markerWidth;
 
-        // Overscan (bigger than the exact tracked boundary) -- mind-ar's
-        // corner detection can be off by a fractional amount, which
-        // otherwise shows up as a thin sliver of the real image peeking
-        // out past one edge of the video. Centered, so it grows evenly on
-        // all sides rather than shifting the video off-center. Bumped
-        // from 1.03 -- a real printed-card test (not just on-screen)
-        // still showed a small gap at that value.
-        const OVERSCAN = 1.06;
-        const planeWidth = 1 * OVERSCAN;
-        const planeHeight = (markerHeight / markerWidth) * OVERSCAN;
+        getTargetOverlays(piece).forEach((overlay) => {
+          if (!overlay.videoUrl) return;
+          const isFullBleed = overlay.x === 0 && overlay.y === 0 && overlay.width === 100 && overlay.height === 100;
+          // Overscan (bigger than the exact tracked boundary) -- mind-ar's
+          // corner detection can be off by a fractional amount, which
+          // otherwise shows up as a thin sliver of the real image peeking
+          // out past one edge of the video. Only applied to a full-bleed
+          // box (the tracked image's own outer edge) -- a Street Art
+          // sub-box has no such boundary to overscan past. Centered, so it
+          // grows evenly on all sides rather than shifting the video
+          // off-center. Bumped from 1.03 -- a real printed-card test (not
+          // just on-screen) still showed a small gap at that value.
+          const OVERSCAN = isFullBleed ? 1.06 : 1;
+          const planeWidth = (overlay.width / 100) * OVERSCAN;
+          const planeHeight = (overlay.height / 100) * fullHeightUnits * OVERSCAN;
+          // Box center, converted from image-space percentages (x/y
+          // increase right/down from the top-left) into local units
+          // (X increases right from center, Y increases UP from center --
+          // hence the flip on Y, same reasoning as the UV-space flip
+          // below).
+          const centerXFrac = (overlay.x + overlay.width / 2) / 100;
+          const centerYFrac = (overlay.y + overlay.height / 2) / 100;
+          const localX = centerXFrac - 0.5;
+          const localY = fullHeightUnits * (0.5 - centerYFrac);
 
-        const arVideo = document.createElement('video');
-        arVideo.crossOrigin = 'anonymous';
-        arVideo.muted = true;
-        arVideo.loop = true;
-        arVideo.playsInline = true;
-        arVideo.src = piece.videoUrl;
-        arVideoEls.push(arVideo);
-        arVideo
-          .play()
-          .then(() => {
-            const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
-            const texture = new THREE.VideoTexture(arVideo);
-            // Display-only crop, chosen in the admin's crop tool (see
-            // MagicArt.jsx) -- a plain UV offset/repeat on the texture,
-            // the video FILE itself is untouched. Three.js UV space has
-            // Y=0 at the bottom, but the stored crop uses image-space
-            // Y=0 at the top, hence the flip here.
-            const crop = piece.videoCrop || { x: 0, y: 0, width: 1, height: 1 };
-            texture.offset.set(crop.x, 1 - crop.y - crop.height);
-            texture.repeat.set(crop.width, crop.height);
-            const material = new THREE.MeshBasicMaterial({
-              map: texture,
-              transparent: true,
-              side: THREE.DoubleSide,
-            });
-            entry.anchorGroup.add(new THREE.Mesh(geometry, material));
-          })
-          .catch((err) => setLoadError(`Could not play an overlay video: ${err.message}`));
+          const arVideo = document.createElement('video');
+          arVideo.crossOrigin = 'anonymous';
+          arVideo.loop = true;
+          arVideo.playsInline = true;
+          arVideo.src = overlay.videoUrl;
+          arVideoEls.push(arVideo);
+          entry.videoEls.push(arVideo); // unmuted/muted by onUpdate above as this target is found/lost
+          startArVideo(arVideo)
+            .then(() => {
+              const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
+              const texture = new THREE.VideoTexture(arVideo);
+              // Display-only crop, chosen in the admin's crop tool (see
+              // MagicArt.jsx / StreetArt.jsx) -- a plain UV offset/repeat
+              // on the texture, the video FILE itself is untouched.
+              // Three.js UV space has Y=0 at the bottom, but the stored
+              // crop uses image-space Y=0 at the top, hence the flip here.
+              const crop = overlay.crop || { x: 0, y: 0, width: 1, height: 1 };
+              texture.offset.set(crop.x, 1 - crop.y - crop.height);
+              texture.repeat.set(crop.width, crop.height);
+              const material = new THREE.MeshBasicMaterial({
+                map: texture,
+                transparent: true,
+                side: THREE.DoubleSide,
+              });
+              const mesh = new THREE.Mesh(geometry, material);
+              mesh.position.set(localX, localY, 0);
+              entry.anchorGroup.add(mesh);
+            })
+            .catch((err) => setLoadError(`Could not play an overlay video: ${err.message}`));
+        });
       });
       arVideoElsRef.current = arVideoEls;
 
@@ -599,9 +673,9 @@ export default function MagicCamera() {
     setCameraDiagnostic('unknown');
   }
 
-  const activeTargets = clientId ? (scopedCard ? [scopedCard] : []) : getActiveTargets(pieces, cards);
+  const activeTargets = clientId ? (scopedCard ? [scopedCard] : []) : getActiveTargets(pieces, cards, streetArt);
   const hasArt = activeTargets.length > 0;
-  const stillLoading = clientId ? scopedCard === undefined : !pieces || !cards;
+  const stillLoading = clientId ? scopedCard === undefined : !pieces || !cards || !streetArt;
 
   // Contact/social/portfolio buttons -- scoped mode only, same underlying
   // profile fields ArView.jsx/ArViewMindAR.jsx already show, but their
@@ -771,79 +845,95 @@ export default function MagicCamera() {
     );
   }
 
+  // Full-screen, same visual language as the scoped branch above -- the
+  // camera fills the entire viewport with the Start button/spinner/hint
+  // floated on top of it, instead of the old page-chrome layout (title +
+  // button + a boxed-in camera preview below the fold).
+  const centeredOverlayStyle = {
+    position: 'fixed',
+    inset: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+    padding: 24,
+    textAlign: 'center',
+    zIndex: 20,
+  };
+
   return (
-    <div>
-      <h1>Magic Camera</h1>
-      <p className="subtitle">
-        Point your camera at any Magic Art image or Magic Business Card to see it come alive -- it
-        automatically recognizes which one you're pointed at.
-      </p>
+    <div style={{ position: 'fixed', inset: 0, background: '#000', overflow: 'hidden' }}>
+      <div ref={containerRef} style={{ position: 'absolute', inset: 0 }}>
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        <video ref={cameraVideoRef} muted playsInline style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+        <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+      </div>
 
-      {loadError && <div className="error-banner">{loadError}</div>}
+      {stillLoading && (
+        <div style={centeredOverlayStyle}>
+          <div className="magic-camera-spinner" />
+          <p style={{ color: '#fff', fontSize: 13 }}>Loading...</p>
+        </div>
+      )}
 
-      {stillLoading ? (
-        <p className="subtitle">Loading...</p>
-      ) : !hasArt ? (
-        <p className="subtitle">Nothing has been uploaded yet -- check back soon.</p>
-      ) : (
+      {!stillLoading && !hasArt && (
+        <div style={centeredOverlayStyle}>
+          <p style={{ color: '#fff', maxWidth: 320 }}>Nothing has been uploaded yet -- check back soon.</p>
+        </div>
+      )}
+
+      {!stillLoading && hasArt && status === 'idle' && (
+        <div style={centeredOverlayStyle}>
+          {/* A background fetch (e.g. Magic Business Cards or Street Art)
+              can fail without blocking the page -- see the .catch
+              fallbacks in the loading effect above, which still resolve
+              the OTHER lists so this can reach "idle" with content to
+              scan. Surfaced here rather than silently dropped. */}
+          {loadError && <p style={{ color: '#f87171', maxWidth: 320, fontSize: 13 }}>{loadError}</p>}
+          <button onClick={handleStart} style={{ width: 'auto', padding: '14px 32px', fontSize: 16 }}>
+            Start Magic Camera
+          </button>
+        </div>
+      )}
+
+      {!stillLoading && hasArt && (status === 'compiling' || status === 'starting') && (
+        <div style={centeredOverlayStyle}>
+          <div className="magic-camera-spinner" />
+          {statusMessage && <p style={{ color: '#fff', fontSize: 13 }}>{statusMessage}</p>}
+        </div>
+      )}
+
+      {!stillLoading && hasArt && status === 'error' && (
+        <div style={centeredOverlayStyle}>
+          <p style={{ color: '#fff', maxWidth: 320 }}>{loadError || 'Could not start Magic Camera'}</p>
+          <button onClick={handleStart} style={{ width: 'auto' }}>
+            Try again
+          </button>
+        </div>
+      )}
+
+      {(status === 'scanning' || status === 'found') && (
         <>
-          {status === 'idle' && (
-            <button onClick={handleStart} style={{ width: 'auto' }}>
-              Start Magic Camera
-            </button>
-          )}
-          {status !== 'idle' && (
-            <button onClick={handleStop} className="secondary" style={{ width: 'auto' }}>
-              Stop
-            </button>
-          )}
-
-          {statusMessage && (
-            <p className="subtitle" style={{ marginTop: 12 }}>
-              {statusMessage}
-            </p>
-          )}
-
-          {status !== 'idle' && (
-            <p style={{ marginTop: 8 }}>
-              Camera diagnostic:{' '}
-              {cameraDiagnostic === 'unknown' && <span className="hint">checking...</span>}
-              {cameraDiagnostic === 'ok' && <span style={{ color: 'var(--accent, green)' }}>✅ Live frames look normal</span>}
-              {cameraDiagnostic === 'black-frames' && (
-                <span style={{ color: 'var(--danger, red)' }}>❌ All-black frames detected</span>
-              )}
-            </p>
-          )}
-
-          <div
-            ref={containerRef}
-            style={{
-              position: 'relative',
-              // No maxWidth cap, and height driven by viewport rather than
-              // a fixed aspect-ratio-of-width -- on a tall phone screen, a
-              // 4:3-of-full-width box is still short and leaves most of
-              // the screen empty below it. This fills nearly all the
-              // remaining vertical space under the header/button instead.
-              width: '100%',
-              height: 'calc(100vh - 160px)',
-              marginTop: 16,
-              background: '#000',
-              borderRadius: 12,
-              overflow: 'hidden',
-            }}
-          >
-            <video
-              ref={cameraVideoRef}
-              muted
-              playsInline
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-            <canvas
-              ref={canvasRef}
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-            />
+          <div style={{ position: 'fixed', bottom: 40, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '10px 18px', borderRadius: 999, fontSize: 13, fontWeight: 600, textAlign: 'center', zIndex: 15, maxWidth: '90%' }}>
+            {statusMessage}
           </div>
+          {cameraDiagnostic === 'black-frames' && (
+            <div style={{ position: 'fixed', bottom: 84, left: '50%', transform: 'translateX(-50%)', color: '#f87171', fontSize: 11, zIndex: 15 }}>
+              ❌ All-black frames detected
+            </div>
+          )}
         </>
+      )}
+
+      {status !== 'idle' && (
+        <button
+          onClick={handleStop}
+          aria-label="Stop"
+          style={{ position: 'fixed', top: 16, right: 16, zIndex: 20, width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, cursor: 'pointer' }}
+        >
+          ✕
+        </button>
       )}
     </div>
   );

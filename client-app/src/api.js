@@ -144,6 +144,12 @@ export const api = {
   // convention as getPublicProfile/getPublicArLayout above.
   getPublicMagicCard: (clientId, cardNumber) =>
     request(`/api/public/magic-card/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`, { auth: false }),
+  // Admin-uploaded Street Art pieces (see backend/models/StreetArt.js) --
+  // scanned by MagicCamera.jsx alongside Magic Art/Magic Business Card,
+  // merged into the same target list there. Deliberately has NO gallery
+  // page anywhere -- unlike getPublicMagicArt above, nothing ever renders
+  // this list for browsing, it exists purely to feed the scanner.
+  getPublicStreetArt: () => request('/api/public/street-art', { auth: false }),
   // Which homepage design to render (see HomeSwitch.jsx) -- toggled from
   // the admin app's topbar switch.
   getSiteSettings: () => request('/api/public/site-settings', { auth: false }),

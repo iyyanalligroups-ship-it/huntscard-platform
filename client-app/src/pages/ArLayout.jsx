@@ -441,6 +441,17 @@ export default function ArLayout() {
         </div>
       </div>
 
+      <ul className="subtitle" style={{ marginTop: 12, paddingLeft: 18 }}>
+        <li>Scroll -- pans the view left/right.</li>
+        <li>
+          <strong>Shift</strong> + scroll -- pans up/down.
+        </li>
+        <li>
+          <strong>Ctrl</strong> + scroll (or pinch on a trackpad) -- zooms in/out.
+        </li>
+        <li>Drag -- still rotates, unchanged.</li>
+      </ul>
+
       {/* Precise buttons for the QR's own position -- the amber-ring drag
           handle above still works for coarse placement, but nudging it
           exactly onto where the QR is really printed is much easier with
