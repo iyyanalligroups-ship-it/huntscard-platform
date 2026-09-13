@@ -175,8 +175,8 @@ router.get('/site-settings', requireAdmin, async (req, res) => {
 // nobody's touched this setting yet the first time it's ever changed.
 router.patch('/site-settings', requireAdmin, async (req, res) => {
   const { homeTheme } = req.body;
-  if (!['default', 'orange'].includes(homeTheme)) {
-    return res.status(400).json({ error: 'homeTheme must be "default" or "orange"' });
+  if (!['default', 'orange', 'cyber'].includes(homeTheme)) {
+    return res.status(400).json({ error: 'homeTheme must be "default", "orange", or "cyber"' });
   }
   try {
     const doc = await SiteSetting.findOneAndUpdate(
@@ -1826,11 +1826,19 @@ function serializeMagicArt(doc) {
     imageUrl: doc.imageUrl,
     imageWidth: doc.imageWidth,
     imageHeight: doc.imageHeight,
-    videoUrl: doc.videoUrl,
-    videoCropX: doc.videoCropX,
-    videoCropY: doc.videoCropY,
-    videoCropWidth: doc.videoCropWidth,
-    videoCropHeight: doc.videoCropHeight,
+    overlays: (doc.overlays || []).map((o) => ({
+      _id: o._id,
+      label: o.label,
+      videoUrl: o.videoUrl,
+      videoCropX: o.videoCropX,
+      videoCropY: o.videoCropY,
+      videoCropWidth: o.videoCropWidth,
+      videoCropHeight: o.videoCropHeight,
+      x: o.x,
+      y: o.y,
+      width: o.width,
+      height: o.height,
+    })),
     active: doc.active,
     updatedBy: doc.updatedBy,
   };
@@ -1857,6 +1865,8 @@ router.post('/magic-art', requireAdmin, async (req, res) => {
 });
 
 // PATCH /api/admin/magic-art/:id -- update a pack's name/description.
+// Overlay-specific edits (position, crop, label) go through the overlay
+// sub-routes below instead.
 router.patch('/magic-art/:id', requireAdmin, async (req, res) => {
   try {
     const doc = await MagicArt.findById(req.params.id);
@@ -1876,12 +1886,15 @@ router.patch('/magic-art/:id', requireAdmin, async (req, res) => {
 // can be active at once; Magic Camera auto-detects which one it's
 // pointed at (mind-ar tracks against every registered target by
 // default, see MagicCamera.jsx's own comment for the confirmation).
+// Requires a name, an image, at least one overlay clip, and every
+// existing overlay to have its own video -- same gate as Street Art's.
 router.post('/magic-art/:id/activate', requireAdmin, async (req, res) => {
   try {
     const doc = await MagicArt.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'Not found' });
-    if (!doc.name?.trim() || !doc.imageUrl || !doc.videoUrl) {
-      return res.status(400).json({ error: 'This pack needs a name, an image, and a video before it can be activated.' });
+    const hasIncompleteOverlay = (doc.overlays || []).some((o) => !o.videoUrl);
+    if (!doc.name?.trim() || !doc.imageUrl || !doc.overlays?.length || hasIncompleteOverlay) {
+      return res.status(400).json({ error: 'This pack needs a name, an image, and at least one overlay clip -- every overlay must have a video before activating.' });
     }
     doc.active = true;
     doc.updatedBy = req.admin?.email || 'unknown';
@@ -1910,13 +1923,16 @@ router.post('/magic-art/:id/deactivate', requireAdmin, async (req, res) => {
   }
 });
 
-// DELETE /api/admin/magic-art/:id -- remove a whole pack (both files + the doc).
+// DELETE /api/admin/magic-art/:id -- remove a whole pack (image + every
+// overlay's video file + the doc).
 router.delete('/magic-art/:id', requireAdmin, async (req, res) => {
   try {
     const doc = await MagicArt.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'Not found' });
     if (doc.imageUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(doc.imageUrl)), () => {});
-    if (doc.videoUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(doc.videoUrl)), () => {});
+    for (const o of doc.overlays || []) {
+      if (o.videoUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(o.videoUrl)), () => {});
+    }
     await doc.deleteOne();
     res.json({ ok: true });
   } catch (err) {
@@ -1949,20 +1965,94 @@ router.post('/magic-art/:id/image', requireAdmin, magicArtImageUpload.single('im
   }
 });
 
-// POST /api/admin/magic-art/:id/video -- upload/replace one pack's overlay
-// video. cropX/cropY/cropWidth/cropHeight (fractional 0-1) describe a
-// display-only crop -- the file itself is stored exactly as uploaded.
-router.post('/magic-art/:id/video', requireAdmin, magicArtVideoUpload.single('video'), async (req, res) => {
+// DELETE /api/admin/magic-art/:id/image -- clear just the image (the pack
+// and its overlays stay put, but obviously can't be activated without one).
+router.delete('/magic-art/:id/image', requireAdmin, async (req, res) => {
+  try {
+    const doc = await MagicArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    if (doc.imageUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(doc.imageUrl)), () => {});
+    doc.imageUrl = undefined;
+    doc.imageWidth = undefined;
+    doc.imageHeight = undefined;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeMagicArt(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/magic-art/:id/overlays -- add one new overlay clip
+// (default full-image box, no video yet).
+router.post('/magic-art/:id/overlays', requireAdmin, async (req, res) => {
+  try {
+    const doc = await MagicArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    doc.overlays.push({ label: req.body.label || `Clip ${doc.overlays.length + 1}` });
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeMagicArt(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/admin/magic-art/:id/overlays/:overlayId -- update one
+// overlay's label and/or position/size (x/y/width/height, dragged in the
+// admin's positioning canvas).
+router.patch('/magic-art/:id/overlays/:overlayId', requireAdmin, async (req, res) => {
+  try {
+    const doc = await MagicArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    const overlay = doc.overlays.id(req.params.overlayId);
+    if (!overlay) return res.status(404).json({ error: 'Overlay not found' });
+    for (const field of ['label', 'x', 'y', 'width', 'height']) {
+      if (req.body[field] !== undefined) overlay[field] = req.body[field];
+    }
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeMagicArt(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/magic-art/:id/overlays/:overlayId -- remove one
+// overlay clip (its video file + the sub-document).
+router.delete('/magic-art/:id/overlays/:overlayId', requireAdmin, async (req, res) => {
+  try {
+    const doc = await MagicArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    const overlay = doc.overlays.id(req.params.overlayId);
+    if (!overlay) return res.status(404).json({ error: 'Overlay not found' });
+    if (overlay.videoUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(overlay.videoUrl)), () => {});
+    overlay.deleteOne();
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeMagicArt(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/magic-art/:id/overlays/:overlayId/video -- upload/replace
+// one overlay clip's video. cropX/cropY/cropWidth/cropHeight (fractional
+// 0-1) describe a display-only crop -- the file itself is stored exactly
+// as uploaded.
+router.post('/magic-art/:id/overlays/:overlayId/video', requireAdmin, magicArtVideoUpload.single('video'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const doc = await MagicArt.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'Not found' });
-    const previousUrl = doc.videoUrl;
-    doc.videoUrl = `${process.env.BACKEND_URL}/uploads/magic-art/${req.file.filename}`;
-    doc.videoCropX = Number(req.body.cropX) || 0;
-    doc.videoCropY = Number(req.body.cropY) || 0;
-    doc.videoCropWidth = Number(req.body.cropWidth) || 1;
-    doc.videoCropHeight = Number(req.body.cropHeight) || 1;
+    const overlay = doc.overlays.id(req.params.overlayId);
+    if (!overlay) return res.status(404).json({ error: 'Overlay not found' });
+    const previousUrl = overlay.videoUrl;
+    overlay.videoUrl = `${process.env.BACKEND_URL}/uploads/magic-art/${req.file.filename}`;
+    overlay.videoCropX = Number(req.body.cropX) || 0;
+    overlay.videoCropY = Number(req.body.cropY) || 0;
+    overlay.videoCropWidth = Number(req.body.cropWidth) || 1;
+    overlay.videoCropHeight = Number(req.body.cropHeight) || 1;
     doc.updatedBy = req.admin?.email || 'unknown';
     await doc.save();
     if (previousUrl) {
@@ -1972,37 +2062,6 @@ router.post('/magic-art/:id/video', requireAdmin, magicArtVideoUpload.single('vi
   } catch (err) {
     const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 80MB.' : err.message;
     res.status(400).json({ error: message });
-  }
-});
-
-// DELETE /api/admin/magic-art/:id/:field -- clear just the image or video
-// of one pack (the pack itself, and its other field, stay put).
-router.delete('/magic-art/:id/:field', requireAdmin, async (req, res) => {
-  try {
-    const { field } = req.params;
-    if (field !== 'image' && field !== 'video') {
-      return res.status(400).json({ error: 'Unknown field' });
-    }
-    const doc = await MagicArt.findById(req.params.id);
-    if (!doc) return res.status(404).json({ error: 'Not found' });
-    if (field === 'image') {
-      if (doc.imageUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(doc.imageUrl)), () => {});
-      doc.imageUrl = undefined;
-      doc.imageWidth = undefined;
-      doc.imageHeight = undefined;
-    } else {
-      if (doc.videoUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(doc.videoUrl)), () => {});
-      doc.videoUrl = undefined;
-      doc.videoCropX = undefined;
-      doc.videoCropY = undefined;
-      doc.videoCropWidth = undefined;
-      doc.videoCropHeight = undefined;
-    }
-    doc.updatedBy = req.admin?.email || 'unknown';
-    await doc.save();
-    res.json(serializeMagicArt(doc));
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -2366,6 +2425,8 @@ async function serializeMagicCard(doc, card) {
     videoCropY: doc.videoCropY,
     videoCropWidth: doc.videoCropWidth,
     videoCropHeight: doc.videoCropHeight,
+    qrX: doc.qrX ?? 82,
+    qrY: doc.qrY ?? 82,
     active: doc.active,
     updatedBy: doc.updatedBy,
   };

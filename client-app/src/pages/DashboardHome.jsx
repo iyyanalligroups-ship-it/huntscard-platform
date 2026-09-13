@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { api, API_URL } from '../api.js';
 import DeviceProtectionCard from '../components/DeviceProtectionCard.jsx';
 import NotificationBell from '../components/NotificationBell.jsx';
+import { composeCardWithQr } from '../lib/cardComposite.js';
+import { cardAspectFor } from '../lib/arProjection.js';
 
 /* Profile fields that count toward completeness -- grouped the same way
    Profile Settings groups them, so the donut legend maps 1:1 to real
@@ -25,6 +27,9 @@ function orderStage(p) {
 
 export default function DashboardHome() {
   const [profile, setProfile] = useState(null);
+  const [cards, setCards] = useState([]); // every physical card this client owns -- see api.getMyCards()
+  const [selectedCardNumber, setSelectedCardNumber] = useState(null); // which one the hero preview shows -- defaults to profile.primaryCardNumber once known
+  const [cardCompositeUrl, setCardCompositeUrl] = useState(null); // data URL, once composited -- see the effect below
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState('');
@@ -32,6 +37,28 @@ export default function DashboardHome() {
   const [zingState, setZingState] = useState('idle'); // idle | busy | success | fail
   const zingTimeoutRef = useRef(null);
   const zingFileRef = useRef(null); // pre-fetched vCard File, ready before the button is ever clicked
+  const miniCardRef = useRef(null); // hero card preview -- mutated directly in the tilt handlers below instead of via React state, so the transform updates every mousemove without a re-render each frame
+
+  // Cursor-follow tilt for the hero card preview -- rotates toward
+  // whatever corner the cursor is nearest, like light catching a real
+  // holographic card. Mutates the DOM node directly (not React state)
+  // since this fires on every mousemove; going through setState/render
+  // for a 3D transform would be needless render-thrashing.
+  function handleCardTiltMove(e) {
+    const el = miniCardRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width; // 0..1
+    const py = (e.clientY - rect.top) / rect.height;
+    const rotateY = (px - 0.5) * 22; // deg
+    const rotateX = (0.5 - py) * 22;
+    el.style.transform = `perspective(700px) scale3d(1.04, 1.04, 1.04) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+  }
+  function handleCardTiltLeave() {
+    const el = miniCardRef.current;
+    if (!el) return;
+    el.style.transform = '';
+  }
 
   useEffect(() => {
     api
@@ -39,6 +66,70 @@ export default function DashboardHome() {
       .then(setProfile)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+  }, []);
+
+  // Every physical card this client owns -- for the hero's card picker
+  // (see the dropdown next to the bell below). Most clients only have
+  // one, in which case the dropdown just doesn't render (see cards.length
+  // < 2 check further down) rather than showing a useless single-option
+  // picker.
+  useEffect(() => {
+    api.getMyCards().then(setCards).catch(() => {});
+  }, []);
+
+  // Default the picker to whichever card cardFrontImageUrl/cardShape
+  // already resolved to (profile.primaryCardNumber, NOT always #1 -- see
+  // profile.js's withPlanFlags), once both profile and cards have loaded.
+  useEffect(() => {
+    if (selectedCardNumber != null) return; // client already picked one -- don't stomp on it
+    if (profile?.primaryCardNumber != null) setSelectedCardNumber(profile.primaryCardNumber);
+    else if (cards.length > 0) setSelectedCardNumber(cards[0].cardNumber);
+  }, [profile?.primaryCardNumber, cards, selectedCardNumber]);
+
+  // Hero card preview -- the same "design + AR QR baked in at its saved
+  // position" composite Magic Business Card's "Download card (with QR)"
+  // button produces (see cardComposite.js), not just the bare design
+  // image. Needs the client's own Magic Business Card doc (for imageUrl +
+  // qrPosition), scoped to whichever card is selected above. Falls back
+  // to the plain design image (heroCardDesignUrl, already showing) if
+  // this fails for any reason -- a failed composite shouldn't blank the
+  // card preview out.
+  useEffect(() => {
+    if (!profile?.clientId || selectedCardNumber == null) return;
+    let cancelled = false;
+    setCardCompositeUrl(null); // clear the previous card's composite immediately on switch, don't show it under the new selection while the new one loads
+    api
+      .getMyMagicCard(selectedCardNumber)
+      .then(async (card) => {
+        if (!card?.imageUrl) return;
+        const qrUrl = `${API_URL}/api/public/qr/${profile.clientId}?type=ar&card=${selectedCardNumber}&fg=000000&bg=ffffff`;
+        const canvas = await composeCardWithQr({ imageUrl: card.imageUrl, qrUrl, qrPos: card.qrPosition || { x: 82, y: 82 } });
+        if (!cancelled) setCardCompositeUrl(canvas.toDataURL('image/png'));
+      })
+      .catch(() => {
+        /* heroCardDesignUrl (plain design, no QR) stays as the fallback */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.clientId, selectedCardNumber]);
+
+  // "Card taps" (see the KPI row below) is the one number on this page
+  // that changes without the client doing anything -- someone tapping
+  // their physical card anywhere in the world bumps it server-side (see
+  // public.js's tapCount $inc). No WebSocket/real-time infra exists in
+  // this codebase (see NotificationBell.jsx's own comment on this same
+  // choice), so poll for a fresh count instead of making the client
+  // reload the page to see it move.
+  const TAP_COUNT_POLL_MS = 15000;
+  useEffect(() => {
+    const interval = setInterval(() => {
+      api
+        .getProfile()
+        .then((fresh) => setProfile((prev) => (prev ? { ...prev, tapCount: fresh.tapCount } : fresh)))
+        .catch(() => {});
+    }, TAP_COUNT_POLL_MS);
+    return () => clearInterval(interval);
   }, []);
 
   // Pre-fetch the vCard as soon as we know who this client is, instead of
@@ -137,6 +228,27 @@ export default function DashboardHome() {
     : 'No card yet';
   const statusLabel = stage === -1 ? 'No order yet' : ORDER_STAGES[stage];
 
+  // Whichever card the hero picker (next to the bell) has selected --
+  // falls back to profile's own (primary-card) fields while `cards` is
+  // still loading, so the preview isn't blank for a moment on first paint.
+  const selectedCard = cards.find((c) => c.cardNumber === selectedCardNumber) || null;
+  const heroCardShape = selectedCard?.shape ?? profile?.cardShape;
+  const heroCardDesignUrl = selectedCard?.cardDesignUrl ?? profile?.cardFrontImageUrl;
+  const heroCardType = selectedCard?.cardType ?? profile?.cardType;
+  const heroCardLabel = selectedCard?.label || selectedCard?.variantName || planLabel;
+
+  // Hero mini card preview -- sized to the real card's own aspect ratio
+  // (see cardAspectFor), not a fixed square. The uploaded design is
+  // already cropped to this exact ratio at upload time (see
+  // MagicBusinessCard.jsx's CARD_UPLOAD_SIZES), so matching the box to it
+  // means the image fills the box edge-to-edge with no letterbox bars --
+  // a square box was leaving visible background strips down the sides of
+  // a vertical card, which then got caught up in the hover glow/tilt
+  // effect along with the real artwork.
+  const miniCardAspect = cardAspectFor(heroCardShape); // width / height
+  const MINI_CARD_HEIGHT = 320; // px
+  const miniCardSize = { height: MINI_CARD_HEIGHT, width: Math.round(MINI_CARD_HEIGHT * miniCardAspect) };
+
   // Donut geometry
   const R = 84;
   const C = 2 * Math.PI * R;
@@ -196,59 +308,113 @@ export default function DashboardHome() {
         </div>
       )}
 
-      {/* Hero -- greeting + shortcut to the live card preview */}
+      {/* Hero -- greeting + shortcut to the live card preview. Two separate
+          cards (not one shared panel) with a gap between them. */}
       <section className="dash-hero">
-        <div>
-          <h1 className="dash-hero-title">Welcome back, {firstName} 👋</h1>
-          <p className="dash-hero-sub">
-            {stage >= 1
-              ? 'Your HuntsTAG is live. Tap stats and order progress below.'
-              : profile?.paid
-                ? 'Your card is being prepared. Follow its progress below.'
-                : 'Complete your profile, then grab a card from the Shop.'}
-          </p>
-          <Link to="/dashboard/profile" className="dash-hero-btn">View my card</Link>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 12 }}>
-          <NotificationBell />
-          <div className={`tap-card mini ${profile?.cardType || 'unassigned'}`}>
-            <span className="tap-card-tier">{planLabel}</span>
-            <span className="tap-card-name">{profile?.fullName}</span>
+        {/* Left column -- greeting card stacked with Zing, so the taller
+            card frame on the right doesn't leave a dead gap below the
+            greeting: this column's own height grows to match instead. */}
+        <div className="dash-left-col">
+          <div className="dash-hero-left">
+            <h1 className="dash-hero-title">Welcome back, {firstName}</h1>
+            <p className="dash-hero-sub">
+              {stage >= 1
+                ? 'Your HuntsTAG is live. Tap stats and order progress below.'
+                : profile?.paid
+                  ? 'Your card is being prepared. Follow its progress below.'
+                  : 'Complete your profile, then grab a card from the Shop.'}
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <Link to="/dashboard/profile" className="dash-hero-btn">View my card</Link>
+              <span className="dash-hero-plan-badge">{heroCardLabel}</span>
+              <NotificationBell />
+              {/* Which physical card the preview on the right shows -- only
+                  worth showing once there's actually more than one to pick
+                  between (e.g. Nova, Dojo, Night Fury all on one account). */}
+              {cards.length > 1 && (
+                <select
+                  className="dash-hero-card-picker"
+                  value={selectedCardNumber ?? ''}
+                  onChange={(e) => setSelectedCardNumber(Number(e.target.value))}
+                  aria-label="Which card to preview"
+                >
+                  {cards.map((c) => (
+                    <option key={c.cardNumber} value={c.cardNumber}>
+                      Card {c.cardNumber} · {c.label || c.variantName || c.planName || 'Untitled'}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
           </div>
-        </div>
-      </section>
 
-      {/* Zing -- share your contact without your physical card. Opens the
-          phone's native share sheet (AirDrop / Nearby Share / WhatsApp /
-          Bluetooth / etc.) with your vCard, so the other person can save
-          you straight to their contacts without any NFC card or app. */}
-      <section className="zing-section">
-        <div>
-          <h2 className="zing-title">⚡ Zing</h2>
-          <p className="zing-sub">
-            {profile?.zingEnabled
-              ? 'No card on you? Zing your contact straight to their phone.'
-              : `Zing isn't included in your current plan${profile?.cardType ? ` (${profile.cardType})` : ''}.`}
-          </p>
+          {/* Zing -- share your contact without your physical card. Opens
+              the phone's native share sheet (AirDrop / Nearby Share /
+              WhatsApp / Bluetooth / etc.) with your vCard, so the other
+              person can save you straight to their contacts without any
+              NFC card or app. */}
+          <section className="zing-section">
+            <div>
+              <h2 className="zing-title">⚡ Zing</h2>
+              <p className="zing-sub">
+                {profile?.zingEnabled
+                  ? 'No card on you? Zing your contact straight to their phone.'
+                  : `Zing isn't included in your current plan${profile?.cardType ? ` (${profile.cardType})` : ''}.`}
+              </p>
+            </div>
+            {profile?.zingEnabled ? (
+              <div className="zing-action">
+                <button
+                  className={`zing-btn zing-${zingState}`}
+                  onClick={handleZing}
+                  disabled={zingState === 'busy'}
+                  aria-label="Zing my contact"
+                  title="Zing my contact"
+                >
+                  {zingState === 'success' ? '✓' : zingState === 'fail' ? '!' : zingState === 'busy' ? '…' : '⚡'}
+                </button>
+                <span className="zing-caption">
+                  {zingState === 'success' ? 'Shared!' : zingState === 'fail' ? 'Try again' : zingState === 'busy' ? 'Sharing…' : 'Zing my contact'}
+                </span>
+              </div>
+            ) : (
+              <Link to="/dashboard/upgrade" className="dash-hero-btn">See plans with Zing</Link>
+            )}
+          </section>
         </div>
-        {profile?.zingEnabled ? (
-          <div className="zing-action">
-            <button
-              className={`zing-btn zing-${zingState}`}
-              onClick={handleZing}
-              disabled={zingState === 'busy'}
-              aria-label="Zing my contact"
-              title="Zing my contact"
-            >
-              {zingState === 'success' ? '✓' : zingState === 'fail' ? '!' : zingState === 'busy' ? '…' : '⚡'}
-            </button>
-            <span className="zing-caption">
-              {zingState === 'success' ? 'Shared!' : zingState === 'fail' ? 'Try again' : zingState === 'busy' ? 'Sharing…' : 'Zing my contact'}
-            </span>
+
+        <div className="dash-hero-right">
+          <div
+            ref={miniCardRef}
+            onMouseMove={handleCardTiltMove}
+            onMouseLeave={handleCardTiltLeave}
+            className={`tap-card mini ${heroCardType || 'unassigned'}`}
+            style={{
+              ...miniCardSize,
+              minWidth: miniCardSize.width,
+              ...(cardCompositeUrl || heroCardDesignUrl
+                ? {
+                    // contain, not cover -- the real design (or the
+                    // composite, once cardCompositeUrl is ready -- see
+                    // the effect above) often carries a QR code near an
+                    // edge; cover was cropping that off to fill the box,
+                    // contain always shows the whole thing.
+                    // Plain color, not the class's own dark fallback
+                    // (see .tap-card:not(...) in styles.css) -- with a
+                    // real design image there's nothing for that fallback
+                    // to show through anymore except as unwanted bars in
+                    // the letterboxed gaps, so it's cleared here.
+                    background: 'transparent',
+                    backgroundImage: `url(${cardCompositeUrl || heroCardDesignUrl})`,
+                    backgroundSize: 'contain',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
+                  }
+                : {}),
+            }}
+          >
           </div>
-        ) : (
-          <Link to="/dashboard/upgrade" className="dash-hero-btn">See plans with Zing</Link>
-        )}
+        </div>
       </section>
 
       {/* KPI row -- every number here is real (taps, plan, order, completeness) */}
@@ -257,7 +423,12 @@ export default function DashboardHome() {
           <div className="kpi-card" key={k.label}>
             <span className={`kpi-chip ${k.tone}`}>{k.icon}</span>
             <div className="kpi-value">{k.value}</div>
-            <div className="kpi-label">{k.label}</div>
+            <div className="kpi-label">
+              {k.label}
+              {k.label === 'Card taps' && (
+                <span className="kpi-live-dot" title="Updates automatically when your card is tapped" />
+              )}
+            </div>
             <div className="kpi-sub">{k.sub}</div>
           </div>
         ))}

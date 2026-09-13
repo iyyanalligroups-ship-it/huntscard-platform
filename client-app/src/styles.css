@@ -52,6 +52,32 @@
   --glow-soft: 0 0 60px rgba(255, 94, 26, 0.14);
 }
 
+/* Cyber theme override -- same admin-toggled homeTheme setting/mechanism
+   as orange above (redefine the 3 source colors, let var(--holo-gradient)
+   and every --holo-cyan/violet/magenta usage recompute automatically),
+   modeled on a neon-NFT-marketplace reference: electric teal + magenta on
+   near-black, glowing edges. Unlike orange, this does NOT swap the public
+   homepage component (see HomeSwitch.jsx -- 'cyber' renders Home.jsx same
+   as 'default'); its footprint is the public header/footer brand mark +
+   the logged-in dashboard, matching exactly where .theme-orange itself
+   reaches (see every .theme-cyber rule below, mirrored 1:1 against its
+   .theme-orange counterpart). */
+.theme-cyber {
+  /* Deliberately far more saturated than the default theme's own pastel
+     cyan/violet/magenta (#5eead4/#a78bfa/#f472b6, see :root -- the base
+     theme is already a soft "holographic" cyan-violet-magenta blend) --
+     without this contrast, a same-hue-family palette barely reads as a
+     different theme at a glance. These are pure/near-pure neon, not
+     pastel. */
+  --holo-cyan: #00fff0;
+  --holo-violet: #7000ff;
+  --holo-magenta: #ff00c8;
+  --font-heavy: "Archivo", var(--font-ui);
+  --glow-cyan: 0 0 50px rgba(0, 255, 240, 0.45);
+  --glow-violet: 0 0 60px rgba(112, 0, 255, 0.4);
+  --glow-soft: 0 0 70px rgba(255, 0, 200, 0.3);
+}
+
 * { box-sizing: border-box; }
 
 body {
@@ -89,31 +115,28 @@ body {
 .top-nav .brand { gap: 16px; }
 
 .brand-mark {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 52px;
+  height: 52px;
+  border-radius: 13px;
   background-color: transparent;
   background-image:
     url("/assets/huntstag-wolf-logo.png"),
     var(--holo-gradient);
   background-repeat: no-repeat;
   background-position: center, center;
-  background-size: 30px auto, cover;
+  background-size: 42px auto, cover;
   flex-shrink: 0;
   position: relative;
 }
-/* Spinning gradient ring -- masked to a thin outline so it reads as an
-   "active/powered" halo rather than a solid shape. */
+/* Spinning gradient ring -- removed per direct request (was a masked
+   conic-gradient outline read as an "active/powered" halo). Kept as a
+   disabled rule rather than deleted, since every theme override below
+   still targets this same ::before selector (harmless once it has no
+   content -- a pseudo-element without content never renders) and
+   deleting it would mean also hunting down and removing every one of
+   those now-dead overrides individually. */
 .brand-mark::before {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 13px;
-  background: conic-gradient(from 0deg, var(--holo-cyan), var(--holo-violet), var(--holo-magenta), var(--holo-cyan));
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), black calc(100% - 1px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), black calc(100% - 1px));
-  animation: brandMarkSpin 4s linear infinite;
-  pointer-events: none;
+  display: none;
 }
 /* Small orbiting dot circling the mark */
 .brand-mark::after {
@@ -351,6 +374,10 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   position: absolute; inset: 0 0 auto 0; height: 2px;
   background: var(--holo-gradient);
 }
+/* Dashboard hero preview shows the real card design edge-to-edge now
+   (see DashboardHome.jsx) -- this accent line was only ever meant to
+   dress up the plain gradient-block placeholder underneath it. */
+.tap-card.mini::before { display: none; }
 
 .tap-card.basic { background: linear-gradient(150deg, #1c1f28, #101218); }
 .tap-card.premium { background: linear-gradient(150deg, #3a4150, #1c1f28); }
@@ -776,6 +803,85 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 }
 .top-nav.theme-orange .brand-name { color: #fff; }
 
+/* Cyber theme -- same header/footer/dash-shell override structure as
+   orange above, neon teal/magenta instead of warm amber/orange. Extra
+   text-shadow glow on hover/active (not just color+background like
+   orange) to read as genuinely neon, per the reference image. */
+.top-nav.theme-cyber {
+  background: rgba(4, 6, 12, 0.88);
+}
+.top-nav.theme-cyber .top-nav-grid,
+.top-nav.theme-cyber .top-nav-power-glow,
+.top-nav.theme-cyber .top-nav-circuit-svg,
+.top-nav.theme-cyber .top-nav-scan-beam,
+.top-nav.theme-cyber::after,
+.top-nav.theme-cyber .top-nav-scan-particle,
+.top-nav.theme-cyber .top-nav-spotlight,
+.top-nav.theme-cyber .top-nav-corner {
+  display: none;
+}
+.top-nav.theme-cyber { border-bottom: 1px solid rgba(0, 255, 240, 0.25); }
+.top-nav.theme-cyber .status-indicator { color: rgba(0, 255, 240, 0.9); }
+.top-nav.theme-cyber .status-dot { background: #00fff0; box-shadow: 0 0 8px #00fff0, 0 0 16px rgba(0, 255, 240, 0.6); }
+.top-nav.theme-cyber .nav-links::before {
+  background: linear-gradient(100deg, transparent 30%, rgba(112, 0, 255, 0.12) 45%, rgba(255, 0, 200, 0.12) 55%, transparent 70%);
+}
+.top-nav.theme-cyber .nav-link:hover,
+.top-nav.theme-cyber .nav-link:nth-child(4):hover {
+  color: #00fff0;
+  background: rgba(0, 255, 240, 0.09);
+  text-shadow: 0 0 10px rgba(0, 255, 240, 0.85), 0 0 24px rgba(0, 255, 240, 0.5);
+}
+.top-nav.theme-cyber .nav-link:nth-child(2):hover {
+  color: #7000ff;
+  background: rgba(112, 0, 255, 0.1);
+  text-shadow: 0 0 10px rgba(112, 0, 255, 0.85), 0 0 24px rgba(112, 0, 255, 0.5);
+}
+.top-nav.theme-cyber .nav-link:nth-child(3):hover {
+  color: #ff00c8;
+  background: rgba(255, 0, 200, 0.1);
+  text-shadow: 0 0 10px rgba(255, 0, 200, 0.85), 0 0 24px rgba(255, 0, 200, 0.5);
+}
+.top-nav.theme-cyber .nav-link.active {
+  color: #04060c;
+  background: linear-gradient(120deg, #00fff0, #7000ff, #ff00c8);
+  box-shadow: 0 0 16px rgba(0, 255, 240, 0.55), 0 0 28px rgba(255, 0, 200, 0.35);
+}
+.top-nav.theme-cyber .brand-mark {
+  background-image:
+    url("/assets/huntstag-wolf-logo.png"),
+    linear-gradient(120deg, #00fff0, #7000ff, #ff00c8);
+}
+.top-nav.theme-cyber .brand-mark::before {
+  background: conic-gradient(from 0deg, #00fff0, #7000ff, #ff00c8, #00fff0);
+}
+.top-nav.theme-cyber .brand-mark::after {
+  box-shadow: 0 0 8px 2px #00fff0;
+}
+.site-footer.theme-cyber .brand-mark {
+  background-image:
+    url("/assets/huntstag-wolf-logo.png"),
+    linear-gradient(120deg, #00fff0, #7000ff, #ff00c8);
+}
+.site-footer.theme-cyber .brand-mark::before {
+  background: conic-gradient(from 0deg, #00fff0, #7000ff, #ff00c8, #00fff0);
+}
+.site-footer.theme-cyber .brand-mark::after {
+  box-shadow: 0 0 8px 2px #00fff0;
+}
+.dash-shell.theme-cyber .brand-mark {
+  background-image:
+    url("/assets/huntstag-wolf-logo.png"),
+    linear-gradient(120deg, #00fff0, #7000ff, #ff00c8);
+}
+.dash-shell.theme-cyber .brand-mark::before {
+  background: conic-gradient(from 0deg, #00fff0, #7000ff, #ff00c8, #00fff0);
+}
+.dash-shell.theme-cyber .brand-mark::after {
+  box-shadow: 0 0 8px 2px #00fff0;
+}
+.top-nav.theme-cyber .brand-name { color: #fff; text-shadow: 0 0 12px rgba(0, 255, 240, 0.5); }
+
 /* Non-navigating "coming soon" markers in the header (Magic Art / AR
    Call, both still being tested on the dashboard) -- deliberately its
    own class, not .nav-link, so it can't pick up that class's nth-child
@@ -957,6 +1063,18 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
    custom properties (see the comment on .pv-page further down),
    redeclaring them here re-themes the whole card -- background, name,
    QR box, tab pills -- without touching a single other rule. */
+/* Cyber theme -- kept dark (unlike orange's flip to a white/cream card),
+   just re-tinted neon -- a bright white card would clash with the rest
+   of this theme's near-black-and-neon look. */
+.theme-cyber .profile-preview {
+  --pv-bg: #05060a;
+  --pv-surface: rgba(0, 255, 240, 0.08);
+  --pv-border: rgba(0, 255, 240, 0.3);
+  --pv-text: #fff;
+  --pv-text-dim: rgba(255, 255, 255, 0.6);
+  border-color: rgba(0, 255, 240, 0.3);
+  box-shadow: 0 0 30px rgba(0, 255, 240, 0.18);
+}
 .theme-orange .profile-preview {
   --pv-bg: #ffffff;
   --pv-surface: #fff3e9;
@@ -1110,6 +1228,7 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 .profile-preview .pv-bio { color: var(--text); }
 .profile-preview .pv-tab-btn.active { box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.25) inset; }
 .theme-orange .profile-preview .pv-tab-btn.active { box-shadow: 0 0 0 1px rgba(255, 122, 26, 0.35) inset; }
+.theme-cyber .profile-preview .pv-tab-btn.active { box-shadow: 0 0 0 1px rgba(0, 255, 240, 0.4) inset, 0 0 10px rgba(0, 255, 240, 0.25); }
 /* These two hardcode the APP-level --panel/--text (not the local
    --pv-* set the white/cream override above redeclares), so without
    this they'd stay dark-styled (unreadable dark icon bg, near-white
@@ -1567,6 +1686,24 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   line-height: 1.08;
   margin: 0 0 18px;
   letter-spacing: -0.02em;
+}
+/* Cyber theme -- pixel/CRT-terminal font (VT323, loaded in index.html)
+   for the hero headline, per the neon-arcade reference. Sized up from
+   the default 44px since VT323 reads visually smaller/thinner per
+   character than Archivo/Space Grotesk at the same font-size. The
+   stepped text-shadow fakes a chunky pixel outline (a handful of 2px
+   offsets in a ring, not a blur) -- real pixel-font rendering doesn't
+   come from font-smoothing tricks, it comes from a font drawn on a
+   coarse grid, which text-shadow can only approximate this way. */
+.theme-cyber .hero-section h1 {
+  font-family: "VT323", var(--font-mono);
+  font-weight: 400;
+  font-size: 64px;
+  letter-spacing: 0.02em;
+  text-shadow:
+    2px 0 0 rgba(0, 255, 240, 0.5),
+    -2px 0 0 rgba(255, 0, 200, 0.5),
+    0 2px 0 rgba(0, 0, 0, 0.6);
 }
 .hero-section h1 .grad {
   background: var(--holo-gradient);
@@ -2119,6 +2256,16 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   .feature-card, .feature-card .feature-icon, .feature-card::before { transition: none; }
 }
 
+.back-link {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-decoration: none;
+  margin-top: 24px;
+}
+.back-link:hover { color: var(--text); }
+
 .section-heading {
   font-family: var(--font-display);
   font-weight: 700;
@@ -2431,6 +2578,14 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 }
 .theme-orange .plan-switch-pill .current-badge {
   background: linear-gradient(120deg, #ffcf5c, #ff8a3d, #ff5e1a);
+}
+.theme-cyber .plan-switch-pill.active {
+  border-color: #00fff0;
+  box-shadow: 0 0 0 1px #00fff0, 0 0 14px rgba(0, 255, 240, 0.45);
+}
+.theme-cyber .plan-switch-pill .current-badge {
+  background: linear-gradient(120deg, #00fff0, #7000ff, #ff00c8);
+  color: #04060c;
 }
 .plan-hero-thumbs {
   flex: 1;
@@ -2836,11 +2991,31 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 
 .dash-home { display: flex; flex-direction: column; gap: 22px; }
 
+/* Two independent cards, not one shared panel -- see .dash-hero-left/
+   -right below for the actual background/border/padding. align-items:
+   flex-start (not stretch) so each box sizes to its OWN content --
+   stretch was forcing the left box to match whatever height the mini
+   card preview happened to need, leaving a large dead gray gap under
+   the greeting text whenever the card was taller than that text block. */
 .dash-hero {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
+  flex-wrap: wrap;
+}
+.dash-left-col {
+  flex: 1 1 420px;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.dash-hero-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
   padding: 26px 28px;
   border-radius: var(--radius);
   border: 1px solid var(--panel-border);
@@ -2849,18 +3024,60 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
     radial-gradient(circle at 10% 100%, rgba(94, 234, 212, 0.12), transparent 45%),
     var(--panel);
 }
-/* Orange theme -- these two radial glows are hand-tuned rgba() (not
-   var(--holo-cyan) etc.), so they don't pick up the theme override
-   automatically the way most of this file does; overridden explicitly
-   here instead. */
-.theme-orange .dash-hero {
-  background:
-    radial-gradient(circle at 85% 20%, rgba(255, 138, 61, 0.22), transparent 50%),
-    radial-gradient(circle at 10% 100%, rgba(255, 207, 92, 0.14), transparent 45%),
-    var(--panel);
+/* No panel/border/background of its own -- just a positioning wrapper
+   for the bell + card, so the card design sits directly on the page
+   instead of inside its own visible frame. */
+.dash-hero-right {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+}
+/* Orange theme -- .dash-hero-left's two radial glows are hand-tuned
+   rgba() (not var(--holo-cyan) etc.), so they don't pick up the theme
+   override automatically the way most of this file does; overridden
+   explicitly here instead. */
+.theme-orange .dash-hero-left {
+  background: rgba(0, 0, 0, 0.75);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
 }
 .dash-hero-title { font-size: 24px; margin: 0 0 6px; }
 .dash-hero-sub { color: var(--text-dim); font-size: 14px; margin: 0 0 16px; max-width: 420px; line-height: 1.5; }
+/* The plan-tier label used to sit on the mini card preview itself --
+   moved next to "View my card" once the card started showing the real
+   design image edge-to-edge (see .tap-card.mini in DashboardHome.jsx). */
+.dash-hero-plan-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+}
+.theme-orange .dash-hero-plan-badge { color: rgba(255, 255, 255, 0.75); border-color: rgba(255, 255, 255, 0.16); }
+/* Picks which of the client's multiple physical cards the hero preview
+   shows (see DashboardHome.jsx) -- only rendered when there's more than
+   one to choose between. */
+.dash-hero-card-picker {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  width: auto;
+  cursor: pointer;
+}
+.theme-orange .dash-hero-card-picker {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
 .dash-hero-btn {
   display: inline-block;
   padding: 11px 22px;
@@ -2877,17 +3094,20 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   transition: filter 0.15s;
 }
 .dash-hero-btn:hover { filter: brightness(1.12); }
+.theme-orange .dash-hero-btn { background: linear-gradient(100deg, #ffc42e 8%, #ff7a1a 92%); }
 
 .zing-section {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 20px;
   padding: 20px 28px;
   border-radius: var(--radius);
   border: 1px solid var(--panel-border);
   background: var(--panel);
   flex-wrap: wrap;
+  justify-content: space-between;
+  width: 100%;
 }
 .zing-title { font-size: 17px; margin: 0 0 4px; }
 .zing-sub { color: var(--text-dim); font-size: 13px; margin: 0; }
@@ -2908,8 +3128,8 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: var(--holo-gradient);
-  color: #06120f;
+  background: #0a0a0a;
+  color: #fff;
   font-size: 26px;
   font-weight: 800;
   line-height: 1;
@@ -2917,12 +3137,12 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(124, 92, 240, 0.25);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   transition: filter 0.15s, transform 0.15s, background 0.25s, box-shadow 0.25s;
 }
-.zing-btn:hover { filter: brightness(1.08); }
+.zing-btn:hover { filter: brightness(1.3); }
 .zing-btn:active { transform: scale(0.93); }
-.theme-orange .zing-btn { box-shadow: 0 6px 20px rgba(255, 138, 61, 0.3); }
+.theme-orange .zing-btn { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
 
 .zing-btn.zing-busy { opacity: 0.7; cursor: wait; }
 .zing-btn.zing-success {
@@ -2947,6 +3167,20 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   height: 120px;
   padding: 14px 16px;
   margin: 0;
+  cursor: pointer;
+  transition: box-shadow 0.25s ease, transform 0.08s linear;
+  will-change: transform;
+}
+/* Neon glow -- holo-gradient's own 3 colors (cyan/violet/magenta, or the
+   orange-theme trio, see :root/.theme-orange), so this automatically
+   matches whichever theme is active without a separate override. Tilt
+   itself (rotateX/rotateY/scale) is applied inline via JS mousemove in
+   DashboardHome.jsx -- CSS alone can't track cursor position. */
+.tap-card.mini:hover {
+  box-shadow:
+    0 0 18px color-mix(in srgb, var(--holo-cyan) 70%, transparent),
+    0 0 42px color-mix(in srgb, var(--holo-violet) 55%, transparent),
+    0 0 70px color-mix(in srgb, var(--holo-magenta) 35%, transparent);
 }
 
 .kpi-grid {
@@ -2991,8 +3225,29 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 .theme-orange .kpi-chip.green { background: rgba(255, 244, 230, 0.14); color: #fff4e6; }
 
 .kpi-value { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
-.kpi-label { font-size: 13px; font-weight: 600; color: var(--text); margin-top: 2px; }
+.kpi-label { font-size: 13px; font-weight: 600; color: var(--text); margin-top: 2px; display: inline-flex; align-items: center; gap: 6px; }
 .kpi-sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+
+/* "Card taps" polls for a fresh count (see DashboardHome.jsx) -- this
+   just signals that to the client so a number that changes without them
+   doing anything doesn't read as a bug. */
+.kpi-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c58b;
+  box-shadow: 0 0 0 rgba(34, 197, 139, 0.5);
+  animation: kpiLivePulse 2s ease-out infinite;
+  flex-shrink: 0;
+}
+@keyframes kpiLivePulse {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 139, 0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(34, 197, 139, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 139, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kpi-live-dot { animation: none; }
+}
 
 .dash-two-col {
   display: grid;
@@ -3139,7 +3394,7 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 body.theme-orange,
 .dash-shell.theme-orange,
 .theme-orange .dash-main {
-  background: var(--space);
+  background: #ffffff;
 }
 
 .theme-orange .side-nav {
@@ -3171,12 +3426,19 @@ body.theme-orange,
 .theme-orange .dash-hero-sub { color: rgba(255, 255, 255, 0.7); }
 .theme-orange .dash-hero-title { font-family: var(--font-heavy); font-weight: 900; }
 
-.theme-orange .zing-section,
-.theme-orange .dash-panel,
-.theme-orange .kpi-card,
 .theme-orange .shop-detail-card {
   background: #ffffff;
   border-color: #ece6dc;
+}
+/* Same transparent-black glass treatment as .dash-hero, not the white
+   card look the rest of theme-orange uses -- these three sit directly
+   below the glassy hero so they read as one continuous dark surface. */
+.theme-orange .zing-section,
+.theme-orange .dash-panel,
+.theme-orange .kpi-card {
+  background: rgba(0, 0, 0, 0.75);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
 }
 /* Shop's plan-detail panel has its own text that was styled to sit on a
    dark card (near-white by default) -- on the white card above that's
@@ -3197,7 +3459,7 @@ body.theme-orange,
 .theme-orange .kpi-value,
 .theme-orange .kpi-label,
 .theme-orange .legend-value {
-  color: #211a12;
+  color: #fff;
 }
 .theme-orange .zing-title,
 .theme-orange .dash-panel-title,
@@ -3209,7 +3471,7 @@ body.theme-orange,
 .theme-orange .kpi-sub,
 .theme-orange .legend-label,
 .theme-orange .donut-caption {
-  color: #8a8073;
+  color: rgba(255, 255, 255, 0.65);
 }
 .theme-orange .kpi-card:hover { border-color: rgba(255, 122, 26, 0.35); }
 
@@ -3219,15 +3481,15 @@ body.theme-orange,
    from an external stylesheet without a fragile structural selector,
    custom properties can). */
 .theme-orange .donut {
-  --donut-track: #ece6dc;
+  --donut-track: rgba(255, 255, 255, 0.14);
   --donut-c1: #ffc42e;
   --donut-c2: #ff7a1a;
   --donut-c3: #ff7a1a;
 }
 
-.theme-orange .mini-steps li { color: #8a8073; }
-.theme-orange .mini-steps li.done { color: #211a12; }
-.theme-orange .mini-step-dot { background: #fff3e9; border-color: #ece6dc; }
+.theme-orange .mini-steps li { color: rgba(255, 255, 255, 0.55); }
+.theme-orange .mini-steps li.done { color: #fff; }
+.theme-orange .mini-step-dot { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.16); }
 .theme-orange .mini-steps li.done .mini-step-dot {
   background: linear-gradient(100deg, #ffc42e 8%, #ff7a1a 92%);
   border-color: transparent;
@@ -3235,6 +3497,141 @@ body.theme-orange,
 }
 
 .theme-orange .zing-btn { box-shadow: 0 12px 26px -10px rgba(255, 122, 26, 0.7); }
+
+/* ============================================================
+   Cyber theme -- same dashboard footprint as orange above (sidebar +
+   Overview page only, see the comment on that block), electric teal/
+   violet/magenta on near-black instead of orange's cream/white flip.
+   Modeled on a neon NFT-marketplace reference: glowing card edges,
+   punchier accent colors than the default holo palette, angular heavy
+   headings. Mirrors every .theme-orange rule in this dashboard section
+   1:1 so the two themes have identical reach. ============================================================ */
+/* body.theme-cyber is toggled site-wide (PublicLayout.jsx and Layout.jsx
+   both set it -- see PublicLayout.jsx's comment on why this is safe for
+   cyber where it isn't for orange), so this also gives every public page
+   its own neon-pooled backdrop, echoing the reference image's dark
+   background with color bleeding in from the edges, not just a flat
+   near-black. */
+body.theme-cyber {
+  background:
+    radial-gradient(circle at 12% -8%, rgba(0, 255, 240, 0.16), transparent 42%),
+    radial-gradient(circle at 92% 4%, rgba(112, 0, 255, 0.14), transparent 46%),
+    radial-gradient(circle at 50% 115%, rgba(255, 0, 200, 0.12), transparent 52%),
+    #04060a;
+}
+.dash-shell.theme-cyber,
+.theme-cyber .dash-main {
+  background: #04060a;
+}
+
+.theme-cyber .side-nav {
+  background: #04060a;
+  border-right: 1px solid rgba(0, 255, 240, 0.18);
+}
+.theme-cyber .side-brand { border-bottom-color: rgba(0, 255, 240, 0.18); }
+.theme-cyber .side-link { color: var(--text-dim); }
+.theme-cyber .side-link:hover { color: #fff; background: rgba(0, 255, 240, 0.1); }
+.theme-cyber .side-link.active {
+  color: #04060c;
+  background: linear-gradient(100deg, #00fff0 8%, #7000ff 55%, #ff00c8 100%);
+  box-shadow: 0 0 18px -4px rgba(0, 255, 240, 0.7);
+}
+.theme-cyber .side-footer { border-top-color: rgba(0, 255, 240, 0.18); background: transparent; }
+.theme-cyber .side-logout { color: #e5484d; }
+.theme-cyber .side-logout:hover { color: #e5484d; background: rgba(229, 72, 77, 0.08); }
+.theme-cyber .dash-menu-btn { background: var(--panel-raised); border-color: rgba(0, 255, 240, 0.25); color: var(--text); }
+
+.theme-cyber .dash-hero-title,
+.theme-cyber .dash-hero-sub { color: #fff; }
+.theme-cyber .dash-hero-sub { color: rgba(255, 255, 255, 0.7); }
+.theme-cyber .dash-hero-title {
+  font-family: var(--font-heavy);
+  font-weight: 900;
+  text-shadow: 0 0 18px rgba(0, 255, 240, 0.35);
+}
+
+.theme-cyber .dash-hero-left {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: rgba(0, 255, 240, 0.3);
+  box-shadow: 0 0 40px -12px rgba(0, 255, 240, 0.35);
+}
+.theme-cyber .dash-hero-plan-badge { color: rgba(255, 255, 255, 0.85); border-color: rgba(0, 255, 240, 0.35); }
+.theme-cyber .dash-hero-card-picker {
+  background: rgba(0, 255, 240, 0.08);
+  border-color: rgba(0, 255, 240, 0.3);
+  color: #fff;
+}
+.theme-cyber .dash-hero-btn {
+  background: linear-gradient(100deg, #00fff0 8%, #7000ff 55%, #ff00c8 100%);
+  color: #04060c;
+  box-shadow: 0 0 20px -4px rgba(0, 255, 240, 0.6);
+}
+
+.theme-cyber .shop-detail-card {
+  background: #04060a;
+  border-color: rgba(0, 255, 240, 0.25);
+}
+.theme-cyber .zing-section,
+.theme-cyber .dash-panel,
+.theme-cyber .kpi-card {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: rgba(0, 255, 240, 0.25);
+  box-shadow: none;
+}
+.theme-cyber .shop-detail-card .plan-detail-name,
+.theme-cyber .shop-detail-card .checkout-modal-media-caption {
+  color: #fff;
+}
+.theme-cyber .shop-detail-card .shop-plan-desc {
+  color: rgba(255, 255, 255, 0.6);
+}
+.theme-cyber .shop-detail-card .plan-detail-header {
+  border-bottom-color: rgba(0, 255, 240, 0.25);
+}
+.theme-cyber .zing-title,
+.theme-cyber .dash-panel-title,
+.theme-cyber .kpi-value,
+.theme-cyber .kpi-label,
+.theme-cyber .legend-value {
+  color: #fff;
+}
+.theme-cyber .zing-title,
+.theme-cyber .dash-panel-title,
+.theme-cyber .kpi-value {
+  font-family: var(--font-heavy);
+  font-weight: 800;
+}
+.theme-cyber .zing-sub,
+.theme-cyber .kpi-sub,
+.theme-cyber .legend-label,
+.theme-cyber .donut-caption {
+  color: rgba(255, 255, 255, 0.65);
+}
+.theme-cyber .kpi-card:hover { border-color: rgba(0, 255, 240, 0.55); box-shadow: 0 0 22px -6px rgba(0, 255, 240, 0.4); }
+
+.theme-cyber .kpi-chip.cyan { background: rgba(0, 255, 240, 0.16); }
+.theme-cyber .kpi-chip.blue { background: rgba(112, 0, 255, 0.18); color: #b98bff; }
+.theme-cyber .kpi-chip.orange { background: rgba(255, 0, 200, 0.16); color: #ff00c8; }
+.theme-cyber .kpi-chip.green { background: rgba(0, 255, 240, 0.1); color: #00fff0; }
+
+.theme-cyber .donut-pct { font-family: var(--font-heavy); font-weight: 900; }
+.theme-cyber .donut {
+  --donut-track: rgba(255, 255, 255, 0.12);
+  --donut-c1: #00fff0;
+  --donut-c2: #7000ff;
+  --donut-c3: #ff00c8;
+}
+
+.theme-cyber .mini-steps li { color: rgba(255, 255, 255, 0.55); }
+.theme-cyber .mini-steps li.done { color: #fff; }
+.theme-cyber .mini-step-dot { background: rgba(0, 255, 240, 0.08); border-color: rgba(0, 255, 240, 0.25); }
+.theme-cyber .mini-steps li.done .mini-step-dot {
+  background: linear-gradient(100deg, #00fff0 8%, #7000ff 55%, #ff00c8 100%);
+  border-color: transparent;
+  color: #04060c;
+}
+
+.theme-cyber .zing-btn { background: #04060a; box-shadow: 0 0 22px -4px rgba(0, 255, 240, 0.65); }
 
 /* Magic Camera's full-screen loading spinner (see MagicCamera.jsx) --
    shown while compiling tracking data / starting the camera, gone once

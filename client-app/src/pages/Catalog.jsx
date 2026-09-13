@@ -204,7 +204,7 @@ function EntryRowSideBySide({ entry }) {
         <EntryDetails entry={entry} />
       </div>
 
-      <div style={{ flex: '0 0 420px', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+      <div style={{ flex: '1 1 320px', maxWidth: 420, display: 'flex', alignItems: 'flex-start', gap: 14 }}>
         {images.length > 0 ? (
           images.map((img, i) => (
             // Fixed portrait aspect ratio + object-fit: cover -- without

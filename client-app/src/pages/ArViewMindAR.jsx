@@ -428,9 +428,13 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
       if (anchorGroup.visible && pillLayoutRef.current.length) {
         const cw = window.innerWidth;
         const ch = window.innerHeight;
+        const project = (v) => {
+          ndcHelper.copy(v).applyMatrix4(anchorGroup.matrix).project(camera);
+          return { x: ((ndcHelper.x + 1) / 2) * cw, y: ((1 - ndcHelper.y) / 2) * ch, z: ndcHelper.z };
+        };
         const next = pillLayoutRef.current.map(({ id, local }) => {
-          ndcHelper.copy(local).applyMatrix4(anchorGroup.matrix).project(camera);
-          return { id, x: ((ndcHelper.x + 1) / 2) * cw, y: ((1 - ndcHelper.y) / 2) * ch, visible: ndcHelper.z <= 1 };
+          const p = project(local);
+          return { id, x: p.x, y: p.y, visible: p.z <= 1 };
         });
         setPillScreens(next);
       }

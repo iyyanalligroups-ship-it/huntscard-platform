@@ -598,30 +598,45 @@ router.get('/ar-icons', async (req, res) => {
 
 // GET /api/public/magic-art -- every COMPLETE admin-managed Magic Art
 // pack (see backend/models/MagicArt.js), oldest first. Read-only, no
-// auth. Filtered to packs with both an image and a video set -- an
-// in-progress pack the admin hasn't finished shouldn't be publicly
-// visible or scannable. Returns [] (not a 404) when none exist yet.
+// auth. Filtered to packs with an image and at least one overlay clip
+// that has its own video -- an in-progress pack the admin hasn't
+// finished shouldn't be publicly visible or scannable. Returns [] (not a
+// 404) when none exist yet.
 router.get('/magic-art', async (req, res) => {
   try {
-    const docs = await MagicArt.find({ imageUrl: { $ne: null }, videoUrl: { $ne: null } }).sort({ createdAt: 1 });
+    const docs = await MagicArt.find({ imageUrl: { $ne: null } }).sort({ createdAt: 1 });
     res.set('Cache-Control', 'no-store');
     res.json(
-      docs.map((doc) => ({
-        _id: doc._id,
-        name: doc.name,
-        description: doc.description,
-        imageUrl: doc.imageUrl,
-        imageWidth: doc.imageWidth,
-        imageHeight: doc.imageHeight,
-        videoUrl: doc.videoUrl,
-        videoCrop: {
-          x: doc.videoCropX ?? 0,
-          y: doc.videoCropY ?? 0,
-          width: doc.videoCropWidth ?? 1,
-          height: doc.videoCropHeight ?? 1,
-        },
-        active: doc.active,
-      }))
+      docs
+        .map((doc) => ({
+          _id: doc._id,
+          name: doc.name,
+          description: doc.description,
+          imageUrl: doc.imageUrl,
+          imageWidth: doc.imageWidth,
+          imageHeight: doc.imageHeight,
+          // One positioned box per clip (see StreetArt.js's identical
+          // shape) -- consumed by client-app's MagicCamera.jsx
+          // (getTargetOverlays), which renders each as its own video
+          // plane instead of one video stretched across the whole image.
+          overlays: (doc.overlays || [])
+            .filter((o) => o.videoUrl)
+            .map((o) => ({
+              videoUrl: o.videoUrl,
+              videoCrop: {
+                x: o.videoCropX ?? 0,
+                y: o.videoCropY ?? 0,
+                width: o.videoCropWidth ?? 1,
+                height: o.videoCropHeight ?? 1,
+              },
+              x: o.x,
+              y: o.y,
+              width: o.width,
+              height: o.height,
+            })),
+          active: doc.active,
+        }))
+        .filter((piece) => piece.overlays.length > 0)
     );
   } catch (err) {
     res.status(500).json({ error: err.message });

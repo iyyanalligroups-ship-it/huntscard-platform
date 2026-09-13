@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, API_URL } from '../api.js';
 import CropBox from '../components/CropBox.jsx';
 import MagicHoverPreview from '../components/MagicHoverPreview.jsx';
+import { composeCardWithQr } from '../lib/cardComposite.js';
 
 const MAX_VIDEO_BYTES = 80 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
@@ -19,7 +20,6 @@ const CARD_UPLOAD_SIZES = {
   vertical: { width: 650, height: 1004 },
 };
 const CARD_PREVIEW_LONG_SIDE = 280;
-const CARD_CORNER_MM = 3.2; // standard card-corner radius, same ratio cardBoxSize uses for the on-screen preview
 
 // AR component editor -- the 3 rectangular buttons MagicCamera.jsx shows
 // 3D-anchored to this card (see that file's own pillLayoutRef). Their
@@ -235,14 +235,22 @@ export default function MagicBusinessCard() {
       .catch(() => {});
   }, []);
 
+  const selectedCard = cards?.find((c) => c.cardNumber === selectedCardNumber) || null;
+
   useEffect(() => {
     if (!selectedCardNumber) return;
     setCard(null);
+    // Apex (and any other magicEnabled: false plan) doesn't get Magic
+    // Business Card at all -- same gate ArLayout.jsx applies for its own
+    // arEnabled, see the render-time check below. Skipping the fetch here
+    // too avoids implicitly creating a MagicBusinessCard doc (see admin's
+    // findOrCreateMagicCard) for a card that was never meant to have one.
+    if (!selectedCard?.magicEnabled) return;
     api
       .getMyMagicCard(selectedCardNumber)
       .then(setCard)
       .catch((err) => setError(err.message));
-  }, [selectedCardNumber]);
+  }, [selectedCardNumber, selectedCard?.magicEnabled]);
 
   // Loads the resolved design image's real pixel size once it's known --
   // needed both for the preview box's true aspect ratio and for locking
@@ -526,60 +534,9 @@ export default function MagicBusinessCard() {
     setBusy(true);
     setError('');
     try {
-      const res = await fetch(card.imageUrl);
-      if (!res.ok) throw new Error('Could not download the image');
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const img = await new Promise((resolve, reject) => {
-        const el = new Image();
-        el.onload = () => resolve(el);
-        el.onerror = () => reject(new Error('Could not read the downloaded image'));
-        el.src = objectUrl;
-      });
-      URL.revokeObjectURL(objectUrl);
-
-      // The QR, baked directly into this same download at the position
-      // dragged onto the preview above -- so what gets printed already
-      // has it, instead of shipping a separate file the client has to
-      // place themselves. Only if there's actually a clientId to build a
-      // QR URL from; the card image alone still downloads fine without it.
-      const qrImg = qrUrl
-        ? await new Promise((resolve) => {
-            const el = new Image();
-            el.crossOrigin = 'anonymous';
-            el.onload = () => resolve(el);
-            el.onerror = () => resolve(null); // a missing QR shouldn't block downloading the card image itself
-            el.src = qrUrl;
-          })
-        : null;
-
-      const pxPerMm = CARD_UPLOAD_SIZES.horizontal.width / CARD_MM.width;
-      const radius = CARD_CORNER_MM * pxPerMm;
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.beginPath();
-      ctx.moveTo(radius, 0);
-      ctx.arcTo(canvas.width, 0, canvas.width, canvas.height, radius);
-      ctx.arcTo(canvas.width, canvas.height, 0, canvas.height, radius);
-      ctx.arcTo(0, canvas.height, 0, 0, radius);
-      ctx.arcTo(0, 0, canvas.width, 0, radius);
-      ctx.closePath();
-      ctx.clip();
-      ctx.drawImage(img, 0, 0);
-
-      if (qrImg) {
-        // Same "~21.2mm, as a fraction of the card's short side" sizing
-        // and (x%, y%) placement convention as the on-screen preview
-        // above, just applied at this canvas's true print resolution
-        // instead of the smaller preview box size.
-        const qrSizePx = Math.round(Math.min(canvas.width, canvas.height) * (21.2 / 55));
-        const qrCenterX = (qrPos.x / 100) * canvas.width;
-        const qrCenterY = (qrPos.y / 100) * canvas.height;
-        ctx.drawImage(qrImg, qrCenterX - qrSizePx / 2, qrCenterY - qrSizePx / 2, qrSizePx, qrSizePx);
-      }
-
+      // Same compositing DashboardHome.jsx's hero card preview now uses
+      // (see cardComposite.js), so both show literally the same image.
+      const canvas = await composeCardWithQr({ imageUrl: card.imageUrl, qrUrl, qrPos });
       const roundedBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
       const url = URL.createObjectURL(roundedBlob);
       const a = document.createElement('a');
@@ -658,6 +615,34 @@ export default function MagicBusinessCard() {
         <a href="/shop">
           <button style={{ width: 'auto' }}>See plans</button>
         </a>
+      </div>
+    );
+  }
+
+  if (!selectedCard?.magicEnabled) {
+    return (
+      <div>
+        <h1>Magic Business Card</h1>
+        <CardPicker />
+        <div
+          style={{
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+            padding: '40px 24px',
+            textAlign: 'center',
+          }}
+        >
+          <p style={{ fontSize: 15, marginBottom: 8 }}>
+            {selectedCard?.planName ? (
+              <>Magic Business Card isn't included in this card's plan (<strong>{selectedCard.planName}</strong>).</>
+            ) : (
+              "Magic Business Card isn't included until you've got a card plan."
+            )}
+          </p>
+          <a href="/shop">
+            <button style={{ width: 'auto' }}>See plans</button>
+          </a>
+        </div>
       </div>
     );
   }

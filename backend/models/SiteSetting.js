@@ -10,7 +10,11 @@ const siteSettingSchema = new mongoose.Schema(
     key: { type: String, required: true, unique: true, default: 'global' },
     // 'default' = Home.jsx (original hero), 'orange' = HomeD1.jsx (the
     // orange-theme redesign) -- see client-app's App.jsx for the switch.
-    homeTheme: { type: String, enum: ['default', 'orange'], default: 'default' },
+    // 'cyber' doesn't swap the homepage component (see HomeSwitch.jsx --
+    // it renders Home.jsx same as 'default'); it only applies the
+    // .theme-cyber dashboard palette, same scope theme-orange had at
+    // first before HomeD1.jsx existed.
+    homeTheme: { type: String, enum: ['default', 'orange', 'cyber'], default: 'default' },
     updatedBy: { type: String, trim: true },
   },
   { timestamps: true }

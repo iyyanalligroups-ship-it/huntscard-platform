@@ -213,6 +213,7 @@ export const api = {
   },
   removeMyMagicCardImage: (cardNumber) =>
     request(`/api/profile/magic-card/image${cardNumber ? `?card=${cardNumber}` : ''}`, { method: 'DELETE' }),
+
   // Admin-defined extra profile fields (see AttributeDefinition) -- used
   // by both Profile Settings (to know which extra inputs to render) and
   // the public profile page (to know which extra rows to render).

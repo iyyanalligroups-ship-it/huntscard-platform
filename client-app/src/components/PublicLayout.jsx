@@ -13,11 +13,15 @@ export default function PublicLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   // Same admin-toggled setting HomeSwitch reads for which hero to render
   // -- here it adds/removes .theme-orange on the header and (via a prop)
-  // the footer. Deliberately NOT toggled on <body> the way the dashboard's
-  // Layout.jsx does it -- .theme-orange has a `body.theme-orange` rule
-  // meant only for the logged-in dashboard (flips it to a light cream
-  // layout); doing the same here would repaint the whole public site's
-  // dark background, not just swap accent colors.
+  // the footer. Deliberately NOT toggled on <body> for orange -- its
+  // `body.theme-orange` rule flips the page to a light cream layout,
+  // meant only for the logged-in dashboard; doing that here would repaint
+  // the whole public site's dark background, not just swap accent colors.
+  // Cyber's own body.theme-cyber rule stays dark-on-dark (just a
+  // different near-black + neon accents, see styles.css), so it's safe
+  // to toggle site-wide here -- without it, cyber's only visible
+  // difference on public pages was nav-link hover/active states, which
+  // read as "looks the same as default" at a glance.
   const [homeTheme, setHomeTheme] = useState('default');
   const navRef = useRef(null);
   const spotlightRef = useRef(null);
@@ -29,6 +33,11 @@ export default function PublicLayout() {
       .then((s) => setHomeTheme(s.homeTheme || 'default'))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle('theme-cyber', homeTheme === 'cyber');
+    return () => document.body.classList.remove('theme-cyber');
+  }, [homeTheme]);
 
   // Close the mobile dropdown on navigation (link clicks already do this
   // directly, but this also covers back/forward browser navigation) and on
@@ -128,7 +137,7 @@ export default function PublicLayout() {
   return (
     <div className="app-shell">
       <header
-        className={`top-nav${homeTheme === 'orange' ? ' theme-orange' : ''}`}
+        className={`top-nav${homeTheme === 'orange' ? ' theme-orange' : homeTheme === 'cyber' ? ' theme-cyber' : ''}`}
         ref={navRef}
         onMouseMove={handleNavMouseMove}
       >

@@ -222,16 +222,52 @@ function uploadErrorMessage(err, maxSizeLabel) {
 // /me's own computation exactly, including the customAttributes Map fix
 // (see that route for why).
 async function withPlanFlags(client) {
-  const plan = await CardPlan.findOne({ key: client.cardType }).select('arEnabled zingEnabled variants');
+  const plan = await CardPlan.findOne({ key: client.cardType }).select('arEnabled zingEnabled variants requiresDesignUpload');
   const clientObj = client.toObject();
   clientObj.arEnabled = !!plan?.arEnabled;
   clientObj.zingEnabled = !!plan?.zingEnabled;
+
+  // Client.cardType/cardVariantId are a legacy mirror of whichever card
+  // was purchased FIRST -- for a client whose real (only, or primary)
+  // physical Card since changed variant, or who has no card numbered 1,
+  // that mirror silently goes stale (see plan file at
+  // C:\Users\NANDHU\.claude\plans\snoopy-baking-oasis.md). Resolve off the
+  // actual Card doc instead, so cardShape/cardFrontImageUrl reflect what
+  // was really purchased. Falls back to the Client-level fields only for
+  // very old accounts predating the Card collection.
+  const primaryCard = await Card.findOne({ clientId: client.clientId }).sort({ cardNumber: 1 });
+  const resolved = primaryCard ? await resolveCardVariant(primaryCard) : null;
+
   // The physical card's actual shape -- picked at purchase time (see
   // CardPlanVariantSchema.shape) and needed by the AR layout system to
   // size/orient itself to match instead of always assuming landscape. See
   // the matching computation in public.js's GET /profile/:clientId.
-  const variant = plan?.variants?.find((v) => v._id.toString() === String(client.cardVariantId));
-  clientObj.cardShape = variant?.shape || 'horizontal';
+  const legacyVariant = plan?.variants?.find((v) => v._id.toString() === String(client.cardVariantId));
+  clientObj.cardShape = resolved ? resolved.shape : legacyVariant?.shape || 'horizontal';
+
+  // Real card design image, for previews like the dashboard hero's mini
+  // card. Same source priority serializeMyMagicCard uses below: for
+  // Custom Card, an admin/client-set MagicBusinessCard.imageUrl override
+  // wins (it's the most recently confirmed art for this exact card) over
+  // the raw checkout upload; every other plan shows the purchased
+  // variant's own print image.
+  if (resolved?.requiresDesignUpload) {
+    const mbc = await MagicBusinessCard.findOne({ clientId: client.clientId, cardNumber: primaryCard.cardNumber }).select('imageUrl');
+    clientObj.cardFrontImageUrl = mbc?.imageUrl || client.customDesignFrontUrl || null;
+  } else if (resolved?.hasVariant) {
+    clientObj.cardFrontImageUrl = resolved.frontImageUrl || null;
+  } else {
+    clientObj.cardFrontImageUrl = plan?.requiresDesignUpload
+      ? client.customDesignFrontUrl || null
+      : legacyVariant?.frontImageUrl || null;
+  }
+  // Which physical card cardFrontImageUrl/cardShape above actually came
+  // from -- the dashboard needs this to fetch that SAME card's Magic
+  // Business Card QR position (api.getMyMagicCard(primaryCardNumber)) for
+  // the "Download card (with QR)" composite preview. Without it the
+  // frontend would default to card #1, which 404s for any client whose
+  // lowest-numbered card isn't 1 (e.g. card #1 was replaced/removed).
+  clientObj.primaryCardNumber = primaryCard?.cardNumber || null;
   clientObj.customAttributes = Object.fromEntries(client.customAttributes || []);
   return clientObj;
 }

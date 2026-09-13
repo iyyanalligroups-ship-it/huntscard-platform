@@ -65,6 +65,7 @@ export default function ChatSupport() {
   if (!loggedIn) {
     return (
       <div>
+        <Link to="/dashboard" className="back-link">‹ Back to Dashboard</Link>
         <h1 className="section-heading" style={{ marginTop: 0 }}>Chat Support</h1>
         <p className="section-subheading">Message our team directly and get a reply here.</p>
         <div className="checkout-panel" style={{ maxWidth: 440 }}>
@@ -79,6 +80,7 @@ export default function ChatSupport() {
 
   return (
     <div>
+      <Link to="/dashboard" className="back-link">‹ Back to Dashboard</Link>
       <h1 className="section-heading" style={{ marginTop: 0 }}>Chat Support</h1>
       <p className="section-subheading">Message our team directly and get a reply here.</p>
 

@@ -121,10 +121,14 @@ async function prepareTargetImage(imageUrl) {
 // Which Magic Art packs this scans -- whatever the admin explicitly
 // activated; if none have been touched yet, every complete pack (so
 // nothing regresses to "scans nothing" for an untouched older setup).
+// "Complete" now means an image plus at least one overlay clip with a
+// video (see backend/models/MagicArt.js's overlays array) -- the public
+// route already filters to this, so pieces here always qualify, but kept
+// explicit for clarity/defensiveness.
 function getActiveArt(pieces) {
   if (!pieces) return [];
   const active = pieces.filter((p) => p.active);
-  return active.length ? active : pieces.filter((p) => p.imageUrl && p.videoUrl);
+  return active.length ? active : pieces.filter((p) => p.imageUrl && p.overlays?.some((o) => o.videoUrl));
 }
 
 // Merges Magic Art's active-or-fallback list with Magic Business Cards and
@@ -138,12 +142,13 @@ function getActiveTargets(pieces, cards, streetArt) {
 }
 
 // Normalizes a target into its list of overlay video boxes. Magic Art and
-// Magic Business Card are a single video covering the whole tracked image
-// (box = the full 0-100% square); Street Art pieces instead carry their
-// own `overlays` array, one positioned box per clip (see
-// backend/models/StreetArt.js) -- e.g. one box per wing of a wings mural,
-// so each animates independently instead of one video stretched across
-// the whole image.
+// Street Art both carry a full `overlays` array -- one positioned box per
+// clip (see backend/models/MagicArt.js and StreetArt.js, identical
+// shape), e.g. one box per wing of a wings mural or per animated element
+// on a Magic Art piece, so each plays back independently instead of one
+// video stretched across the whole image. Magic Business Card is the only
+// remaining single-video case (no position field on that model at all) --
+// it falls through to the full-image default below.
 function getTargetOverlays(piece) {
   if (piece.overlays) {
     return piece.overlays.map((o) => ({
@@ -155,7 +160,14 @@ function getTargetOverlays(piece) {
       height: o.height,
     }));
   }
-  return [{ videoUrl: piece.videoUrl, crop: piece.videoCrop, x: 0, y: 0, width: 100, height: 100 }];
+  return [{
+    videoUrl: piece.videoUrl,
+    crop: piece.videoCrop,
+    x: piece.x ?? 0,
+    y: piece.y ?? 0,
+    width: piece.width ?? 100,
+    height: piece.height ?? 100,
+  }];
 }
 
 export default function MagicCamera() {
@@ -593,6 +605,16 @@ export default function MagicCamera() {
             .then(() => {
               const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
               const texture = new THREE.VideoTexture(arVideo);
+              // Without this, Three.js treats the video's pixel data as
+              // linear instead of standard sRGB, rendering it visibly
+              // flatter/duller/desaturated than the actual file -- the
+              // renderer's own output is already sRGB by default, but a
+              // texture's own colorSpace is NOT auto-detected and stays
+              // NoColorSpace (linear) unless set explicitly. Confirmed via
+              // a real printed-mural test: the overlay video came out
+              // consistently muted toward gray/olive compared to the same
+              // file played in a plain <video> tag.
+              texture.colorSpace = THREE.SRGBColorSpace;
               // Display-only crop, chosen in the admin's crop tool (see
               // MagicArt.jsx / StreetArt.jsx) -- a plain UV offset/repeat
               // on the texture, the video FILE itself is untouched.

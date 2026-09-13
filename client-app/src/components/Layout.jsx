@@ -108,7 +108,8 @@ export default function Layout() {
   // chasing the exact sticky/scroll interaction that caused it.
   useEffect(() => {
     document.body.classList.toggle('theme-orange', homeTheme === 'orange');
-    return () => document.body.classList.remove('theme-orange');
+    document.body.classList.toggle('theme-cyber', homeTheme === 'cyber');
+    return () => document.body.classList.remove('theme-orange', 'theme-cyber');
   }, [homeTheme]);
 
   function handleLogout() {
@@ -135,7 +136,7 @@ export default function Layout() {
     location.pathname === '/dashboard/appointments';
 
   return (
-    <div className={`dash-shell${homeTheme === 'orange' ? ' theme-orange' : ''}`}>
+    <div className={`dash-shell${homeTheme === 'orange' ? ' theme-orange' : homeTheme === 'cyber' ? ' theme-cyber' : ''}`}>
       <button
         className="dash-menu-btn"
         onClick={() => setMenuOpen((v) => !v)}

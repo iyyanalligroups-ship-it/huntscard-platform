@@ -4,7 +4,7 @@ const SUPPORT_EMAIL = 'info@huntsworld.com';
 
 export default function Footer({ homeTheme }) {
   return (
-    <footer className={`site-footer${homeTheme === 'orange' ? ' theme-orange' : ''}`}>
+    <footer className={`site-footer${homeTheme === 'orange' ? ' theme-orange' : homeTheme === 'cyber' ? ' theme-cyber' : ''}`}>
       <div className="site-footer-grid">
         <div className="site-footer-brand">
           <div className="brand" style={{ marginBottom: 10 }}>
