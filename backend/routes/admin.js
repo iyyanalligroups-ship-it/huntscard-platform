@@ -417,7 +417,7 @@ router.post('/plans', requireAdmin, (req, res) => {
     if (err) return res.status(400).json({ error: err.message });
 
     try {
-      const { name, price, priceAmount, description, arEnabled, zingEnabled, magicEnabled, requiresDesignUpload, variants } = req.body;
+      const { name, price, priceAmount, description, arEnabled, zingEnabled, magicEnabled, isSpecialEdition, requiresDesignUpload, variants } = req.body;
       if (!name) return res.status(400).json({ error: 'name is required' });
 
       // multipart/form-data can't carry a real nested array -- the
@@ -451,6 +451,7 @@ router.post('/plans', requireAdmin, (req, res) => {
         arEnabled: arEnabled === 'true' || arEnabled === true,
         zingEnabled: zingEnabled === 'true' || zingEnabled === true,
         magicEnabled: magicEnabled === 'true' || magicEnabled === true,
+        isSpecialEdition: isSpecialEdition === 'true' || isSpecialEdition === true,
         variants: parsedVariants,
         requiresDesignUpload: requiresDesignUpload === 'true' || requiresDesignUpload === true,
       });
@@ -478,7 +479,7 @@ router.post('/plans', requireAdmin, (req, res) => {
 // bug that dropped the id" from the server side alone.
 router.patch('/plans/:id', requireAdmin, async (req, res) => {
   try {
-    const { name, price, priceAmount, description, active, arEnabled, zingEnabled, magicEnabled, requiresDesignUpload, variants } = req.body;
+    const { name, price, priceAmount, description, active, arEnabled, zingEnabled, magicEnabled, isSpecialEdition, requiresDesignUpload, variants } = req.body;
     const updates = {};
     if (name !== undefined) updates.name = name;
     if (price !== undefined) updates.price = price;
@@ -488,6 +489,7 @@ router.patch('/plans/:id', requireAdmin, async (req, res) => {
     if (arEnabled !== undefined) updates.arEnabled = arEnabled === 'true' || arEnabled === true;
     if (zingEnabled !== undefined) updates.zingEnabled = zingEnabled === 'true' || zingEnabled === true;
     if (magicEnabled !== undefined) updates.magicEnabled = magicEnabled === 'true' || magicEnabled === true;
+    if (isSpecialEdition !== undefined) updates.isSpecialEdition = isSpecialEdition === 'true' || isSpecialEdition === true;
     if (requiresDesignUpload !== undefined) updates.requiresDesignUpload = requiresDesignUpload === 'true' || requiresDesignUpload === true;
     if (variants !== undefined) {
       const variantError = validateVariants(variants);
