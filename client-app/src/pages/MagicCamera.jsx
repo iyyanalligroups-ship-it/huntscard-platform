@@ -583,13 +583,11 @@ export default function MagicCamera() {
             entry.anchorGroup.visible = true;
             if (!foundFlags[targetIndex]) {
               foundFlags[targetIndex] = true;
-              // Sound only plays while this specific target is actually
-              // being tracked -- the video itself has been silently
-              // playing/looping in the background since compile finished
-              // (so it's already in sync once found, not restarting), but
-              // it stayed muted until now so nothing is audible before the
-              // camera actually recognizes the image.
-              entry.videoEls.forEach((v) => { v.muted = false; });
+              // Sound plays only for Special Edition cards while tracked
+              const isSpecial = Boolean(targets[targetIndex]?.isSpecialEdition);
+              entry.videoEls.forEach((v) => {
+                v.muted = !isSpecial;
+              });
               setStatus('found');
               setStatusMessage('Found -- being tracked.');
             }

@@ -275,10 +275,21 @@ export default function MagicBusinessCard() {
   // percentage position on a static image, so a simple bounding-rect
   // calculation is enough.
   function qrPercentFromEvent(e) {
+    if (!previewBoxRef.current) return { x: 78, y: 80 };
     const rect = previewBoxRef.current.getBoundingClientRect();
+    const halfQrWFrac = (qrBoxSize / 2 / rect.width) * 100;
+    const halfQrHFrac = (qrBoxSize / 2 / rect.height) * 100;
+    const minX = Math.ceil(halfQrWFrac);
+    const maxX = Math.floor(100 - halfQrWFrac);
+    const minY = Math.ceil(halfQrHFrac);
+    const maxY = Math.floor(100 - halfQrHFrac);
+
+    const rawX = ((e.clientX - rect.left) / rect.width) * 100;
+    const rawY = ((e.clientY - rect.top) / rect.height) * 100;
+
     return {
-      x: Math.round(Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100))),
-      y: Math.round(Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100))),
+      x: Math.round(Math.max(minX, Math.min(maxX, rawX))),
+      y: Math.round(Math.max(minY, Math.min(maxY, rawY))),
     };
   }
   function handleQrDragStart(e) {
@@ -675,7 +686,7 @@ export default function MagicBusinessCard() {
   // card was actually tapped -- the bug that made scanning Card 2/3 show
   // "no Magic effect set up" even after activating the right one.
   const qrUrl = clientId ? `${API_URL}/api/public/qr/${clientId}?type=ar&card=${selectedCardNumber}&${qrColorParams}` : null;
-  const qrPos = card?.qrPosition || { x: 82, y: 82 };
+  const qrPos = card?.qrPosition || { x: 78, y: 80 };
   // ~21.2mm real QR size (see arTargetImage.js's own derivation), as a
   // fraction of THIS card's short side (55mm) -- same "N% of the card's
   // short side" convention used for the main AR system's tracking target,
@@ -781,7 +792,7 @@ export default function MagicBusinessCard() {
               {card?.imageUrl && qrUrl ? ', drag the QR to place it' : ''}
             </p>
             {card?.imageUrl ? (
-              <div ref={previewBoxRef} style={{ position: 'relative', width: box.width, height: box.height }}>
+              <div ref={previewBoxRef} style={{ position: 'relative', width: box.width, height: box.height, overflow: 'hidden', borderRadius: box.borderRadius }}>
                 <MagicHoverPreview
                   imageUrl={card.imageUrl}
                   videoUrl={card.videoUrl}
