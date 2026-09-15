@@ -53,7 +53,6 @@
     }
   },
   "allowScripts": {
-    "@pokusew/pcsclite@0.6.0": true,
     "electron@32.3.3": true
   }
 }

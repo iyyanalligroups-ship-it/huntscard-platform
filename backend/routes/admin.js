@@ -2387,6 +2387,16 @@ const magicCardVideoUpload = multer({
     cb(null, true);
   },
 });
+const magicCardAudioUpload = multer({
+  storage: magicCardStorage,
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!['audio/mpeg', 'audio/wav', 'audio/mp3', 'audio/x-wav'].includes(file.mimetype)) {
+      return cb(new Error('Only MP3 or WAV audio is allowed'));
+    }
+    cb(null, true);
+  },
+});
 // Async -- resolves the derived image (Custom Card's checkout design, or
 // the purchased variant's own front image, see utils/cardVariant.js) the
 // same way routes/profile.js's serializeMyMagicCard does, so admin's view
@@ -2394,6 +2404,7 @@ const magicCardVideoUpload = multer({
 // `card` is the Card doc (cardType/cardVariantId) this doc belongs to.
 async function serializeMagicCard(doc, card) {
   const resolved = card ? await resolveCardVariant(card) : null;
+  const plan = card ? await CardPlan.findOne({ key: card.cardType }).select('isSpecialEdition') : null;
   let imageUrl = null;
   if (resolved?.requiresDesignUpload) {
     // Custom Card only -- a client- or admin-set image here takes
@@ -2417,6 +2428,7 @@ async function serializeMagicCard(doc, card) {
     cardType: resolved?.shape || doc.cardType || null,
     available: Boolean(imageUrl),
     requiresDesignUpload: Boolean(resolved?.requiresDesignUpload),
+    isSpecialEdition: Boolean(plan?.isSpecialEdition),
     imageUrl,
     imageWidth: doc.imageWidth,
     imageHeight: doc.imageHeight,
@@ -2425,6 +2437,7 @@ async function serializeMagicCard(doc, card) {
     videoCropY: doc.videoCropY,
     videoCropWidth: doc.videoCropWidth,
     videoCropHeight: doc.videoCropHeight,
+    audioUrl: doc.audioUrl,
     qrX: doc.qrX ?? 82,
     qrY: doc.qrY ?? 82,
     active: doc.active,
@@ -2575,11 +2588,37 @@ router.post(
   }
 );
 
+// POST /api/admin/clients/:clientId/magic-card/audio
+router.post(
+  '/clients/:clientId/magic-card/audio',
+  requireAdmin,
+  magicCardAudioUpload.single('audio'),
+  async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+      const loaded = await loadAdminCard(req, res);
+      if (!loaded) return;
+      const doc = await findOrCreateMagicCard(req.params.clientId, loaded.cardNumber);
+      const previousUrl = doc.audioUrl;
+      doc.audioUrl = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
+      doc.updatedBy = req.admin?.email || 'unknown';
+      await doc.save();
+      if (previousUrl) {
+        fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(previousUrl)), () => {});
+      }
+      res.json(await serializeMagicCard(doc, loaded.card));
+    } catch (err) {
+      const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 20MB.' : err.message;
+      res.status(400).json({ error: message });
+    }
+  }
+);
+
 // DELETE /api/admin/clients/:clientId/magic-card/:field?card=N
 router.delete('/clients/:clientId/magic-card/:field', requireAdmin, async (req, res) => {
   try {
     const { field } = req.params;
-    if (field !== 'image' && field !== 'video') {
+    if (field !== 'image' && field !== 'video' && field !== 'audio') {
       return res.status(400).json({ error: 'Unknown field' });
     }
     const loaded = await loadAdminCard(req, res);
@@ -2590,6 +2629,9 @@ router.delete('/clients/:clientId/magic-card/:field', requireAdmin, async (req, 
       doc.imageUrl = undefined;
       doc.imageWidth = undefined;
       doc.imageHeight = undefined;
+    } else if (field === 'audio') {
+      if (doc.audioUrl) fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(doc.audioUrl)), () => {});
+      doc.audioUrl = undefined;
     } else {
       if (doc.videoUrl) fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(doc.videoUrl)), () => {});
       doc.videoUrl = undefined;

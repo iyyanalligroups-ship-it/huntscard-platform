@@ -68,6 +68,10 @@ const CardPlanSchema = new mongoose.Schema(
     // AR image+video effect, distinct from the general arEnabled AR QR/AR
     // Layout feature above). Same premium-tier gating pattern.
     magicEnabled: { type: Boolean, default: false },
+    // Special Edition Card -- premium edition configured exclusively by
+    // admin. Has Magic AR with sound/audio effects allowed in Magic Camera,
+    // and is view-only on the client dashboard (no client edits allowed).
+    isSpecialEdition: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

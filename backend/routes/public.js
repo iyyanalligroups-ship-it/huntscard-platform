@@ -679,6 +679,7 @@ router.get('/magic-cards', async (req, res) => {
       const card = cardByKey[`${doc.clientId}:${doc.cardNumber}`];
       if (!card) continue;
       const resolved = await resolveCardVariant(card, maps);
+      const isSpecialEdition = Boolean(maps.planByKey[card.cardType]?.isSpecialEdition);
       // Same priority order as the singular GET /magic-card/:clientId
       // route -- this card's own client-set override (doc.imageUrl)
       // wins over the checkout design for Custom Card, since that design
@@ -696,6 +697,8 @@ router.get('/magic-cards', async (req, res) => {
         imageWidth: doc.imageWidth,
         imageHeight: doc.imageHeight,
         videoUrl: doc.videoUrl,
+        isSpecialEdition,
+        audioUrl: isSpecialEdition ? doc.audioUrl : null,
         videoCrop: {
           x: doc.videoCropX ?? 0,
           y: doc.videoCropY ?? 0,
@@ -781,6 +784,8 @@ router.get('/magic-card/:clientId', async (req, res) => {
 
     const card = await Card.findOne({ clientId: req.params.clientId, cardNumber }).select('cardType cardVariantId');
     const resolved = card ? await resolveCardVariant(card) : null;
+    const plan = card ? await CardPlan.findOne({ key: card.cardType }) : null;
+    const isSpecialEdition = Boolean(plan?.isSpecialEdition);
 
     let imageUrl = null;
     if (resolved?.requiresDesignUpload) {
@@ -812,6 +817,8 @@ router.get('/magic-card/:clientId', async (req, res) => {
       imageWidth: doc.imageWidth,
       imageHeight: doc.imageHeight,
       videoUrl: doc.videoUrl,
+      isSpecialEdition,
+      audioUrl: isSpecialEdition ? doc.audioUrl : null,
       videoCrop: {
         x: doc.videoCropX ?? 0,
         y: doc.videoCropY ?? 0,

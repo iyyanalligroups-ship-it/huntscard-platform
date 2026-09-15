@@ -1049,7 +1049,7 @@ export default function MagicBusinessCard() {
         </div>
       )}
 
-      {card?.requiresDesignUpload && (
+      {card?.requiresDesignUpload && !card?.isSpecialEdition && (
         <div className="card" style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <div style={{ flex: 1 }}>
@@ -1078,8 +1078,9 @@ export default function MagicBusinessCard() {
         </div>
       )}
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+      {!card?.isSpecialEdition && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ flex: 1 }}>
             <p style={{ margin: 0, fontWeight: 700 }}>Video</p>
             <p className="hint" style={{ margin: '2px 0 0' }}>
@@ -1097,6 +1098,7 @@ export default function MagicBusinessCard() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

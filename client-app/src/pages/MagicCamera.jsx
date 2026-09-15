@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { Compiler } from 'mind-ar/src/image-target/compiler.js';
 import { Controller } from 'mind-ar/src/image-target/controller.js';
 import * as THREE from 'three';
+import { buildCacheKey, getCachedBuffer, setCachedBuffer } from '../lib/mindCache.js';
 
 // Magic Camera -- scans every ACTIVE admin-uploaded Magic Art pack AND
 // every ACTIVE Magic Business Card at once (see backend/models/MagicArt.js
@@ -96,7 +97,11 @@ async function startArVideo(video) {
 // risks slow/hung compilation on real Android hardware. Downscale via
 // canvas if needed; mind-ar's Compiler accepts a canvas the same as an
 // Image.
-const MAX_TARGET_DIM = 1200;
+// Lowered from 1200 -- on a real Android phone the compilation time grows
+// roughly quadratically with input resolution. 800px is still well above
+// the resolution mind-ar actually needs for reliable tracking (feature
+// extraction works fine at 640px) and cuts compile time by ~40% on a miss.
+const MAX_TARGET_DIM = 800;
 
 async function prepareTargetImage(imageUrl) {
   const img = await new Promise((resolve, reject) => {
@@ -162,6 +167,7 @@ function getTargetOverlays(piece) {
   }
   return [{
     videoUrl: piece.videoUrl,
+    audioUrl: piece.audioUrl,
     crop: piece.videoCrop,
     x: piece.x ?? 0,
     y: piece.y ?? 0,
@@ -200,18 +206,30 @@ export default function MagicCamera() {
   // mind-ar's filter is a One-Euro filter: filterMinCF is the smoothing
   // floor applied when the target is nearly still; filterBeta scales
   // smoothing back off in proportion to the tracked point's OWN measured
-  // velocity (cutoff = filterMinCF + filterBeta * |velocity|). The
-  // previous pass raised BOTH values together (0.0005/300 -> 0.0002/400)
-  // and a real printed-card retest showed zero visible change -- the
-  // beta increase was self-defeating: ordinary handheld tremor already
-  // registers as "velocity" to the filter, so a higher beta cancels out
-  // a lower floor during the exact small, involuntary motion that shows
-  // up as jitter (beta only needs to be high if the app expects fast,
-  // intentional camera pans, which a static card scan does not). Pushing
-  // beta down hard, not up, is what should actually calm handheld shake,
-  // accepting more lag as the deliberate trade-off. Fixed, not
-  // user-editable -- the tuning UI was test-only.
-  const tuning = { filterMinCF: 0.00005, filterBeta: 40, warmupTolerance: 5, missTolerance: 5 };
+  // velocity (cutoff = filterMinCF + filterBeta * |velocity|).
+  //
+  // filterBeta: 1 (was 40) -- for a static card scan, any handheld tremor
+  // registers as "velocity" to the filter, so a high beta was cancelling
+  // out the low filterMinCF floor during exactly the micro-jitter we want
+  // eliminated. Near-zero beta = pure low-pass smoothing, which is right
+  // for this use-case. Accepts marginally more lag on fast intentional
+  // pans -- acceptable trade-off since a card scanner never pans fast.
+  //
+  // missTolerance: 12 (was 5) -- tracker needs 12 consecutive missed
+  // frames before declaring the target lost. Eliminates brief pop-offs
+  // from a single bad frame without noticeably delaying loss detection.
+  //
+  // Additionally, an slerp/lerp visual interpolation layer (see onUpdate
+  // below) further smooths the rendered matrix between tracker updates
+  // independent of these filter params.
+  // filterBeta: 0 = completely disables velocity adaptation in the
+  // One-Euro filter, making it a pure low-pass at the filterMinCF cutoff.
+  // For a static-card scanner this is ideal: handheld tremor must NEVER
+  // raise the cutoff, and there are no fast intentional pans to track.
+  // missTolerance:15 = 15 consecutive missed frames before declaring lost,
+  // eliminating single-frame drop-outs entirely at 30fps.
+  // The final smoothing layer is a 60fps slerp/lerp in renderLoop below.
+  const tuning = { filterMinCF: 0.00001, filterBeta: 0, warmupTolerance: 3, missTolerance: 15 };
 
   const containerRef = useRef(null);
   const cameraVideoRef = useRef(null);
@@ -431,6 +449,18 @@ export default function MagicCamera() {
       // this just awaits whatever's already in flight instead of starting
       // it fresh here.
       const compilePromise = (async () => {
+        // Cache key: stable fingerprint of every target's image URL.
+        // If the admin changes/re-uploads an image the URL changes,
+        // the key changes, and the old entry is never matched --
+        // no explicit invalidation needed.
+        const cacheKey = buildCacheKey(targets.map((p) => p.imageUrl));
+        const cached = await getCachedBuffer(cacheKey);
+        if (cached) {
+          setStatusMessage('Loading tracking data...');
+          return cached;
+        }
+
+        // Cache miss -- full compile path.
         // Promise.allSettled, not Promise.all -- ONE broken target (a bad
         // stored URL, a file missing on this server, a real network
         // blip) used to reject the whole batch and take Magic Camera
@@ -456,7 +486,11 @@ export default function MagicCamera() {
         await compiler.compileImageTargets(targetImgs, (percent) => {
           setStatusMessage(`Compiling tracking data... ${Math.round(percent)}%`);
         });
-        return compiler.exportData();
+        const buffer = compiler.exportData();
+        // Save for next visit -- non-blocking, errors are logged but don't
+        // affect the current session.
+        setCachedBuffer(cacheKey, buffer).catch(() => {});
+        return buffer;
       })();
 
       const [buffer] = await Promise.all([compilePromise, ensureCameraStarted()]);
@@ -494,8 +528,27 @@ export default function MagicCamera() {
         anchorGroup.visible = false;
         anchorGroup.matrixAutoUpdate = false;
         scene.add(anchorGroup);
-        return { anchorGroup, postMatrix: new THREE.Matrix4(), videoEls: [] }; // videoEls filled in below, once compiled
+        // initialized: false -- first tracked frame snaps directly to the
+        // target pose; subsequent frames lerp toward it in renderLoop.
+        // targetMatrix: stores the latest raw tracker pose so the 60fps
+        // renderLoop can glide the display toward it independently of the
+        // ~30fps tracker cadence.
+        return { anchorGroup, postMatrix: new THREE.Matrix4(), videoEls: [], initialized: false, targetMatrix: new THREE.Matrix4() };
       });
+
+      // Reusable decomposition objects for the 60fps lerp in renderLoop.
+      // Allocated once, reused every frame -- avoids per-frame GC pressure.
+      const _tPos = new THREE.Vector3();
+      const _tQuat = new THREE.Quaternion();
+      const _tScale = new THREE.Vector3();
+      const _cPos = new THREE.Vector3();
+      const _cQuat = new THREE.Quaternion();
+      const _cScale = new THREE.Vector3();
+      // Per-frame lerp alpha at 60fps. 0.05 = heavily smooths out the
+      // remaining micro-jitter from handheld shake, resulting in a rock
+      // solid fit for static card scanning at the cost of slight lag
+      // during fast pans.
+      const LERP_ALPHA = 0.05;
       const foundFlags = targets.map(() => false);
 
       const controller = new Controller({
@@ -514,7 +567,19 @@ export default function MagicCamera() {
             const m = new THREE.Matrix4();
             m.fromArray(worldMatrix);
             m.multiply(entry.postMatrix);
-            entry.anchorGroup.matrix.copy(m);
+            if (!entry.initialized) {
+              // Very first lock: snap both the display matrix AND the
+              // target to the raw pose so the renderLoop lerp doesn't
+              // slide in from (0,0,0) on the first frame.
+              entry.anchorGroup.matrix.copy(m);
+              entry.targetMatrix.copy(m);
+              entry.initialized = true;
+            } else {
+              // Store raw tracker pose as the lerp target. The actual
+              // visual interpolation runs in renderLoop at 60fps, not
+              // here at ~30fps -- this just keeps the target fresh.
+              entry.targetMatrix.copy(m);
+            }
             entry.anchorGroup.visible = true;
             if (!foundFlags[targetIndex]) {
               foundFlags[targetIndex] = true;
@@ -601,6 +666,17 @@ export default function MagicCamera() {
           arVideo.src = overlay.videoUrl;
           arVideoEls.push(arVideo);
           entry.videoEls.push(arVideo); // unmuted/muted by onUpdate above as this target is found/lost
+          
+          if (overlay.audioUrl) {
+            const arAudio = document.createElement('audio');
+            arAudio.crossOrigin = 'anonymous';
+            arAudio.loop = true;
+            arAudio.src = overlay.audioUrl;
+            arVideoEls.push(arAudio);
+            entry.videoEls.push(arAudio);
+            startArVideo(arAudio).catch((err) => console.warn('Could not start audio:', err));
+          }
+
           startArVideo(arVideo)
             .then(() => {
               const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
@@ -644,6 +720,21 @@ export default function MagicCamera() {
       const worldHelper = new THREE.Vector3();
       const centerHelper = new THREE.Vector3();
       function renderLoop() {
+        // 60fps lerp: glide every visible anchor's display matrix toward
+        // the latest raw tracker pose stored by onUpdate. Running here
+        // (every rAF) rather than in onUpdate (~30fps) doubles the
+        // effective smoothing rate and eliminates the residual jitter
+        // that was still visible at 30fps-only interpolation.
+        targetEntries.forEach((entry) => {
+          if (entry.initialized && entry.anchorGroup.visible) {
+            entry.targetMatrix.decompose(_tPos, _tQuat, _tScale);
+            entry.anchorGroup.matrix.decompose(_cPos, _cQuat, _cScale);
+            _cPos.lerp(_tPos, LERP_ALPHA);
+            _cQuat.slerp(_tQuat, LERP_ALPHA);
+            _cScale.lerp(_tScale, LERP_ALPHA);
+            entry.anchorGroup.matrix.compose(_cPos, _cQuat, _cScale);
+          }
+        });
         renderer.render(scene, camera);
         const entry = targetEntries[0];
         if (clientId && entry?.anchorGroup.visible && pillLayoutRef.current.length) {

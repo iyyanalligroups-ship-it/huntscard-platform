@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -570,6 +570,7 @@ async function serializeMyMagicCard(doc, card) {
   const globalDefault = await getGlobalMagicLayoutDefault();
   const { componentPositions, magicElements } = mergeMagicLayout(doc, globalDefault);
   const resolved = card ? await resolveCardVariant(card) : null;
+  const plan = card ? await CardPlan.findOne({ key: card.cardType }).select('isSpecialEdition') : null;
 
   let imageUrl = null;
   if (resolved?.requiresDesignUpload) {
@@ -602,10 +603,12 @@ async function serializeMyMagicCard(doc, card) {
     // (POST /magic-card/image) just for this plan, matching the 403 the
     // route itself enforces.
     requiresDesignUpload: Boolean(resolved?.requiresDesignUpload),
+    isSpecialEdition: Boolean(plan?.isSpecialEdition),
     imageUrl,
     imageWidth: doc.imageWidth,
     imageHeight: doc.imageHeight,
     videoUrl: doc.videoUrl || null,
+    audioUrl: plan?.isSpecialEdition ? (doc.audioUrl || null) : null,
     videoCrop: {
       x: doc.videoCropX ?? 0,
       y: doc.videoCropY ?? 0,

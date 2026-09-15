@@ -54,6 +54,8 @@ const magicBusinessCardSchema = new mongoose.Schema(
     imageWidth: Number,
     imageHeight: Number,
     videoUrl: { type: String, trim: true },
+    // Audio / Sound Effect exclusively uploaded by Admin for Special Edition cards.
+    audioUrl: { type: String, trim: true, default: null },
     // Display-only crop, fractional (0-1) within the ORIGINAL video's own
     // pixel size -- same as MagicArt.js, applied at playback via a
     // texture UV transform, the uploaded file itself is never re-encoded.

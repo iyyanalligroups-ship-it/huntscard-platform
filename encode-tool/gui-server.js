@@ -21,7 +21,12 @@ require('dotenv').config();
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
-const { NFC } = require('nfc-pcsc');
+let NFC = null;
+try {
+  ({ NFC } = require('nfc-pcsc'));
+} catch (err) {
+  // nfc-pcsc native addon (@pokusew/pcsclite) requires compilation
+}
 const { writeNdef, verifyWrite, lockCard, readNdefUri, checkLockStatus, attemptPasswordAuth, attemptRewriteTest, unlockAndBlankCard, blankUnprotectedCard, identifyCard, assertNtag216 } = require('./lib');
 const { readConfig, writeConfig, clearSavedSession } = require('./config-store');
 
@@ -445,8 +450,8 @@ app.patch('/api/pending/:clientId', requireSession, async (req, res) => {
 // the env var) on the real machine with the ACR1252U plugged in.
 // ---------------------------------------------------------------------
 
-if (process.env.SKIP_NFC === 'true') {
-  console.log('⚠️  SKIP_NFC=true -- NFC reader watcher disabled. Card read/write features are inactive.');
+if (process.env.SKIP_NFC === 'true' || !NFC) {
+  console.log('⚠️  NFC reader watcher disabled (' + (!NFC ? 'nfc-pcsc native module not compiled' : 'SKIP_NFC=true') + '). Card read/write features are inactive.');
 } else {
 
 const nfc = new NFC();
