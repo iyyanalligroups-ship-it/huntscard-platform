@@ -583,10 +583,16 @@ export default function MagicCamera() {
             entry.anchorGroup.visible = true;
             if (!foundFlags[targetIndex]) {
               foundFlags[targetIndex] = true;
-              // Sound plays only for Special Edition cards while tracked
-              const isSpecial = Boolean(targets[targetIndex]?.isSpecialEdition);
+              // Sound plays only for Special Edition cards (or Magic Art with overlays) while tracked
+              const target = targets[targetIndex];
+              const isSpecial = Boolean(target?.isSpecialEdition || target?.overlays);
               entry.videoEls.forEach((v) => {
                 v.muted = !isSpecial;
+                if (isSpecial) {
+                  v.volume = 1.0;
+                  const p = v.play();
+                  if (p !== undefined) p.catch(() => {});
+                }
               });
               setStatus('found');
               setStatusMessage('Found -- being tracked.');
