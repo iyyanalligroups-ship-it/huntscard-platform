@@ -1,5 +1,5 @@
 /**
- * HuntsTAG NFC encode tool -- terminal version
+ * huntsTAG NFC encode tool -- terminal version
  * -----------------------------------------------------------------------
  * Runs LOCALLY on the machine with the ACR1252U plugged in -- this is NOT
  * a web app, because browsers cannot talk to PC/SC smart-card readers

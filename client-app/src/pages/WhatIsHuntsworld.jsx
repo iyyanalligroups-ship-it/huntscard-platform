@@ -15,7 +15,7 @@ export default function WhatIsHuntsworld() {
         <div className="card" style={{ marginBottom: 20 }}>
           <h2 style={{ fontSize: 18, margin: '0 0 10px' }}>How it connects to your card</h2>
           <p className="shop-plan-desc" style={{ marginBottom: 0 }}>
-            HuntsWorld is a business listing platform, separate from HuntsTAG itself. If your
+            HuntsWorld is a business listing platform, separate from huntsTAG itself. If your
             business has a listing there, you can add that link to your profile — it then shows up
             as its own "Huntsworld" section on your public card page, and (if you're on a plan with
             AR features) as its own block in the AR layout too.

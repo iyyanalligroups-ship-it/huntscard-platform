@@ -193,9 +193,7 @@ export default function MagicBusinessCard() {
 
   const videoInputRef = useRef(null);
   const imageInputRef = useRef(null);
-  const previewBoxRef = useRef(null); // the card-preview container the QR position is measured relative to
-  const [draggingQr, setDraggingQr] = useState(false);
-  const [qrSaveStatus, setQrSaveStatus] = useState('');
+  const previewBoxRef = useRef(null); // the card-preview container the QR is positioned relative to
   // QR print colors -- same idea as admin's ClientDetail.jsx color
   // pickers, needed here for a real reason, not just parity: a
   // transparent-background QR composited onto a busy multi-color design
@@ -269,68 +267,6 @@ export default function MagicBusinessCard() {
       cancelled = true;
     };
   }, [card?.imageUrl]);
-
-  // Plain 2D pointer drag over the flat preview image (not the 3D
-  // raycasting drag the AR Layout editor needs) -- this is just a
-  // percentage position on a static image, so a simple bounding-rect
-  // calculation is enough.
-  function qrPercentFromEvent(e) {
-    if (!previewBoxRef.current) return { x: 78, y: 80 };
-    const rect = previewBoxRef.current.getBoundingClientRect();
-    const halfQrWFrac = (qrBoxSize / 2 / rect.width) * 100;
-    const halfQrHFrac = (qrBoxSize / 2 / rect.height) * 100;
-    const minX = Math.ceil(halfQrWFrac);
-    const maxX = Math.floor(100 - halfQrWFrac);
-    const minY = Math.ceil(halfQrHFrac);
-    const maxY = Math.floor(100 - halfQrHFrac);
-
-    const rawX = ((e.clientX - rect.left) / rect.width) * 100;
-    const rawY = ((e.clientY - rect.top) / rect.height) * 100;
-
-    return {
-      x: Math.round(Math.max(minX, Math.min(maxX, rawX))),
-      y: Math.round(Math.max(minY, Math.min(maxY, rawY))),
-    };
-  }
-  function handleQrDragStart(e) {
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setDraggingQr(true);
-  }
-  function handleQrDragMove(e) {
-    if (!draggingQr) return;
-    const pos = qrPercentFromEvent(e);
-    setCard((prev) => ({ ...prev, qrPosition: pos }));
-    setQrSaveStatus('');
-  }
-  // Dragging only updates the on-screen position locally -- nothing is
-  // sent to the server until "Save position" (below) is clicked
-  // explicitly, so it's clear exactly when a placement is actually saved
-  // (and therefore what a later download will include).
-  function handleQrDragEnd() {
-    setDraggingQr(false);
-  }
-  async function handleSaveQrPosition() {
-    setQrSaveStatus('Saving...');
-    setError('');
-    try {
-      const updatedQr = await api.saveMyMagicCardQrPosition(qrPos.x, qrPos.y, selectedCardNumber);
-      setCard((prev) => ({ ...prev, ...updatedQr }));
-      // Also mirrors into the main AR Layout system's own qr position for
-      // THIS SAME physical card (see ArLayout.jsx / arTargetImage.js) --
-      // one QR placement, not two separately-set ones that can drift
-      // apart. Sent as a partial update (just the qr field), so it can't
-      // clobber any of that card's other saved AR Layout positions.
-      // Best-effort: AR Layout isn't necessarily part of every plan, so a
-      // failure here (e.g. AR not included) shouldn't block the Magic
-      // Business Card save that already succeeded above.
-      api.saveMyArLayout({ qr: { x: qrPos.x, y: qrPos.y } }, selectedCardNumber).catch(() => {});
-      setQrSaveStatus('Saved.');
-    } catch (err) {
-      setQrSaveStatus('');
-      setError(err.message);
-    }
-  }
 
   // The 3 built-in components have their own dedicated fields
   // (card.componentPositions); admin-defined custom ones (see
@@ -552,7 +488,7 @@ export default function MagicBusinessCard() {
       const url = URL.createObjectURL(roundedBlob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `huntstag-magic-business-card-${card.cardType || 'card'}.png`;
+      a.download = `huntsTAG-magic-business-card-${card.cardType || 'card'}.png`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -686,6 +622,11 @@ export default function MagicBusinessCard() {
   // card was actually tapped -- the bug that made scanning Card 2/3 show
   // "no Magic effect set up" even after activating the right one.
   const qrUrl = clientId ? `${API_URL}/api/public/qr/${clientId}?type=ar&card=${selectedCardNumber}&${qrColorParams}` : null;
+  // Fixed, not client-editable -- it has to line up with wherever the QR
+  // is actually printed on the physical card, which is set once (admin/
+  // AR Layout default) rather than something a client can drag around
+  // here. { x: 78, y: 80 } is that fixed default; qrPosition only differs
+  // from it for cards set up before this was locked down.
   const qrPos = card?.qrPosition || { x: 78, y: 80 };
   // ~21.2mm real QR size (see arTargetImage.js's own derivation), as a
   // fraction of THIS card's short side (55mm) -- same "N% of the card's
@@ -744,7 +685,7 @@ export default function MagicBusinessCard() {
             style={{ width: 160, height: 160, border: '1px solid var(--border)', borderRadius: 8, background: '#fff' }}
           />
           <div style={{ marginTop: 10 }}>
-            <a href={qrUrl} download={`huntstag-ar-qr-${clientId}.png`}>
+            <a href={qrUrl} download={`huntsTAG-ar-qr-${clientId}.png`}>
               <button type="button" className="secondary" style={{ width: 'auto', fontSize: 12, padding: '6px 14px' }}>
                 Download QR only
               </button>
@@ -789,7 +730,6 @@ export default function MagicBusinessCard() {
           <div style={{ width: box.width }}>
             <p className="hint" style={{ margin: '0 0 8px' }}>
               Card preview{card?.videoUrl ? ' -- hover to see the video' : ''}
-              {card?.imageUrl && qrUrl ? ', drag the QR to place it' : ''}
             </p>
             {card?.imageUrl ? (
               <div ref={previewBoxRef} style={{ position: 'relative', width: box.width, height: box.height, overflow: 'hidden', borderRadius: box.borderRadius }}>
@@ -800,19 +740,16 @@ export default function MagicBusinessCard() {
                   alt="Your Magic Business Card"
                   style={{ borderRadius: box.borderRadius, boxShadow: '0 10px 24px rgba(0,0,0,0.35)' }}
                 />
-                {/* Draggable QR placement -- position saved via
-                    api.saveMyMagicCardQrPosition on release, then baked
-                    directly into the printable download at this same
-                    spot (see handleDownloadImage) instead of shipping as
-                    a separate file the client has to place themselves. */}
+                {/* Fixed QR placement -- position isn't client-editable
+                    (see qrPos's own comment above), baked directly into
+                    the printable download at this same spot (see
+                    handleDownloadImage) instead of shipping as a separate
+                    file the client has to place themselves. */}
                 {qrUrl && (
                   <img
                     src={qrUrl}
-                    alt="AR QR -- drag to reposition"
-                    onPointerDown={handleQrDragStart}
-                    onPointerMove={handleQrDragMove}
-                    onPointerUp={handleQrDragEnd}
-                    onPointerCancel={handleQrDragEnd}
+                    alt="AR QR"
+                    draggable={false}
                     style={{
                       position: 'absolute',
                       left: `${qrPos.x}%`,
@@ -823,29 +760,12 @@ export default function MagicBusinessCard() {
                       background: '#fff',
                       borderRadius: 4,
                       boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
-                      cursor: draggingQr ? 'grabbing' : 'grab',
-                      touchAction: 'none',
                       userSelect: 'none',
                     }}
                   />
                 )}
               </div>
             ) : null}
-            {card?.imageUrl && qrUrl && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={busy}
-                  title="Save the QR's current position"
-                  style={{ width: 'auto', fontSize: 12, padding: '6px 14px' }}
-                  onClick={handleSaveQrPosition}
-                >
-                  Save position
-                </button>
-                {qrSaveStatus && <span className="hint" style={{ margin: 0 }}>{qrSaveStatus}</span>}
-              </div>
-            )}
             {card?.imageUrl && (
               <button
                 type="button"

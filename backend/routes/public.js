@@ -76,7 +76,9 @@ async function cardBlockReason(client, cardNumberParam) {
 // show -- so this is deliberately unauthenticated.
 router.get('/plans', async (req, res) => {
   const plans = await CardPlan.find({ active: true })
-    .select('name key price priceAmount description images variants requiresDesignUpload')
+    .select(
+      'name key price priceAmount description images variants requiresDesignUpload arEnabled zingEnabled magicEnabled isSpecialEdition'
+    )
     .sort({ createdAt: 1 });
   // chargeAmount is what checkout actually uses -- priceAmount if admin set
   // it, else a plain-number `price` (e.g. "499") parsed as a fallback. Sent
@@ -328,7 +330,7 @@ router.get('/profile/:clientId', async (req, res) => {
     { $inc: { tapCount: 1 } }, // simple tap analytics, per the report's spec -- kept even while paused, harmless
     { new: true }
   ).select(
-    'fullName jobTitle bio photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType cardVariantId clientId cardActive customDesignFrontUrl'
+    'fullName jobTitle bio photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail loginEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType cardVariantId clientId cardActive customDesignFrontUrl'
   );
 
   if (!client) {
@@ -345,6 +347,12 @@ router.get('/profile/:clientId', async (req, res) => {
   }
 
   const clientObj = client.toObject();
+  // No public contact email set -- fall back to the login email rather
+  // than leaving the card's Contact tab with no email row at all. Applied
+  // here (not stored) so Profile Settings' own "Public email" field still
+  // shows genuinely empty when it's genuinely empty.
+  clientObj.publicEmail = clientObj.publicEmail || clientObj.loginEmail;
+  delete clientObj.loginEmail;
   // The physical card's actual shape -- picked at purchase time (see
   // CardPlanVariantSchema.shape) and needed by the AR layout system to
   // size/orient itself to match instead of always assuming landscape.
@@ -400,7 +408,7 @@ router.get('/vcard/:clientId', async (req, res) => {
     `FN:${client.fullName || ''}`,
     client.jobTitle ? `TITLE:${client.jobTitle}` : '',
     client.phone ? `TEL;TYPE=CELL:${client.phone}` : '',
-    client.publicEmail ? `EMAIL:${client.publicEmail}` : '',
+    client.publicEmail || client.loginEmail ? `EMAIL:${client.publicEmail || client.loginEmail}` : '',
     client.portfolioUrl ? `URL:${client.portfolioUrl}` : '',
     client.photoUrl ? `PHOTO;VALUE=URI:${client.photoUrl}` : '',
     'END:VCARD',

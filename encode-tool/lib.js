@@ -1,5 +1,5 @@
 /**
- * Shared NFC/NDEF logic for the HuntsTAG encode tool.
+ * Shared NFC/NDEF logic for the huntsTAG encode tool.
  * -----------------------------------------------------------------------
  * Used by BOTH encode.js (terminal version) and gui-server.js (local
  * browser GUI) so the two never drift out of sync -- this is the exact
@@ -443,7 +443,7 @@ async function attemptPasswordAuth(reader, pwdHex) {
   }
 }
 
-// A page far outside any realistic NDEF payload HuntsTAG ever writes
+// A page far outside any realistic NDEF payload huntsTAG ever writes
 // (a short "huntstag.com/c/{clientId}" URL only occupies roughly pages
 // 4-16). Used ONLY for this rewrite test -- writing test data here can
 // never corrupt a card's real profile URL, even if the write succeeds

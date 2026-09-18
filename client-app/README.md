@@ -1,4 +1,4 @@
-# HuntsTAG Client App
+# huntsTAG Client App
 
 React (Vite) app for clients: log in with the credentials admin sent you,
 change your temporary password once, then edit your profile.

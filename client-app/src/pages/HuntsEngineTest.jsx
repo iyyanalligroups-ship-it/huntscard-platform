@@ -222,7 +222,7 @@ export default function HuntsEngineTest() {
 
   const contactRows = [
     profile?.phone && { href: `tel:${profile.phone}` },
-    profile?.publicEmail && { href: `mailto:${profile.publicEmail}` },
+    (profile?.publicEmail || profile?.loginEmail) && { href: `mailto:${profile.publicEmail || profile.loginEmail}` },
   ].filter(Boolean);
   const socialLinks = [
     profile?.instagramUrl && { key: 'instagram', label: 'Instagram', href: profile.instagramUrl },

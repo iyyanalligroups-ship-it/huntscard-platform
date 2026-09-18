@@ -8,7 +8,7 @@ const FaqEntry = require('./models/FaqEntry');
 
 const SEED = [
   {
-    question: 'What is HuntsTAG?',
+    question: 'What is huntsTAG?',
     answer:
       "An NFC smart card that shares your profile with a tap — no app needed on the other person's phone. A QR code on the card works the same way for phones without NFC.",
   },
@@ -37,7 +37,7 @@ const SEED = [
   {
     question: 'What is HuntsWorld?',
     answer:
-      'HuntsWorld is a separate business listing platform. If you have a listing there, your HuntsTAG profile can link straight to it. See the "What is HuntsWorld?" page for more.',
+      'HuntsWorld is a separate business listing platform. If you have a listing there, your huntsTAG profile can link straight to it. See the "What is HuntsWorld?" page for more.',
   },
   {
     question: 'Still have a question?',

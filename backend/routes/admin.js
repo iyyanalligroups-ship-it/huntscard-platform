@@ -674,7 +674,7 @@ router.post('/catalog-entries', requireAdmin, (req, res) => {
     if (err) return res.status(400).json({ error: err.message });
 
     try {
-      const { name, price, printingType, material, nfcChipSize, engravedTextColor, durability, colorCount, linkedPlanKey, features, active, sortOrder, viewLayout } = req.body;
+      const { name, price, printingType, material, nfcChipSize, engravedTextColor, durability, colorCount, linkedPlanKey, features, active, sortOrder, viewLayout, videoUrl } = req.body;
       if (!name) return res.status(400).json({ error: 'name is required' });
 
       let parsedFeatures = [];
@@ -713,6 +713,7 @@ router.post('/catalog-entries', requireAdmin, (req, res) => {
         active: active === 'true' || active === true || active === undefined,
         sortOrder: sortOrder !== undefined && sortOrder !== '' ? Number(sortOrder) : 0,
         viewLayout: viewLayout === 'horizontal' ? 'horizontal' : 'vertical',
+        videoUrl: videoUrl || null,
         updatedBy: req.admin?.email || 'unknown',
       });
       res.status(201).json(entry);
@@ -727,7 +728,7 @@ router.post('/catalog-entries', requireAdmin, (req, res) => {
 // dedicated images routes below for that).
 router.patch('/catalog-entries/:id', requireAdmin, async (req, res) => {
   try {
-    const { name, price, printingType, material, nfcChipSize, engravedTextColor, durability, colorCount, linkedPlanKey, features, active, sortOrder, viewLayout } = req.body;
+    const { name, price, printingType, material, nfcChipSize, engravedTextColor, durability, colorCount, linkedPlanKey, features, active, sortOrder, viewLayout, videoUrl } = req.body;
     const updates = { updatedBy: req.admin?.email || 'unknown' };
     if (name !== undefined) updates.name = name;
     if (price !== undefined) updates.price = price === '' ? null : Number(price);
@@ -741,6 +742,7 @@ router.patch('/catalog-entries/:id', requireAdmin, async (req, res) => {
     if (active !== undefined) updates.active = active === 'true' || active === true;
     if (sortOrder !== undefined) updates.sortOrder = Number(sortOrder) || 0;
     if (viewLayout !== undefined) updates.viewLayout = viewLayout === 'horizontal' ? 'horizontal' : 'vertical';
+    if (videoUrl !== undefined) updates.videoUrl = videoUrl || null;
     if (features !== undefined) {
       if (!Array.isArray(features) || features.some((f) => typeof f !== 'string')) {
         return res.status(400).json({ error: 'features must be an array of strings' });
@@ -3157,7 +3159,7 @@ const ENCODE_TOOL_DIR = path.join(__dirname, '..', 'uploads', 'encode-tool');
 fs.mkdirSync(ENCODE_TOOL_DIR, { recursive: true });
 const encodeToolStorage = multer.diskStorage({
   destination: ENCODE_TOOL_DIR,
-  filename: (req, file, cb) => cb(null, 'HuntsTAG-Encode-Tool-Setup.exe'),
+  filename: (req, file, cb) => cb(null, 'huntsTAG-Encode-Tool-Setup.exe'),
 });
 const uploadEncodeTool = multer({
   storage: encodeToolStorage,

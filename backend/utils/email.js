@@ -26,7 +26,7 @@ async function sendEmail(to, subject, body) {
     return;
   }
   try {
-    await t.sendMail({ from: `HuntsTAG <${process.env.APP_EMAIL}>`, to, subject, text: body });
+    await t.sendMail({ from: `huntsTAG <${process.env.APP_EMAIL}>`, to, subject, text: body });
     console.log(`[EMAIL] sent to ${to}: ${subject}`);
   } catch (err) {
     console.error(`[EMAIL] failed to send to ${to}:`, err.message);

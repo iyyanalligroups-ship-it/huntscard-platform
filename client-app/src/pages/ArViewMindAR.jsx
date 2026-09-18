@@ -130,9 +130,17 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
     profile?.twitterUrl && { key: 'twitter', label: 'Twitter / X', href: profile.twitterUrl },
     profile?.whatsapp && { key: 'whatsapp', label: 'WhatsApp', href: `https://wa.me/${profile.whatsapp.replace(/\D/g, '')}` },
   ].filter(Boolean);
+  // No Instagram/Twitter/WhatsApp set -- fall back to WhatsApp via the
+  // registration phone number rather than leaving the Social icon a dead
+  // end for a scanner (see ArView.jsx's own copy of this same fallback).
+  if (socialLinks.length === 0 && profile?.phone) {
+    socialLinks.push({ key: 'whatsapp', label: 'WhatsApp', href: `https://wa.me/${profile.phone.replace(/\D/g, '')}` });
+  }
   const linkFor = {
     portfolio: profile?.portfolioUrl,
-    huntsworld: profile?.huntsworldUrl,
+    // Falls back to the general Huntsworld site when this client hasn't
+    // set their own listing link -- see ArView.jsx's own copy of this.
+    huntsworld: profile?.huntsworldUrl || 'https://huntsworld.com/',
   };
 
   // Auto-starts as soon as profile+layout are loaded -- matches ArView.jsx's
@@ -504,7 +512,7 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
 
       {!visible && !cameraError && !loadError && (
         <div style={{ position: 'fixed', bottom: 40, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '10px 18px', borderRadius: 999, fontSize: 13, fontWeight: 600, textAlign: 'center', zIndex: 10 }}>
-          Point your camera at the HuntsTAG QR code
+          Point your camera at the huntsTAG QR code
         </div>
       )}
 

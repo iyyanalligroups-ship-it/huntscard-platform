@@ -297,7 +297,7 @@ router.get('/contacts/export', requireAuth, async (req, res) => {
 
     res.set({
       'Content-Type': 'text/vcard; charset=utf-8',
-      'Content-Disposition': 'attachment; filename="huntstag-contacts.vcf"',
+      'Content-Disposition': 'attachment; filename="huntsTAG-contacts.vcf"',
     });
     res.send(vcf);
   } catch (err) {

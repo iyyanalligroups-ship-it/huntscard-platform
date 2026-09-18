@@ -942,7 +942,7 @@ router.post('/pause-card', requireAuth, async (req, res) => {
     if (client?.loginEmail) {
       sendEmail(
         client.loginEmail,
-        'Your HuntsTAG card has been frozen',
+        'Your huntsTAG card has been frozen',
         "Your card has just been frozen -- nobody can tap or scan it to see your profile until you turn it back on. If this wasn't you, log in and reactivate it from your dashboard right away."
       ).catch((err) => console.error('[pause-card] confirmation email failed:', err.message));
     }
@@ -963,7 +963,7 @@ router.post('/unpause-card', requireAuth, async (req, res) => {
     if (client?.loginEmail) {
       sendEmail(
         client.loginEmail,
-        'Your HuntsTAG card is active again',
+        'Your huntsTAG card is active again',
         'Your card is active again -- tapping or scanning it now shows your live profile as normal.'
       ).catch((err) => console.error('[unpause-card] confirmation email failed:', err.message));
     }

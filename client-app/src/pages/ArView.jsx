@@ -781,10 +781,21 @@ export default function ArView({ clientId, cardNumber }) {
       href: `https://wa.me/${profile.whatsapp.replace(/\D/g, '')}`,
     },
   ].filter(Boolean);
+  // No Instagram/Twitter/WhatsApp set -- fall back to WhatsApp via the
+  // registration phone number rather than leaving the Social icon a dead
+  // end for a scanner. profile.phone (registration) is deliberately
+  // distinct from profile.whatsapp (a separately-set field above) --
+  // this only kicks in once neither of those, nor Instagram/Twitter, is set.
+  if (socialLinks.length === 0 && profile?.phone) {
+    socialLinks.push({ key: 'whatsapp', label: 'WhatsApp', href: `https://wa.me/${profile.phone.replace(/\D/g, '')}` });
+  }
 
   const linkFor = {
     portfolio: profile?.portfolioUrl,
-    huntsworld: profile?.huntsworldUrl,
+    // Falls back to the general Huntsworld site when this client hasn't
+    // set their own listing link -- the icon should always be useful,
+    // not a dead pill just because they never set huntsworldUrl.
+    huntsworld: profile?.huntsworldUrl || 'https://huntsworld.com/',
   };
 
   return (
@@ -1108,7 +1119,7 @@ export default function ArView({ clientId, cardNumber }) {
             zIndex: 10,
           }}
         >
-          Point your camera at the HuntsTAG QR code
+          Point your camera at the huntsTAG QR code
         </div>
       )}
 

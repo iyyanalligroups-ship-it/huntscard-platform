@@ -183,7 +183,7 @@ export default function DashboardHome() {
     if (!profile?.clientId || zingState === 'busy') return;
     setZingState('busy');
     const shareUrl = `${window.location.origin}/c/${profile.clientId}`;
-    const shareTitle = `${profile.fullName} — HuntsTAG`;
+    const shareTitle = `${profile.fullName} — huntsTAG`;
     // Already fetched (see the useEffect above) -- nothing async runs
     // between the click and navigator.share() below.
     const file = zingFileRef.current;
@@ -319,7 +319,7 @@ export default function DashboardHome() {
             <h1 className="dash-hero-title">Welcome back, {firstName}</h1>
             <p className="dash-hero-sub">
               {stage >= 1
-                ? 'Your HuntsTAG is live. Tap stats and order progress below.'
+                ? 'Your huntsTAG is live. Tap stats and order progress below.'
                 : profile?.paid
                   ? 'Your card is being prepared. Follow its progress below.'
                   : 'Complete your profile, then grab a card from the Shop.'}

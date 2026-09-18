@@ -1,17 +1,17 @@
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 function getToken() {
-  return localStorage.getItem('huntstag_client_token');
+  return localStorage.getItem('huntsTAG_client_token');
 }
 
 export function setSession({ token, clientId }) {
-  localStorage.setItem('huntstag_client_token', token);
-  localStorage.setItem('huntstag_client_id', clientId);
+  localStorage.setItem('huntsTAG_client_token', token);
+  localStorage.setItem('huntsTAG_client_id', clientId);
 }
 
 export function clearSession() {
-  localStorage.removeItem('huntstag_client_token');
-  localStorage.removeItem('huntstag_client_id');
+  localStorage.removeItem('huntsTAG_client_token');
+  localStorage.removeItem('huntsTAG_client_id');
 }
 
 export function isLoggedIn() {
@@ -389,7 +389,7 @@ export const api = {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'huntstag-contacts.vcf';
+    a.download = 'huntsTAG-contacts.vcf';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -397,7 +397,7 @@ export const api = {
   },
 
   // Appointment requests -- sent from a contact's own saved phone number
-  // (see pages/Contacts.jsx), in-app if they're already a Huntstag
+  // (see pages/Contacts.jsx), in-app if they're already a huntsTAG
   // account, an SMS invite otherwise. See pages/Appointments.jsx.
   sendAppointmentRequest: (contactId, note, proposedAt) =>
     request('/api/profile/appointments', { method: 'POST', body: { contactId, note, proposedAt } }),

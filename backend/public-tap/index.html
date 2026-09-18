@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-<title>HuntsTAG</title>
+<title>huntsTAG</title>
 <style>
   :root {
     --bg: #faf9f7;
@@ -47,6 +47,12 @@
     width: 100%;
     overflow: hidden;
     background: var(--border);
+    /* .cover-avatar centers itself on THIS element's height (top: 50%) --
+       without a floor here, a banner image that fails to load (a stale
+       bannerUrl pointing at a file that's gone from the backend) leaves
+       .banner at 0 height, pulling the avatar's own center up to 0 too
+       and clipping its top half against .shell's own overflow:hidden. */
+    min-height: 140px;
   }
   /* Height follows the image's own aspect ratio -- the full image is
      always visible, whatever its dimensions. Only extremely tall images
@@ -366,7 +372,7 @@
     const url = window.location.href;
     if (navigator.share) {
       try {
-        await navigator.share({ title: `${name} — HuntsTAG`, url });
+        await navigator.share({ title: `${name} — huntsTAG`, url });
       } catch (e) { /* cancelled */ }
     } else {
       await navigator.clipboard.writeText(url);
@@ -431,7 +437,7 @@
       }
       if (socialRows.length) tabs.push({ label: 'Social', html: socialRows.join('') });
       // Huntsworld is a business listing platform (part of the same
-      // network as HuntsTAG), so it gets its own featured tab rather
+      // network as huntsTAG), so it gets its own featured tab rather
       // than sitting inside Social.
       if (p.huntsworldUrl) {
         tabs.push({
@@ -460,7 +466,7 @@
       shell.innerHTML = `
         ${p.bannerUrl ? `
         <div class="cover">
-          <div class="banner"><img src="${escapeHtml(p.bannerUrl)}" alt="" onerror="this.parentElement.remove()" /></div>
+          <div class="banner"><img src="${escapeHtml(p.bannerUrl)}" alt="" onerror="this.style.display='none'" /></div>
           <div class="avatar-wrap cover-avatar">
             <div class="avatar">
               ${p.photoUrl
@@ -516,7 +522,7 @@
 
         <div class="footer-brand">
           <div class="footer-mark"></div>
-          HUNTSTAG
+          huntsTAG
         </div>
       `;
 

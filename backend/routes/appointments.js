@@ -10,7 +10,7 @@ const router = express.Router();
 
 // ---------------------------------------------------------------------
 // Appointment requests -- sent from a client's own Contacts list (see
-// Contact.js) to a phone number, not necessarily an existing Huntstag
+// Contact.js) to a phone number, not necessarily an existing huntsTAG
 // account. If that phone matches a registered client, they see the
 // request immediately on their own Appointment Requests page; otherwise
 // an SMS invite goes out and the request gets silently claimed the
@@ -93,7 +93,7 @@ router.post('/appointments', requireAuth, async (req, res) => {
       // whatever text gets approved, this is a placeholder.
       await sendSms(
         contact.phone,
-        `${sender?.fullName || 'Someone'} wants to schedule an appointment with you on HuntsTAG. Create your free account to view it: ${link}`
+        `${sender?.fullName || 'Someone'} wants to schedule an appointment with you on huntsTAG. Create your free account to view it: ${link}`
       );
     } else if (matchedClient.loginEmail) {
       // The recipient already has an account -- nothing about creating
@@ -107,7 +107,7 @@ router.post('/appointments', requireAuth, async (req, res) => {
       const when = parsedProposedAt ? ` for ${parsedProposedAt.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}` : '';
       sendEmail(
         matchedClient.loginEmail,
-        'New appointment request on HuntsTAG',
+        'New appointment request on huntsTAG',
         `${sender?.fullName || 'Someone'} requested an appointment with you${when}.${note ? `\n\n"${note}"` : ''}\n\nView it: ${link}`
       ).catch((err) => console.error('[appointments email notify]', err));
     }

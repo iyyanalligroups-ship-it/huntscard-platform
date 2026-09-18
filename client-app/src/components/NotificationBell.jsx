@@ -10,7 +10,7 @@ const POLL_INTERVAL_MS = 30000;
 // So the "Enable phone notifications" prompt doesn't nag on every single
 // dashboard visit once the owner has already made a choice (granted,
 // denied, or just dismissed it).
-const PUSH_PROMPT_DISMISSED_KEY = 'huntstag-push-prompt-dismissed';
+const PUSH_PROMPT_DISMISSED_KEY = 'huntsTAG-push-prompt-dismissed';
 
 function timeAgo(dateStr) {
   const diffMs = Date.now() - new Date(dateStr).getTime();
@@ -40,6 +40,15 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
+  // Warmed up in the background the moment the prompt appears (see the
+  // effect below) so clicking "Enable" doesn't have to wait on a fetch to
+  // our own backend AND a fresh service-worker install/activate cycle --
+  // both were previously kicked off only inside the click handler, one
+  // after another, which is what made "Enabling..." sit there for
+  // several real seconds. By the time someone actually reads the prompt
+  // and clicks, both are usually already done.
+  const [pushPublicKey, setPushPublicKey] = useState(null);
+  const swRegistrationRef = useRef(null);
   // Viewport-relative position for the portaled panel(s) below, computed
   // from the bell button's own rect -- see the effect below for why this
   // is a portal at all, not a plain absolutely-positioned child.
@@ -71,6 +80,16 @@ export default function NotificationBell() {
     if (Notification.permission !== 'default') return;
     if (localStorage.getItem(PUSH_PROMPT_DISMISSED_KEY)) return;
     setShowPushPrompt(true);
+    api
+      .getPushPublicKey()
+      .then(({ publicKey }) => setPushPublicKey(publicKey))
+      .catch(() => {}); // handleEnablePush falls back to fetching it live if this didn't finish/failed
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((reg) => {
+        swRegistrationRef.current = reg;
+      })
+      .catch(() => {});
   }, []);
 
   // The dropdown/prompt are portaled straight to <body> (position: fixed,
@@ -130,8 +149,8 @@ export default function NotificationBell() {
         dismissPushPrompt();
         return;
       }
-      const { publicKey } = await api.getPushPublicKey();
-      const registration = await navigator.serviceWorker.register('/sw.js');
+      const publicKey = pushPublicKey || (await api.getPushPublicKey()).publicKey;
+      const registration = swRegistrationRef.current || (await navigator.serviceWorker.register('/sw.js'));
       await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,

@@ -151,7 +151,7 @@ export default function Layout() {
       <aside className={`side-nav${menuOpen ? ' open' : ''}`}>
         <Link to="/" className="side-brand" onClick={() => setMenuOpen(false)}>
           <div className="brand-mark" />
-          <span className="brand-name">HUNTSTAG</span>
+          <span className="brand-name">huntsTAG</span>
         </Link>
 
         <nav className="side-links">

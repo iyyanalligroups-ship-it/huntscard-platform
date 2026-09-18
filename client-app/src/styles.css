@@ -111,7 +111,7 @@ body {
 }
 /* Header only (not the generic .brand used on form pages like
    Login/Register) -- a bit more breathing room between the logo and
-   "HUNTSTAG" text specifically here. */
+   "huntsTAG" text specifically here. */
 .top-nav .brand { gap: 16px; }
 
 .brand-mark {
@@ -120,7 +120,7 @@ body {
   border-radius: 13px;
   background-color: transparent;
   background-image:
-    url("/assets/huntstag-wolf-logo.png"),
+    url("/assets/huntsTAG-wolf-logo.png"),
     var(--holo-gradient);
   background-repeat: no-repeat;
   background-position: center, center;
@@ -761,7 +761,7 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 }
 .top-nav.theme-orange .brand-mark {
   background-image:
-    url("/assets/huntstag-wolf-logo.png"),
+    url("/assets/huntsTAG-wolf-logo.png"),
     linear-gradient(120deg, #ffcf5c, #ff8a3d, #ff5e1a);
 }
 .top-nav.theme-orange .brand-mark::before {
@@ -777,7 +777,7 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
    too instead of trusting the generic variable. */
 .site-footer.theme-orange .brand-mark {
   background-image:
-    url("/assets/huntstag-wolf-logo.png"),
+    url("/assets/huntsTAG-wolf-logo.png"),
     linear-gradient(120deg, #ffcf5c, #ff8a3d, #ff5e1a);
 }
 .site-footer.theme-orange .brand-mark::before {
@@ -792,7 +792,7 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
    background-image, same reasoning as the header/footer overrides above. */
 .dash-shell.theme-orange .brand-mark {
   background-image:
-    url("/assets/huntstag-wolf-logo.png"),
+    url("/assets/huntsTAG-wolf-logo.png"),
     linear-gradient(120deg, #ffcf5c, #ff8a3d, #ff5e1a);
 }
 .dash-shell.theme-orange .brand-mark::before {
@@ -849,7 +849,7 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 }
 .top-nav.theme-cyber .brand-mark {
   background-image:
-    url("/assets/huntstag-wolf-logo.png"),
+    url("/assets/huntsTAG-wolf-logo.png"),
     linear-gradient(120deg, #00fff0, #7000ff, #ff00c8);
 }
 .top-nav.theme-cyber .brand-mark::before {
@@ -860,7 +860,7 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 }
 .site-footer.theme-cyber .brand-mark {
   background-image:
-    url("/assets/huntstag-wolf-logo.png"),
+    url("/assets/huntsTAG-wolf-logo.png"),
     linear-gradient(120deg, #00fff0, #7000ff, #ff00c8);
 }
 .site-footer.theme-cyber .brand-mark::before {
@@ -871,7 +871,7 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 }
 .dash-shell.theme-cyber .brand-mark {
   background-image:
-    url("/assets/huntstag-wolf-logo.png"),
+    url("/assets/huntsTAG-wolf-logo.png"),
     linear-gradient(120deg, #00fff0, #7000ff, #ff00c8);
 }
 .dash-shell.theme-cyber .brand-mark::before {
@@ -1107,6 +1107,11 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 .pv-banner {
   overflow: hidden;
   background: #ece9e4;
+  /* Reserved space for a missing/still-loading banner -- .pv-cover-avatar
+     centers itself on THIS element's height (top: 50%), so without a
+     floor here a 0-height banner pulls the avatar's own center up to 0
+     too, clipping its top half against .profile-preview's overflow:hidden. */
+  min-height: 120px;
 }
 /* Full image always visible, height follows its aspect ratio; only very
    tall images get capped. Matches public-tap/index.html. */
@@ -1116,6 +1121,24 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   max-height: 220px;
   object-fit: cover;
   display: block;
+}
+/* Dashboard-only (see Dashboard.jsx) -- shown in place of the real banner
+   when the client hasn't uploaded one yet, or the saved bannerUrl points
+   at a file that's gone missing from the backend. */
+.pv-banner-placeholder {
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.pv-banner-placeholder-icon { font-size: 22px; opacity: 0.5; }
+.pv-banner-placeholder a {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pv-text-dim);
+  text-decoration: underline;
 }
 .pv-cover-avatar {
   position: absolute;
@@ -1988,7 +2011,7 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
    guidance: spend boldness in one place). It's a direct depiction of the
    actual product -- a holographic-foil NFC card with tap-ripple rings
    expanding outward -- rather than a generic tech/AI stock image, so the
-   neon-particle mood ties straight back to what HuntsTAG physically is. */
+   neon-particle mood ties straight back to what huntsTAG physically is. */
 .hero-visual {
   position: relative;
   z-index: 1;
@@ -2302,6 +2325,42 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 
 /* --- shop --- */
 .shop-plan-desc { font-size: 13px; color: var(--text-dim); line-height: 1.6; margin: 8px 0 0; flex: 1; }
+
+/* Which admin-set feature flags (AR/Zing/Magic AR/etc, see CardPlan.js)
+   this specific plan has -- shown right under the description so a
+   shopper can see what they're buying before picking a style. */
+.plan-feature-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.plan-feature-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 5px 10px;
+}
+/* Plain-language explanation of each badge above -- a first-time shopper
+   has no reason to already know what "Zing" or "Magic AR" means. */
+.plan-feature-notes {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plan-feature-notes li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.plan-feature-notes li strong { color: var(--text); font-weight: 600; }
 
 .checkout-panel {
   max-width: 440px;

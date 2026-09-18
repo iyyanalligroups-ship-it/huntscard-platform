@@ -32,7 +32,7 @@ export default function ChangePassword() {
     <div className="shell">
       <div className="brand">
         <div className="brand-mark" />
-        <span className="brand-name">HUNTSTAG</span>
+        <span className="brand-name">huntsTAG</span>
       </div>
 
       <h1>Set a new password</h1>

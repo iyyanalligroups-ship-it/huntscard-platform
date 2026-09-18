@@ -48,6 +48,72 @@ function PlanImageGallery({ images }) {
   );
 }
 
+// Which of the plan's boolean feature flags (set by admin on the Card
+// Plans screen, see models/CardPlan.js) actually apply, shown as small
+// badges so a shopper can see what they're getting before they buy --
+// mirrors the admin's own checkbox labels exactly.
+const PLAN_FEATURE_BADGES = [
+  {
+    key: 'arEnabled',
+    icon: '🥽',
+    label: 'AR feature',
+    note: 'Anyone who scans your card can point their phone camera at it to unlock an AR experience.',
+  },
+  {
+    key: 'zingEnabled',
+    icon: '⚡',
+    label: 'Zing',
+    note: 'Share your contact card instantly from your dashboard with a tap — no app needed on their end.',
+  },
+  {
+    key: 'requiresDesignUpload',
+    icon: '🎨',
+    label: 'Requires design upload',
+    note: "You'll upload your own front and back artwork for this card during checkout.",
+  },
+  {
+    key: 'magicEnabled',
+    icon: '✨',
+    label: 'Magic AR feature',
+    note: 'Add your own photo or video effect that plays when someone scans your card in Magic Camera.',
+  },
+  {
+    key: 'isSpecialEdition',
+    icon: '🔊',
+    label: 'Special Edition (Sound)',
+    note: 'Comes with a custom sound effect that plays when your card is scanned.',
+  },
+];
+
+// Compact pills give the at-a-glance summary; the plain-language notes
+// right below spell out what each one actually means for someone who's
+// never heard "Zing" or "Magic AR" before deciding whether to buy.
+function PlanFeatureBadges({ plan }) {
+  const active = PLAN_FEATURE_BADGES.filter((f) => plan?.[f.key]);
+  if (active.length === 0) return null;
+  return (
+    <>
+      <div className="plan-feature-badges">
+        {active.map((f) => (
+          <span key={f.key} className="plan-feature-badge">
+            <span aria-hidden="true">{f.icon}</span> {f.label}
+          </span>
+        ))}
+      </div>
+      <ul className="plan-feature-notes">
+        {active.map((f) => (
+          <li key={f.key}>
+            <span aria-hidden="true">{f.icon}</span>
+            <span>
+              <strong>{f.label}</strong> — {f.note}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 // One slot (front or back) of a variant's own product photo -- falls back
 // to a plain labeled box when admin hasn't uploaded that side yet, rather
 // than a broken image or blank gap.
@@ -323,7 +389,7 @@ export default function Shop() {
         amount: order.amount,
         currency: order.currency,
         order_id: order.orderId,
-        name: 'HuntsTAG',
+        name: 'huntsTAG',
         description,
         prefill: { name: myProfile?.fullName, email: myProfile?.loginEmail },
         handler: async (response) => {
@@ -455,8 +521,9 @@ export default function Shop() {
                 </p>
               )}
               <p className="shop-plan-desc">
-                {selectedPlan.description || 'A HuntsTAG smart card, tap-to-share ready.'}
+                {selectedPlan.description || 'A huntsTAG smart card, tap-to-share ready.'}
               </p>
+              <PlanFeatureBadges plan={selectedPlan} />
             </div>
 
             {error && <div className="error-banner">{error}</div>}

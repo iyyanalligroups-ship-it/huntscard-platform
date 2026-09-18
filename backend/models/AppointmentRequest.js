@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 // A request to meet, sent from one client to a phone number in their own
 // Contacts list (see Contact.js) -- the recipient doesn't need to already
-// be a Huntstag account. If they are (matched by phone, see
+// be a huntsTAG account. If they are (matched by phone, see
 // normalizePhone in routes/appointments.js), toClientId is set right
 // away and they see it on their own Appointment Requests page. If not,
 // toClientId stays null and an SMS invite goes out instead

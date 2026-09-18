@@ -1,5 +1,5 @@
 /**
- * Frontend for the HuntsTAG encode tool GUI. Plain JS, no build step --
+ * Frontend for the huntsTAG encode tool GUI. Plain JS, no build step --
  * this is a local tool run by one operator, not a shipped web product,
  * so a framework would be pure overhead here.
  */

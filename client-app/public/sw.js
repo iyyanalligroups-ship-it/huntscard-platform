@@ -4,7 +4,7 @@
 // Registered from NotificationBell.jsx via navigator.serviceWorker.register('/sw.js').
 
 self.addEventListener('push', (event) => {
-  let data = { title: 'HuntsTAG', body: 'You have a new notification' };
+  let data = { title: 'huntsTAG', body: 'You have a new notification' };
   try {
     if (event.data) data = { ...data, ...event.data.json() };
   } catch {
@@ -13,7 +13,7 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: '/assets/huntstag-favi.png',
+      icon: '/assets/huntsTAG-favi.png',
     })
   );
 });

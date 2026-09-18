@@ -176,7 +176,7 @@ export default function AuthModal({ mode: initialMode, onClose }) {
 
         <div className="brand" style={{ marginBottom: 20 }}>
           <div className="brand-mark" />
-          <span className="brand-name">HUNTSTAG</span>
+          <span className="brand-name">huntsTAG</span>
         </div>
 
         {mode === 'login' ? (

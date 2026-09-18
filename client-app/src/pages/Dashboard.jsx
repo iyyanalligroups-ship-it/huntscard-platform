@@ -29,6 +29,14 @@ export default function Dashboard() {
   const [attributes, setAttributes] = useState([]); // admin-defined extra fields, see AttributeDefinition
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  // True once the banner <img> actually fails to load (a stale bannerUrl
+  // pointing at a file that's gone from the backend, not just "never set"
+  // -- that case is handled separately below). Without this, a broken
+  // image left the cover-avatar's absolutely-positioned circle (it
+  // centers itself on .pv-cover's height) sitting on top of a collapsed
+  // 0-height banner, clipping its top half against .profile-preview's
+  // own overflow:hidden.
+  const [bannerFailed, setBannerFailed] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const touchStartX = useRef(null);
   // Direct WhatsApp/Telegram/email share links, not the OS share sheet --
@@ -59,8 +67,15 @@ export default function Dashboard() {
       .catch(() => {});
   }, []);
 
+  // Give a freshly-uploaded banner a clean retry -- otherwise a stale
+  // bannerFailed from a PREVIOUS broken URL would keep the placeholder
+  // showing even after the client uploads a working one.
+  useEffect(() => {
+    setBannerFailed(false);
+  }, [profile?.bannerUrl]);
+
   const shareUrl = profile?.clientId ? `${window.location.origin}/c/${profile.clientId}` : '';
-  const shareText = profile?.fullName ? `${profile.fullName} — HuntsTAG\n${shareUrl}` : shareUrl;
+  const shareText = profile?.fullName ? `${profile.fullName} — huntsTAG\n${shareUrl}` : shareUrl;
 
   function closeShareMenu() {
     setShareMenuOpen(false);
@@ -117,7 +132,11 @@ export default function Dashboard() {
 
   const contactRows = [
     profile?.phone && { icon: '☎', label: profile.phone, href: `tel:${profile.phone}` },
-    profile?.publicEmail && { icon: '✉', label: profile.publicEmail, href: `mailto:${profile.publicEmail}` },
+    (profile?.publicEmail || profile?.loginEmail) && {
+      icon: '✉',
+      label: profile.publicEmail || profile.loginEmail,
+      href: `mailto:${profile.publicEmail || profile.loginEmail}`,
+    },
   ].filter(Boolean);
 
   const socialRows = [
@@ -215,28 +234,32 @@ export default function Dashboard() {
 
       {/* This block visually matches backend/public-tap/index.html exactly --
           it's a live, accurate preview of what a receiver sees, not just a
-          loose approximation. */}
+          loose approximation. The cover/avatar-overlap layout below always
+          renders (real banner or placeholder) rather than switching to a
+          differently-laid-out plain avatar when there's no banner -- that
+          used to also mean a stale bannerUrl pointing at a file missing
+          from the backend rendered a 0-height banner with the absolutely-
+          positioned avatar clipped against .profile-preview's own
+          overflow:hidden (its top:50% math has nothing to center against). */}
       <div className="profile-preview">
-        {profile?.bannerUrl && (
-          <div className="pv-cover">
+        <div className="pv-cover">
+          {profile?.bannerUrl && !bannerFailed ? (
             <div className="pv-banner">
-              <img src={profile.bannerUrl} alt="" />
+              <img src={profile.bannerUrl} alt="" onError={() => setBannerFailed(true)} />
             </div>
-            <div className="pv-avatar-wrap pv-cover-avatar">
-              <div className="pv-avatar">
-                {profile?.photoUrl ? <img src={profile.photoUrl} alt="" /> : initials}
-              </div>
-            </div>
-          </div>
-        )}
-        <div className={`pv-header${profile?.bannerUrl ? ' has-banner' : ''}`}>
-          {!profile?.bannerUrl && (
-            <div className="pv-avatar-wrap">
-              <div className="pv-avatar">
-                {profile?.photoUrl ? <img src={profile.photoUrl} alt="" /> : initials}
-              </div>
+          ) : (
+            <div className="pv-banner pv-banner-placeholder">
+              <span className="pv-banner-placeholder-icon">🖼</span>
+              <Link to="/dashboard/settings">Upload a banner</Link>
             </div>
           )}
+          <div className="pv-avatar-wrap pv-cover-avatar">
+            <div className="pv-avatar">
+              {profile?.photoUrl ? <img src={profile.photoUrl} alt="" /> : initials}
+            </div>
+          </div>
+        </div>
+        <div className="pv-header has-banner">
           <div className="pv-name">{profile?.fullName}</div>
           <div className="pv-client-id">{profile?.clientId}</div>
           <div className="pv-title">{profile?.jobTitle || '\u00A0'}</div>
@@ -315,7 +338,7 @@ export default function Dashboard() {
                 </svg>
               </button>
               <a
-                href={`mailto:?subject=${encodeURIComponent(`${profile?.fullName || ''} — HuntsTAG`)}&body=${encodeURIComponent(shareText)}`}
+                href={`mailto:?subject=${encodeURIComponent(`${profile?.fullName || ''} — huntsTAG`)}&body=${encodeURIComponent(shareText)}`}
                 onClick={closeShareMenu}
                 className="share-dial-item"
                 title="Share via Email"
@@ -328,7 +351,7 @@ export default function Dashboard() {
                 </svg>
               </a>
               <a
-                href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(`${profile?.fullName || ''} — HuntsTAG`)}`}
+                href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(`${profile?.fullName || ''} — huntsTAG`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={closeShareMenu}

@@ -4,7 +4,7 @@ import { api } from '../api.js';
 
 // Requests to meet -- sent from someone's own Contacts list (see
 // Contacts.jsx's arrow-icon button), in-app if the recipient already has
-// a Huntstag account, an SMS invite otherwise (see routes/appointments.js
+// a huntsTAG account, an SMS invite otherwise (see routes/appointments.js
 // for the claim-on-register flow that links an SMS invite to an account
 // the moment the recipient signs up).
 const STATUS_LABEL = { pending: 'Pending', accepted: 'Accepted', declined: 'Declined' };
@@ -437,7 +437,7 @@ export default function Appointments() {
   }
 
   // Profile preview popup -- opened by clicking a name, only when that
-  // side of the request actually has a real Huntstag account attached
+  // side of the request actually has a real huntsTAG account attached
   // (always true for a request's sender; only true for a request's
   // recipient once they've registered/claimed it, see toClientId).
   const [previewClientId, setPreviewClientId] = useState(null);
@@ -687,7 +687,7 @@ export default function Appointments() {
                   <div className="contact-row-meta">
                     {tab === 'sent' && r.toPhone}
                     {tab === 'sent' && r.invitedViaSms && !r.toClientId && (
-                      <span style={{ marginLeft: 8, color: 'var(--text-dim)' }}>· Invited via SMS, not on HuntsTAG yet</span>
+                      <span style={{ marginLeft: 8, color: 'var(--text-dim)' }}>· Invited via SMS, not on huntsTAG yet</span>
                     )}
                     {r.proposedAt && (
                       <span style={{ display: 'block', marginTop: 2, color: 'var(--holo-cyan)', fontWeight: 600 }}>

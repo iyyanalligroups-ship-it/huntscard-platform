@@ -1,5 +1,5 @@
 /**
- * Electron main process for the HuntsTAG Encode Tool.
+ * Electron main process for the huntsTAG Encode Tool.
  * -----------------------------------------------------------------------
  * This does NOT reimplement any of the tool's logic -- it starts the
  * exact same gui-server.js (same Express routes, same nfc-pcsc reader
@@ -44,7 +44,7 @@ if (!gotLock) {
       height: 820,
       minWidth: 900,
       minHeight: 640,
-      title: 'HuntsTAG Encode Tool',
+      title: 'huntsTAG Encode Tool',
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
@@ -95,11 +95,11 @@ if (!gotLock) {
     if (serverReady) return; // already up and running -- a later transient error shouldn't quit the whole app
     const message =
       err.code === 'EADDRINUSE'
-        ? "HuntsTAG Encode Tool couldn't start because something else on this computer is already using port " +
+        ? "huntsTAG Encode Tool couldn't start because something else on this computer is already using port " +
           PORT +
           '. This usually means the app is already running somewhere (check your taskbar and system tray), or a previous session didn\'t close properly. Restarting your computer will also clear this.'
-        : `HuntsTAG Encode Tool couldn't start: ${err.message}`;
-    dialog.showErrorBox('HuntsTAG Encode Tool', message);
+        : `huntsTAG Encode Tool couldn't start: ${err.message}`;
+    dialog.showErrorBox('huntsTAG Encode Tool', message);
     app.quit();
   });
 

@@ -21,7 +21,7 @@ const httpsConfig =
     ? { cert: fs.readFileSync(certPath), key: fs.readFileSync(keyPath) }
     : undefined;
 
-// Serves the mkcert root CA (public/huntstag-dev-ca.crt) with the MIME
+// Serves the mkcert root CA (public/huntsTAG-dev-ca.crt) with the MIME
 // type Android's cert installer actually looks for -- Vite's static
 // middleware doesn't know a .crt extension and serves it with no
 // Content-Type at all otherwise, which is why Chrome on Android just
@@ -32,7 +32,7 @@ function caCertMimePlugin() {
     name: 'ca-cert-mime',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        if (req.url?.startsWith('/huntstag-dev-ca.crt')) {
+        if (req.url?.startsWith('/huntsTAG-dev-ca.crt')) {
           res.setHeader('Content-Type', 'application/x-x509-ca-cert');
         }
         next();

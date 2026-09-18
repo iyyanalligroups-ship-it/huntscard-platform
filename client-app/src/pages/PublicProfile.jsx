@@ -154,6 +154,13 @@ export default function PublicProfile() {
   const [attributes, setAttributes] = useState([]); // admin-defined extra fields, see AttributeDefinition
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  // True once the banner <img> actually fails to load (a stale bannerUrl
+  // pointing at a file that's gone from the backend) -- treated the same
+  // as "no banner" below (falls back to the plain, non-overlapping
+  // avatar layout) rather than leaving .pv-cover-avatar's absolutely-
+  // positioned circle centered on a collapsed 0-height banner, which
+  // clipped its top half against .pv-shell's own overflow:hidden.
+  const [bannerFailed, setBannerFailed] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [toast, setToast] = useState('');
   const toastTimeoutRef = useRef(null);
@@ -190,6 +197,7 @@ export default function PublicProfile() {
     // ArView fetches its own profile/layout data -- skip the plain-profile
     // fetch entirely in AR mode instead of doing it and throwing it away.
     if (isArMode) return;
+    setBannerFailed(false);
     api
       .getPublicProfile(clientId, cardNumber)
       .then(setProfile)
@@ -338,7 +346,7 @@ export default function PublicProfile() {
     const url = window.location.href;
     if (navigator.share) {
       try {
-        await navigator.share({ title: `${profile.fullName} — HuntsTAG`, url });
+        await navigator.share({ title: `${profile.fullName} — huntsTAG`, url });
       } catch {
         /* cancelled */
       }
@@ -436,7 +444,10 @@ export default function PublicProfile() {
   const tabs = [];
   if (profile.bio) tabs.push({ label: 'My Bio', key: 'bio' });
   if (contactRows.length || contactCustomRows.length) tabs.push({ label: 'Contact', key: 'contact' });
-  if (profile.portfolioUrl || portfolioCustomRows.length) tabs.push({ label: 'Portfolio', key: 'portfolio' });
+  // Always shown, unlike the other tabs -- see the portfolio panel below,
+  // which falls back to this client's own profile link when portfolioUrl
+  // isn't set, so there's always something here instead of an empty tab.
+  tabs.push({ label: 'Portfolio', key: 'portfolio' });
   if (socialRows.length || socialCustomRows.length) tabs.push({ label: 'Social', key: 'social' });
   if (profile.huntsworldUrl || huntsworldCustomRows.length) tabs.push({ label: 'Huntsworld', key: 'huntsworld' });
 
@@ -462,16 +473,16 @@ export default function PublicProfile() {
   return (
     <div className="pv-page">
       <div className="pv-shell">
-        {profile.bannerUrl && (
+        {profile.bannerUrl && !bannerFailed && (
           <div className="pv-cover">
-            <div className="pv-banner"><img src={profile.bannerUrl} alt="" onError={(e) => e.target.parentElement.remove()} /></div>
+            <div className="pv-banner"><img src={profile.bannerUrl} alt="" onError={() => setBannerFailed(true)} /></div>
             <div className="pv-avatar-wrap pv-cover-avatar">
               <div className="pv-avatar">{profile.photoUrl ? <img src={profile.photoUrl} alt="" /> : initials}</div>
             </div>
           </div>
         )}
-        <div className={`pv-header${profile.bannerUrl ? ' has-banner' : ''}`}>
-          {!profile.bannerUrl && (
+        <div className={`pv-header${profile.bannerUrl && !bannerFailed ? ' has-banner' : ''}`}>
+          {(!profile.bannerUrl || bannerFailed) && (
             <div className="pv-avatar-wrap">
               <div className="pv-avatar">{profile.photoUrl ? <img src={profile.photoUrl} alt="" /> : initials}</div>
             </div>
@@ -516,11 +527,26 @@ export default function PublicProfile() {
 
           {currentKey === 'portfolio' && (
             <>
-              {profile.portfolioUrl && (
+              {profile.portfolioUrl ? (
                 <a className="pv-contact-row" href={profile.portfolioUrl} target="_blank" rel="noopener noreferrer">
                   <span className="pv-icon">◆</span>
                   <span className="pv-contact-label">{profile.portfolioUrl.replace(/^https?:\/\//, '')}</span>
                 </a>
+              ) : (
+                portfolioCustomRows.length === 0 && (
+                  // No portfolio link set -- fall back to this client's own
+                  // public profile page (same URL the dashboard's "View
+                  // Live Page" button opens) instead of an empty tab.
+                  <a
+                    className="pv-contact-row"
+                    href={`${window.location.origin}/c/${profile.clientId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <span className="pv-icon">◆</span>
+                    <span className="pv-contact-label">View my profile</span>
+                  </a>
+                )
               )}
               {portfolioCustomRows.map((row) => (
                 <CustomRow key={row.key} row={row} />
@@ -580,7 +606,7 @@ export default function PublicProfile() {
 
         <div className="pv-footer-brand">
           <div className="pv-footer-mark" />
-          HUNTSTAG
+          huntsTAG
         </div>
       </div>
 

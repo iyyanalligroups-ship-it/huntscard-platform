@@ -8,7 +8,7 @@
  *
  * Location:
  *   - Packaged inside Electron: app.getPath('userData')/config.json
- *     (Windows: %APPDATA%/HuntsTAG Encode Tool/config.json)
+ *     (Windows: %APPDATA%/huntsTAG Encode Tool/config.json)
  *   - Running via `npm run gui` in dev: ./local-config.json, next to
  *     this file (already gitignored alongside .env)
  *

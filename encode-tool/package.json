@@ -26,7 +26,7 @@
   },
   "build": {
     "appId": "com.huntstag.encodetool",
-    "productName": "HuntsTAG Encode Tool",
+    "productName": "huntsTAG Encode Tool",
     "directories": {
       "output": "dist-electron"
     },

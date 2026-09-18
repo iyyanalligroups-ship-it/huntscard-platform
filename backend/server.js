@@ -61,7 +61,7 @@ async function main() {
   });
 
   const port = process.env.PORT || 4000;
-  app.listen(port, () => console.log(`[server] HuntsTAG backend listening on port ${port}`));
+  app.listen(port, () => console.log(`[server] huntsTAG backend listening on port ${port}`));
 }
 
 main().catch((err) => {

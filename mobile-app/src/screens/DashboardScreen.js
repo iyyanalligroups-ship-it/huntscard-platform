@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../theme/colors.js';
 
-// Placeholder -- the real HuntsTAG dashboard (profile preview, appointment
+// Placeholder -- the real huntsTAG dashboard (profile preview, appointment
 // requests, etc., mirroring client-app's own Dashboard.jsx) isn't built
 // into this RN project yet. This exists purely as the anchor screen the
 // nav is organized around, since Device Protection Check was asked for
@@ -10,7 +10,7 @@ export default function DashboardScreen() {
   return (
     <View style={styles.screen}>
       <Text style={styles.title}>Dashboard</Text>
-      <Text style={styles.subtitle}>The rest of your HuntsTAG dashboard will live here.</Text>
+      <Text style={styles.subtitle}>The rest of your huntsTAG dashboard will live here.</Text>
     </View>
   );
 }

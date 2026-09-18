@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 const FEATURES = [
   {
     title: 'NFC Tap Technology',
-    desc: 'Just tap your HuntsTag on any NFC enabled smartphone and your complete profile transfers instantly. No app required. No WiFi needed. Just tap and connect.',
+    desc: 'Just tap your huntsTAG on any NFC enabled smartphone and your complete profile transfers instantly. No app required. No WiFi needed. Just tap and connect.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
         <path d="M5 13a10 10 0 0 1 14 0" opacity="0.45" />
@@ -26,7 +26,7 @@ const FEATURES = [
   },
   {
     title: 'Augmented Reality',
-    desc: 'Experience networking like never before. HuntsTag brings your profile to life through stunning Augmented Reality -- making you unforgettable in every meeting and event.',
+    desc: 'Experience networking like never before. huntsTAG brings your profile to life through stunning Augmented Reality -- making you unforgettable in every meeting and event.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 8.5 12 4l9 4.5-9 4.5-9-4.5Z" />
@@ -37,7 +37,7 @@ const FEATURES = [
   },
   {
     title: 'QR Scanner',
-    desc: 'Not every phone supports NFC? No problem. Every HuntsTag comes with a built-in QR code -- scan and connect in an instant from any smartphone.',
+    desc: 'Not every phone supports NFC? No problem. Every huntsTAG comes with a built-in QR code -- scan and connect in an instant from any smartphone.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -52,31 +52,31 @@ const FEATURES = [
 export default function AboutUs() {
   return (
     <div>
-      <span className="hero-eyebrow" style={{ display: 'block', marginBottom: 8 }}>HuntsTag</span>
+      <span className="hero-eyebrow" style={{ display: 'block', marginBottom: 8 }}>huntsTAG</span>
       <h1 className="section-heading" style={{ marginTop: 0 }}>
         The Future of Networking is Here.
         <br />
         <span className="grad">One Tap. Infinite Connections.</span>
       </h1>
       <p className="section-subheading">
-        HuntsTag is a next generation smart business card powered by NFC technology -- designed to replace
+        huntsTAG is a next generation smart business card powered by NFC technology -- designed to replace
         traditional visiting cards with a seamless, futuristic and powerful networking experience.
       </p>
 
       <div className="checkout-panel" style={{ maxWidth: 720 }}>
         <div className="card" style={{ marginBottom: 20 }}>
-          <h2 style={{ fontSize: 18, margin: '0 0 10px' }}>What is HuntsTag</h2>
+          <h2 style={{ fontSize: 18, margin: '0 0 10px' }}>What is huntsTAG</h2>
           <p className="shop-plan-desc" style={{ marginBottom: 10 }}>
-            In a world that moves at the speed of technology, your business card should too. HuntsTag is a
+            In a world that moves at the speed of technology, your business card should too. huntsTAG is a
             revolutionary smart card that connects people instantly with just a single tap. No more paper
             cards. No more manual typing. No more lost contacts.
           </p>
           <p className="shop-plan-desc" style={{ marginBottom: 10 }}>
-            Simply tap your HuntsTag card on any smartphone and share your complete business profile,
+            Simply tap your huntsTAG card on any smartphone and share your complete business profile,
             portfolio, social media, contact details and more -- instantly, effortlessly and unforgettably.
           </p>
           <p className="shop-plan-desc" style={{ marginBottom: 0, fontWeight: 600 }}>
-            HuntsTag is not just a card. It is your digital identity.
+            huntsTAG is not just a card. It is your digital identity.
           </p>
         </div>
       </div>

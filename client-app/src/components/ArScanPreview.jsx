@@ -707,16 +707,6 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
   const videoProj = hasVideoContent
     ? projectWorldPoint(...toLocalOffset(videoPos, qrPos, cardAspect), heightToLocalZ(videoPos.z, cardAspect))
     : null;
-  // The QR mesh always sits at local (0,0) by definition -- toLocalOffset
-  // measures every OTHER element's offset FROM the QR, so the QR's own
-  // offset from itself is always zero. Dragging it doesn't move it
-  // relative to itself; it changes qrPos, recalibrating where every other
-  // (unmoved) element's local offset resolves to -- AND, since
-  // arTargetImage.js now composites the real tracking-target QR at this
-  // same layout.qr position, dragging this actually determines where the
-  // QR appears on the physical card/download too, not just this preview.
-  const qrProj = projectWorldPoint(0, 0, 0);
-
   return (
     <div
       ref={wrapRef}
@@ -795,8 +785,18 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
                     }
               }
             >
+              {/* draggable={false} -- without it, the browser's own native
+                  HTML5 image-drag kicks in on top of the custom pointer
+                  drag from dragHandlers() above (an <img> is draggable by
+                  default), showing its ghost/no-drop cursor and eating the
+                  gesture so this element's position never actually moves. */}
               {iconUrl ? (
-                <img src={iconUrl} alt={el.label} style={{ width: '60%', height: '60%', objectFit: 'contain' }} />
+                <img
+                  src={iconUrl}
+                  alt={el.label}
+                  draggable={false}
+                  style={{ width: '60%', height: '60%', objectFit: 'contain' }}
+                />
               ) : (
                 el.label
               )}
@@ -860,8 +860,15 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
                     }
               }
             >
+              {/* draggable={false} -- same native-image-drag footgun as
+                  the other icon handle above. */}
               {iconUrl ? (
-                <img src={iconUrl} alt={c.label} style={{ width: '60%', height: '60%', objectFit: 'contain' }} />
+                <img
+                  src={iconUrl}
+                  alt={c.label}
+                  draggable={false}
+                  style={{ width: '60%', height: '60%', objectFit: 'contain' }}
+                />
               ) : (
                 c.label
               )}
@@ -870,31 +877,10 @@ export default function ArScanPreview({ profile, layout, arComponents = [], edit
         );
       })}
 
-      {/* QR drag handle -- same invisible-hit-target-over-a-WebGL-mesh
-          pattern as the model/video handles below, but a solid amber
-          ring instead of a dashed one: dragging this is recalibrating
-          where the QR is actually printed on the card (and, now, where
-          it gets composited into the real tracking-target download too),
-          not repositioning a floating decorative element. */}
-      {editable && qrProj && (
-        <div
-          {...dragHandlers('qr')}
-          title="Drag to match where the QR is actually printed on your card"
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            transform: `translate3d(${qrProj.x}px, ${qrProj.y}px, 0) translate(-50%, -50%)`,
-            width: 64,
-            height: 64,
-            borderRadius: '50%',
-            border: '2px solid #f5a524',
-            cursor: dragging === 'qr' ? 'grabbing' : 'grab',
-            touchAction: 'none',
-            zIndex: dragging === 'qr' ? 10 : 2,
-          }}
-        />
-      )}
+      {/* No drag handle for the QR itself -- its position is fixed (not
+          client-editable), it just needs to line up with wherever it's
+          actually printed on the card. Every other element's position
+          below is still stored relative to it. */}
 
       {/* Model/video drag handles -- invisible-ish hit targets over the
           WebGL-rendered mesh (not a DOM element itself, so it can't carry

@@ -1,5 +1,5 @@
 /**
- * HuntsTAG NFC encode tool -- local GUI version
+ * huntsTAG NFC encode tool -- local GUI version
  * -----------------------------------------------------------------------
  * PHASE 1 of the plan: a real local web app (open in your normal browser
  * at http://localhost:5175) instead of the terminal. This runs entirely
@@ -635,7 +635,7 @@ nfc.on('error', (err) => broadcast('nfc-error', { message: err.message }));
 } // end SKIP_NFC guard
 
 const server = app.listen(PORT, () => {
-  console.log(`\nHuntsTAG encode tool (GUI) running.`);
+  console.log(`\nhuntsTAG encode tool (GUI) running.`);
   console.log(`Open this in your browser:  http://localhost:${PORT}\n`);
 });
 

@@ -1,4 +1,4 @@
-# HuntsTAG NFC Encode Tool
+# huntsTAG NFC Encode Tool
 
 Writes a client's tap URL to an NTAG216 card via the ACR1252U and locks
 it with a password. Runs on the machine physically connected to the

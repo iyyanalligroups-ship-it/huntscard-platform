@@ -306,7 +306,7 @@ router.post('/forgot-password', otpLimiter, async (req, res) => {
       await client.save();
       await sendEmail(
         client.loginEmail,
-        'Your HuntsTAG password reset code',
+        'Your huntsTAG password reset code',
         `Your password reset code is ${otp}. It expires in 10 minutes. If you didn't request this, you can ignore this email.`
       );
     }

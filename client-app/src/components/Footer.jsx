@@ -9,7 +9,7 @@ export default function Footer({ homeTheme }) {
         <div className="site-footer-brand">
           <div className="brand" style={{ marginBottom: 10 }}>
             <div className="brand-mark" />
-            <span className="brand-name">HUNTSTAG</span>
+            <span className="brand-name">huntsTAG</span>
           </div>
           <p className="site-footer-tagline">A smart card for a smarter first impression.</p>
         </div>
@@ -32,7 +32,7 @@ export default function Footer({ homeTheme }) {
       </div>
 
       <div className="site-footer-bottom">
-        <span>© {new Date().getFullYear()} HuntsTAG. All rights reserved.</span>
+        <span>© {new Date().getFullYear()} huntsTAG. All rights reserved.</span>
       </div>
     </footer>
   );

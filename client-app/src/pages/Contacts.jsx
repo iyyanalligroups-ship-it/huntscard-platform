@@ -259,7 +259,7 @@ export default function Contacts() {
     const sheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, 'Contacts');
-    XLSX.writeFile(workbook, 'huntstag-contacts.xlsx');
+    XLSX.writeFile(workbook, 'huntsTAG-contacts.xlsx');
   }
 
   // Same header names rowToContact() looks for -- gives people the exact
@@ -273,16 +273,16 @@ export default function Contacts() {
         Email: 'jane@example.com',
         Company: 'Acme Inc',
         Address: '123 Main St, Bengaluru',
-        Notes: 'Met at HuntsTAG launch event',
+        Notes: 'Met at huntsTAG launch event',
       },
     ]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, 'Contacts');
-    XLSX.writeFile(workbook, 'huntstag-contacts-template.xlsx');
+    XLSX.writeFile(workbook, 'huntsTAG-contacts-template.xlsx');
   }
 
   async function handleDelete(id) {
-    if (!window.confirm('Remove this contact from your HuntsTAG backup?')) return;
+    if (!window.confirm('Remove this contact from your huntsTAG backup?')) return;
     setError('');
     setDeletingId(id);
     try {
@@ -424,7 +424,7 @@ export default function Contacts() {
     <div>
       <h1>Contacts</h1>
       <p className="subtitle">
-        Back up your phone's contacts to your HuntsTAG account. If you switch phones, log in here and export to
+        Back up your phone's contacts to your huntsTAG account. If you switch phones, log in here and export to
         restore them.
       </p>
 
@@ -710,7 +710,7 @@ export default function Contacts() {
                 <h1 style={{ fontSize: 18 }}>Request sent</h1>
                 <p className="subtitle" style={{ marginBottom: 20 }}>
                   {sentRequest.toClientId
-                    ? `${appointmentTarget.name} is already on HuntsTAG -- they've been emailed, and it's waiting on their Appointment Requests page.`
+                    ? `${appointmentTarget.name} is already on huntsTAG -- they've been emailed, and it's waiting on their Appointment Requests page.`
                     : `We texted ${appointmentTarget.name} a link to create an account and see it -- that text needs your SMS provider's template approved before it actually delivers (ask your dev if unsure).`}
                 </p>
                 <p className="hint" style={{ margin: '0 0 12px' }}>
@@ -719,12 +719,12 @@ export default function Contacts() {
                 <a
                   href={`https://wa.me/${waNumber(appointmentTarget.phone)}?text=${encodeURIComponent(
                     sentRequest.toClientId
-                      ? `Hi ${appointmentTarget.name.split(' ')[0]}, I just sent you an appointment request on HuntsTAG${
+                      ? `Hi ${appointmentTarget.name.split(' ')[0]}, I just sent you an appointment request on huntsTAG${
                           sentRequest.proposedAt ? ` for ${new Date(sentRequest.proposedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : ''
                         }. Check it out: ${window.location.origin}/dashboard/appointments`
                       : `Hi, I'd like to schedule an appointment with you${
                           sentRequest.proposedAt ? ` for ${new Date(sentRequest.proposedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : ''
-                        }. Create your free HuntsTAG account to see my request: ${window.location.origin}/register`
+                        }. Create your free huntsTAG account to see my request: ${window.location.origin}/register`
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -755,7 +755,7 @@ export default function Contacts() {
                 <p className="subtitle" style={{ marginBottom: 20 }}>
                   {appointmentTarget.name}
                   {' — '}
-                  if they're already on HuntsTAG they'll see this on their Appointment Requests page (and get
+                  if they're already on huntsTAG they'll see this on their Appointment Requests page (and get
                   emailed); otherwise we'll text them a link to create an account and view it.
                 </p>
                 {appointmentError && <div className="error-banner">{appointmentError}</div>}

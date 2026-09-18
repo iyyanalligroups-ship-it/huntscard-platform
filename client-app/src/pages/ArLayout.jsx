@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, API_URL } from '../api.js';
 import ArScanPreview from '../components/ArScanPreview.jsx';
 import ArModelPreview from '../components/ArModelPreview.jsx';
-import { clampHeight, clampPercent } from '../lib/arProjection.js';
+import { clampHeight } from '../lib/arProjection.js';
 
 /**
  * Lets a client visually position where each element appears in their
@@ -14,13 +14,12 @@ import { clampHeight, clampPercent } from '../lib/arProjection.js';
  *
  * Both panels below are the SAME real 3D renderer (ArScanPreview, the
  * exact Three.js/projection code the live AR view uses) -- not a flat
- * top-down mockup. Drag either one to reposition anything, including the
- * QR itself (the amber ring) -- every other element's position is stored
- * relative to wherever the QR ends up, so dragging the QR recalibrates
- * the whole arrangement to match where it's actually printed on your
- * card. Orbit either preview freely to see the arrangement from any
- * angle, same as a real phone scanning at a tilt would. Rotation/height/
- * scale for the 3D model and AR Video/Photo panel live in the controls
+ * top-down mockup. Drag either one to reposition anything EXCEPT the QR
+ * itself, which is fixed (not client-editable) -- every other element's
+ * position is stored relative to it. Orbit either preview freely to see
+ * the arrangement from any angle, same as a real phone scanning at a
+ * tilt would. Rotation/height/scale for the 3D model and AR Video/Photo
+ * panel live in the controls
  * section below the previews instead of on-canvas handles, since those
  * wouldn't have a fixed screen position to attach to once the model/video
  * can be viewed from any orbit angle.
@@ -86,21 +85,6 @@ export default function ArLayout() {
   // base size is only 15% of the card width, so it needs more headroom to
   // grow to a comparable on-card size.
   const VIDEO_SCALE_MAX = 10;
-
-  // Explicit X/Y buttons for the QR itself -- dragging it in a tilted 3D
-  // orbit view (see ArScanPreview.jsx's raycasting-based drag) translates
-  // small mouse movements into large position jumps at some angles, too
-  // imprecise for landing on the QR's actual printed position. A small
-  // step (1%) makes this fine enough to nudge into place exactly, same
-  // "buttons over imprecise dragging" reasoning as rotation/height/scale
-  // already use below for the model/video.
-  const QR_POSITION_STEP = 1;
-  function adjustQrPosition(axis, delta) {
-    setLayout((prev) => ({
-      ...prev,
-      qr: { ...(prev.qr || { x: 50, y: 50 }), [axis]: clampPercent((prev.qr?.[axis] ?? 50) + delta) },
-    }));
-  }
 
   // Explicit per-axis buttons -- easier to land on an exact angle than
   // dragging or eyeballing, and the only way to set Z (roll) at all.
@@ -400,9 +384,8 @@ export default function ArLayout() {
       <h1 className="page-title">AR Layout</h1>
       <CardPicker />
       <p className="subtitle">
-        The QR code (amber ring) is the anchor a phone locks onto when scanning -- drag it to match where
-        it's actually printed on your card; this also controls where it's placed in your downloadable AR
-        tracking target. Drag anything else, in either preview below, to where you want it to float relative
+        The QR code is the anchor a phone locks onto when scanning -- its position is fixed, not something
+        you can move here. Drag anything else, in either preview below, to where you want it to float relative
         to that QR; orbit either preview (drag empty space) to check the arrangement from any angle.
       </p>
 
@@ -451,26 +434,6 @@ export default function ArLayout() {
         </li>
         <li>Drag -- still rotates, unchanged.</li>
       </ul>
-
-      {/* Precise buttons for the QR's own position -- the amber-ring drag
-          handle above still works for coarse placement, but nudging it
-          exactly onto where the QR is really printed is much easier with
-          fixed steps than eyeballing a drag in a tilted 3D view. */}
-      <div className="card" style={{ marginTop: 20, padding: '16px 18px' }}>
-        <h3 style={{ fontSize: 14, margin: '0 0 10px' }}>QR position</h3>
-        <ControlRow
-          label="Left/right"
-          value={`${Math.round(layout.qr?.x ?? 50)}%`}
-          onDecrement={() => adjustQrPosition('x', -QR_POSITION_STEP)}
-          onIncrement={() => adjustQrPosition('x', QR_POSITION_STEP)}
-        />
-        <ControlRow
-          label="Up/down"
-          value={`${Math.round(layout.qr?.y ?? 50)}%`}
-          onDecrement={() => adjustQrPosition('y', -QR_POSITION_STEP)}
-          onIncrement={() => adjustQrPosition('y', QR_POSITION_STEP)}
-        />
-      </div>
 
       {(hasModel || hasVideoContent) && (
         <div className="card" style={{ marginTop: 20, padding: '16px 18px', display: 'flex', gap: 32, flexWrap: 'wrap' }}>
@@ -596,7 +559,7 @@ export default function ArLayout() {
       </div>
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <a href={qrUrl} download={`huntstag-ar-qr-${profile.clientId}.png`}>
+        <a href={qrUrl} download={`huntsTAG-ar-qr-${profile.clientId}.png`}>
           <button className="secondary" style={{ width: 'auto' }}>
             Download AR QR
           </button>

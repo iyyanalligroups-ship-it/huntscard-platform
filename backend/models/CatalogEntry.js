@@ -36,6 +36,14 @@ const CatalogEntrySchema = new mongoose.Schema(
     // back, and the public page always shows them in that order.
     frontImageUrl: { type: String, trim: true, default: null },
     backImageUrl: { type: String, trim: true, default: null },
+    // Optional demo clip for this specific variant -- an already-hosted
+    // link (YouTube page URL or a direct video file), same "admin pastes
+    // a link, no upload" pattern as VideoShort.videoUrl. Shown on hover
+    // over the front photo on the public Catalog page (Catalog.jsx),
+    // filling the exact same box the photo does, rather than in the
+    // separate "See it in motion" section below (which pulls from the
+    // VideoShort model instead, unrelated to any one variant).
+    videoUrl: { type: String, trim: true, default: null },
     // Optional CardPlan.key this entry represents for checkout purposes.
     // Joined at read time (not copied), same "reference by key" principle
     // as Client.cardType <-> CardPlan.key elsewhere in this app.

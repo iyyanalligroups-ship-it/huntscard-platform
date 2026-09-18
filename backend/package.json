@@ -1,7 +1,7 @@
 {
   "name": "huntstag-backend",
   "version": "0.1.0",
-  "description": "HuntsTAG platform backend - client registration, login, profile edit, public profile page",
+  "description": "huntsTAG platform backend - client registration, login, profile edit, public profile page",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {

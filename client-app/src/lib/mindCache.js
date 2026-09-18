@@ -16,7 +16,7 @@
  * the store from growing forever if many different target sets are visited.
  */
 
-const DB_NAME = 'huntstag-mind-cache';
+const DB_NAME = 'huntsTAG-mind-cache';
 const STORE_NAME = 'buffers';
 const DB_VERSION = 1;
 const MAX_ENTRIES = 10; // evict oldest if we exceed this
