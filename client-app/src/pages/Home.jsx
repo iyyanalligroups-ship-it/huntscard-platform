@@ -1,9 +1,13 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { api, isLoggedIn } from '../api.js';
 import WhyChooseHuntsworld from '../components/WhyChooseHuntsworld.jsx';
-import BroadcastField from '../components/BroadcastField.jsx';
+import TechGlobe from '../components/TechGlobe.jsx';
 import Reveal from '../components/Reveal.jsx';
+
+gsap.registerPlugin(ScrollTrigger);
 
 const SAMPLE_CARD_NAME = 'Alex Chen';
 const SAMPLE_CARD_ROLE = 'Founder, Studio Nine';
@@ -96,6 +100,7 @@ export default function Home() {
   const glitchRef = useRef(null);
   const spotlightRef = useRef(null);
   const orbitContainerRef = useRef(null);
+  const howItWorksRef = useRef(null);
 
   // Re-runs on every navigation to this page (location.key), not just
   // first mount -- logging in/out from the modal navigates back to '/'
@@ -260,11 +265,44 @@ export default function Home() {
     return () => clearTimeout(timeoutId);
   }, []);
 
+  // "How it works" -- GSAP ScrollTrigger timeline instead of the plain
+  // Reveal component the rest of the page uses (see Reveal.jsx): heading,
+  // subheading, the three numbered steps (staggered, with a slight
+  // overshoot on the scale so they "pop" into place) and the CTA button
+  // all play once as a single choreographed sequence the first time this
+  // section crosses into view, rather than each fading in independently.
+  useEffect(() => {
+    const section = howItWorksRef.current;
+    if (!section) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const ctx = gsap.context(() => {
+      const heading = section.querySelector('.section-heading');
+      const subheading = section.querySelector('.section-subheading');
+      const steps = section.querySelectorAll('.step-item');
+      const cta = section.querySelector('.how-it-works-cta');
+
+      gsap.set([heading, subheading, cta], { opacity: 0, y: 28 });
+      gsap.set(steps, { opacity: 0, y: 40, scale: 0.9 });
+
+      gsap
+        .timeline({
+          scrollTrigger: { trigger: section, start: 'top 78%', once: true },
+          defaults: { ease: 'power3.out' },
+        })
+        .to(heading, { opacity: 1, y: 0, duration: 0.6 })
+        .to(subheading, { opacity: 1, y: 0, duration: 0.5 }, '-=0.35')
+        .to(steps, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'back.out(1.6)', stagger: 0.15 }, '-=0.2')
+        .to(cta, { opacity: 1, y: 0, duration: 0.5 }, '-=0.25');
+    }, section);
+
+    return () => ctx.revert();
+  }, []);
+
   return (
     <div>
       <div className="hero-section hero-section-split" ref={heroRef}>
-        <BroadcastField />
-        <div className="circuit-grid" aria-hidden="true" />
+        <TechGlobe />
         <div className="hero-spotlight" ref={spotlightRef} aria-hidden="true" />
         <div className="hero-scanline" aria-hidden="true" />
 
@@ -340,34 +378,36 @@ export default function Home() {
         ))}
       </div>
 
-      <Reveal as="h2" className="section-heading">How it works</Reveal>
-      <Reveal as="p" className="section-subheading" delay={80}>From order to first tap in three steps.</Reveal>
-      <div className="steps-row">
-        {STEPS.map((s, i) => (
-          <Reveal as="div" className="step-item" key={s.title} delay={i * 120}>
-            <div className="step-number">{i + 1}</div>
-            <h4>{s.title}</h4>
-            <p>{s.desc}</p>
-          </Reveal>
-        ))}
-      </div>
+      <div ref={howItWorksRef}>
+        <h2 className="section-heading">How it works</h2>
+        <p className="section-subheading">From order to first tap in three steps.</p>
+        <div className="steps-row">
+          {STEPS.map((s, i) => (
+            <div className="step-item" key={s.title}>
+              <div className="step-number">{i + 1}</div>
+              <h4>{s.title}</h4>
+              <p>{s.desc}</p>
+            </div>
+          ))}
+        </div>
 
-      <Reveal as="div" style={{ textAlign: 'center', marginTop: 48 }}>
-        <Link
-          to="/shop"
-          style={{
-            display: 'inline-block',
-            padding: '14px 32px',
-            borderRadius: 999,
-            background: 'var(--holo-gradient)',
-            color: '#06120f',
-            fontWeight: 700,
-            textDecoration: 'none',
-          }}
-        >
-          Browse card plans
-        </Link>
-      </Reveal>
+        <div className="how-it-works-cta" style={{ textAlign: 'center', marginTop: 48 }}>
+          <Link
+            to="/shop"
+            style={{
+              display: 'inline-block',
+              padding: '14px 32px',
+              borderRadius: 999,
+              background: 'var(--holo-gradient)',
+              color: '#06120f',
+              fontWeight: 700,
+              textDecoration: 'none',
+            }}
+          >
+            Browse card plans
+          </Link>
+        </div>
+      </div>
 
       <WhyChooseHuntsworld />
     </div>

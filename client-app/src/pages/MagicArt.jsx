@@ -42,7 +42,7 @@ export default function MagicArt() {
 
   return (
     <div>
-      <h1 className="section-heading" style={{ marginTop: 0 }}>Magic Art</h1>
+      <h1 className="section-heading" style={{ marginTop: 0 }}>Magic Poster</h1>
       <p className="section-subheading">
         Open Magic Camera -- no login needed -- and point it at one of the images below to see it come alive.
       </p>

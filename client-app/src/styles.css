@@ -88,11 +88,23 @@ body {
      site relies on horizontal page scroll, only scoped containers do
      (e.g. wide tables), which set their own overflow-x separately. */
   overflow-x: hidden;
+  /* Fine circuit-dot grid site-wide, not just behind the hero -- extends
+     that visual language to every section (feature grid, steps, Why
+     Huntsworld, footer), which previously sat on plain dark with no dots
+     at all. The hero and nav used to each draw their own copy of this
+     same grid; both were removed once this site-wide layer made them
+     redundant (double-density dots right where they overlapped). `fixed`
+     keeps the dots stationary while scrolling instead of scrolling away
+     with the page content, reading as one continuous backdrop for the
+     whole site rather than a hero-only decoration. */
   background:
+    radial-gradient(circle at 1px 1px, rgba(94, 234, 212, 0.06) 1px, transparent 0),
     radial-gradient(circle at 15% -10%, rgba(94, 234, 212, 0.12), transparent 40%),
     radial-gradient(circle at 90% 0%, rgba(167, 139, 250, 0.10), transparent 45%),
     radial-gradient(circle at 50% 120%, rgba(244, 114, 182, 0.08), transparent 50%),
     var(--space);
+  background-size: 32px 32px, auto, auto, auto, auto;
+  background-attachment: fixed, scroll, scroll, scroll, scroll;
   color: var(--text);
   font-family: var(--font-ui);
 }
@@ -112,7 +124,11 @@ body {
 /* Header only (not the generic .brand used on form pages like
    Login/Register) -- a bit more breathing room between the logo and
    "huntsTAG" text specifically here. */
-.top-nav .brand { gap: 16px; }
+/* margin-bottom:0 overrides the base .brand rule's 32px -- that spacing
+   is meant for the standalone brand block on Login/Register/etc (a gap
+   before the form below it), not for the header's own floating pill,
+   where it just added unwanted extra height under the logo/nav row. */
+.top-nav .brand { gap: 16px; margin-bottom: 0; }
 
 .brand-mark {
   width: 52px;
@@ -138,24 +154,21 @@ body {
 .brand-mark::before {
   display: none;
 }
-/* Small orbiting dot circling the mark */
+/* Small orbiting dot circling the mark -- removed per direct request.
+   Kept as a disabled rule (same convention as ::before above) rather than
+   deleted, since theme overrides elsewhere still target this selector. */
 .brand-mark::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 6px 2px var(--holo-cyan);
-  animation: brandMarkOrbit 4s linear infinite;
-  pointer-events: none;
+  display: none;
 }
 @keyframes brandMarkSpin { to { transform: rotate(360deg); } }
 @keyframes brandMarkOrbit {
-  from { transform: translate(-50%, -50%) rotate(0deg) translateX(25px) rotate(0deg); }
-  to { transform: translate(-50%, -50%) rotate(360deg) translateX(25px) rotate(-360deg); }
+  /* Orbit radius (32px) kept deliberately just outside the 52px mark's own
+     half-width (26px) -- at the old 25px radius the dot never actually
+     cleared the box, so it spent the whole loop skimming just inside the
+     edge, blending into the logo artwork underneath it instead of reading
+     as a visible orbiting sparkle against the plain nav background. */
+  from { transform: translate(-50%, -50%) rotate(0deg) translateX(32px) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg) translateX(32px) rotate(-360deg); }
 }
 @media (prefers-reduced-motion: reduce) {
   .brand-mark::before, .brand-mark::after { animation: none; opacity: 0.6; }
@@ -487,25 +500,38 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   inset: auto;
 }
 
+/* Floating rounded pill navbar (mx-auto, inset from the viewport edges
+   and top on every breakpoint) rather than a full-bleed sticky strip --
+   width:calc(100% - Npx) + max-width + margin:auto guarantees a gutter
+   on the sides even on viewports narrower than max-width, where
+   margin:auto alone wouldn't produce one. */
 .top-nav {
   position: sticky;
-  top: 0;
+  top: 14px;
   z-index: 20;
+  width: calc(100% - 24px);
+  max-width: 1240px;
+  margin: 14px auto 0;
   overflow: hidden;
-  border-bottom: 1px solid var(--panel-border);
-  background: linear-gradient(180deg, rgba(94,234,212,0.06), rgba(10,11,16,0.55) 70%);
+  border: 1px solid var(--panel-border);
+  border-radius: 28px;
+  /* Low alpha (was 0.72-0.8) -- the page's own --space (#0a0b10) is
+     already this same near-black, so a near-opaque fill here just read
+     as a separate solid block sitting on the page rather than blending
+     with it. Backdrop-blur still does the "glass" legibility work over
+     whatever scrolls underneath. */
+  background: linear-gradient(180deg, rgba(94,234,212,0.05), rgba(10,11,16,0.4) 70%), rgba(10, 11, 16, 0.32);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
 }
-/* Fine circuit-dot grid, same language as the hero background -- ties
-   the nav visually to the rest of the page instead of a standalone
-   decorative motif. */
-.top-nav-grid {
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(circle at 1px 1px, rgba(94, 234, 212, 0.08) 1px, transparent 0);
-  background-size: 26px 26px;
-  pointer-events: none;
+@media (max-width: 480px) {
+  .top-nav {
+    width: calc(100% - 16px);
+    margin-top: 10px;
+    top: 10px;
+    border-radius: 20px;
+  }
 }
 /* Power-source glow anchored behind the logo -- the bar reads as
    "powered from here" rather than lit by generic floating blobs. */
@@ -525,15 +551,6 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   0%, 100% { opacity: 0.65; transform: translate(-50%, -50%) scale(1); }
   50% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
 }
-/* Circuit traces radiating from the logo, drawn in JS (see
-   PublicLayout.jsx) with real light pulses traveling along them. */
-.top-nav-circuit-svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
 /* Sharper, more defined scanning beam than a soft blurred sweep */
 .top-nav-scan-beam {
   position: absolute;
@@ -552,10 +569,9 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 }
 @media (prefers-reduced-motion: reduce) {
   .top-nav-power-glow, .top-nav-scan-beam { animation: none; }
-  .top-nav-circuit-svg { display: none; }
 }
 @media (max-width: 860px) {
-  .top-nav-power-glow, .top-nav-circuit-svg { display: none; }
+  .top-nav-power-glow { display: none; }
 }
 
 /* Slow scanning glow line along the bottom border, with a bright
@@ -597,6 +613,11 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   height: 12px;
   border: 1.5px solid rgba(94,234,212,0.4);
   pointer-events: none;
+  /* Square right-angle brackets read as a hairline-flush-edge accent --
+     doesn't suit the floating pill's heavily rounded (28px) corners, so
+     hidden here rather than deleted (kept for the mobile/theme overrides
+     below that already turn it off too). */
+  display: none;
 }
 .top-nav-corner.tl { top: 5px; left: 5px; border-right: none; border-bottom: none; }
 .top-nav-corner.br { bottom: 5px; right: 5px; border-left: none; border-top: none; }
@@ -638,15 +659,18 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 }
 
 .top-nav-row {
+  /* .top-nav itself now owns the max-width/centering (it's the floating
+     pill's own bounds), so this only needs internal padding. */
   position: relative;
-  max-width: 1240px;
-  margin: 0 auto;
-  padding: 20px 32px;
+  padding: 8px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  flex-wrap: wrap;
+  /* Single line at desktop widths -- wrapping only exists as a mobile
+     fallback, handled separately by the <860px hamburger/dropdown
+     breakpoint below, not by letting this row wrap in place. */
+  flex-wrap: nowrap;
 }
 
 /* Cleaned up from a pill-shaped tray (its own background/border, a
@@ -709,11 +733,9 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
    (.brand-mark's image + size) is NOT touched here -- that's a
    permanent branding change, not part of either theme. */
 .top-nav.theme-orange {
-  background: rgba(10, 11, 16, 0.86);
+  background: rgba(10, 11, 16, 0.35);
 }
-.top-nav.theme-orange .top-nav-grid,
 .top-nav.theme-orange .top-nav-power-glow,
-.top-nav.theme-orange .top-nav-circuit-svg,
 .top-nav.theme-orange .top-nav-scan-beam,
 .top-nav.theme-orange::after,
 .top-nav.theme-orange .top-nav-scan-particle,
@@ -775,11 +797,9 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
    text-shadow glow on hover/active (not just color+background like
    orange) to read as genuinely neon, per the reference image. */
 .top-nav.theme-cyber {
-  background: rgba(4, 6, 12, 0.88);
+  background: rgba(4, 6, 12, 0.35);
 }
-.top-nav.theme-cyber .top-nav-grid,
 .top-nav.theme-cyber .top-nav-power-glow,
-.top-nav.theme-cyber .top-nav-circuit-svg,
 .top-nav.theme-cyber .top-nav-scan-beam,
 .top-nav.theme-cyber::after,
 .top-nav.theme-cyber .top-nav-scan-particle,
@@ -881,19 +901,24 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 .nav-menu-btn svg { width: 100%; height: 100%; }
 
 @media (max-width: 860px) {
+  .top-nav-row { padding: 8px 18px; }
   .nav-menu-btn { display: flex; }
   .nav-menu {
     display: none;
     position: absolute;
-    top: 100%;
+    /* Sits below the pill with a visible gap, as its own rounded floating
+       panel, instead of a flush edge-to-edge sheet -- matches the pill's
+       own floating-inset look rather than reverting to a full-bleed bar. */
+    top: calc(100% + 10px);
     left: 0;
     right: 0;
     flex-direction: column;
     align-items: stretch;
     gap: 16px;
-    padding: 18px 24px 26px;
+    padding: 18px 22px 24px;
     background: #0d0e14;
-    border-bottom: 1px solid var(--panel-border);
+    border: 1px solid var(--panel-border);
+    border-radius: 22px;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
     z-index: 30;
   }
@@ -910,6 +935,10 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
      the header's own box. Those decorative layers are already display:none
      at this width, so relaxing overflow here is safe. */
   .top-nav { overflow: visible; }
+}
+@media (max-width: 480px) {
+  .top-nav-row { padding: 7px 14px; }
+  .nav-menu { border-radius: 18px; padding: 16px 18px 20px; }
 }
 
 .pill-outline {
@@ -1595,9 +1624,9 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 .hero-col-text { position: relative; z-index: 1; }
 
 /* Real-time WebGL broadcast-particle background (see BroadcastField.jsx)
-   -- sits BEHIND the circuit-grid/spotlight/scanline layers below (same
-   z-index, but first in DOM order so it paints first), so those existing
-   effects read as sitting on top of it rather than competing with it. */
+   -- sits BEHIND the spotlight/scanline layers below (same z-index, but
+   first in DOM order so it paints first), so those existing effects read
+   as sitting on top of it rather than competing with it. */
 .broadcast-field {
   position: absolute;
   inset: 0;
@@ -1606,16 +1635,15 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 }
 .broadcast-field canvas { display: block; width: 100%; height: 100%; }
 
-/* Fine circuit-style dot grid behind the hero -- reinforces "this is
-   real hardware" rather than a decorative gradient wash. */
-.circuit-grid {
+/* Rotating point-cloud globe (see TechGlobe.jsx), same layering role as
+   .broadcast-field above -- this replaces it on the home hero. */
+.tech-globe {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(circle at 1px 1px, rgba(94, 234, 212, 0.1) 1px, transparent 0);
-  background-size: 32px 32px;
-  pointer-events: none;
   z-index: 0;
+  pointer-events: none;
 }
+.tech-globe canvas { display: block; width: 100%; height: 100%; }
 
 /* Cursor spotlight -- soft glow that follows the mouse, lighting up the
    circuit-dot grid as it passes. */
@@ -3588,12 +3616,21 @@ body.theme-orange,
    its own neon-pooled backdrop, echoing the reference image's dark
    background with color bleeding in from the edges, not just a flat
    near-black. */
+/* Same fine circuit-dot grid the base `body` rule (top of file) and the
+   hero's own .circuit-grid use -- this rule used to fully replace body's
+   background (dot layer included), so the dots only ever showed inside
+   the hero's separate overlay element and vanished everywhere else on
+   the page once cyber theme was active. Adding the dot layer back here
+   (cyan-tinted to match this theme) extends it site-wide again. */
 body.theme-cyber {
-  background:
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(0, 255, 240, 0.07) 1px, transparent 0),
     radial-gradient(circle at 12% -8%, rgba(0, 255, 240, 0.16), transparent 42%),
     radial-gradient(circle at 92% 4%, rgba(112, 0, 255, 0.14), transparent 46%),
-    radial-gradient(circle at 50% 115%, rgba(255, 0, 200, 0.12), transparent 52%),
-    #04060a;
+    radial-gradient(circle at 50% 115%, rgba(255, 0, 200, 0.12), transparent 52%);
+  background-color: #04060a;
+  background-size: 32px 32px, auto, auto, auto;
+  background-attachment: fixed, scroll, scroll, scroll;
 }
 .dash-shell.theme-cyber,
 .theme-cyber .dash-main {

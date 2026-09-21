@@ -242,7 +242,6 @@ export default function HomeD1() {
   return (
     <div>
       <div className="d1-hero" ref={heroRef}>
-        <div className="circuit-grid" aria-hidden="true" />
         <div className="hero-spotlight" ref={spotlightRef} aria-hidden="true" />
         <div className="hero-scanline" aria-hidden="true" />
         <div className="d1-corner-mark" aria-hidden="true">*</div>

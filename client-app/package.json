@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/model-viewer": "^4.3.1",
+    "gsap": "^3.15.0",
     "js-aruco2": "^2.0.0",
     "jsqr": "^1.4.0",
     "mind-ar": "^1.2.5",
