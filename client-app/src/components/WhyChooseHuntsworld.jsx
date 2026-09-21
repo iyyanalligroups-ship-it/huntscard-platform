@@ -1,3 +1,5 @@
+import Reveal from './Reveal.jsx';
+
 const POINTS = [
   {
     title: 'Innovation Over Payment',
@@ -33,21 +35,21 @@ export default function WhyChooseHuntsworld() {
   return (
     <section className="why-huntsworld">
       <div className="why-huntsworld-inner">
-        <h2 className="section-heading" style={{ margin: '0 0 8px' }}>What is HuntsWorld and why</h2>
-        <p className="why-huntsworld-intro">
+        <Reveal as="h2" className="section-heading" style={{ margin: '0 0 8px' }}>What is HuntsWorld and why</Reveal>
+        <Reveal as="p" className="why-huntsworld-intro" delay={80}>
           Huntsworld is India's most affordable B2B marketplace, designed to democratize business
           connections for companies of all sizes. We believe that every business, regardless of
           budget, deserves access to powerful marketplace tools and genuine growth opportunities.
-        </p>
+        </Reveal>
 
-        <h3 className="why-huntsworld-sub">What Makes Us Different</h3>
+        <Reveal as="h3" className="why-huntsworld-sub" delay={140}>What Makes Us Different</Reveal>
         <div className="feature-grid">
-          {POINTS.map((p) => (
-            <div className="feature-card" key={p.title}>
+          {POINTS.map((p, i) => (
+            <Reveal as="div" className="feature-card" key={p.title} delay={i * 90}>
               <div className="feature-icon">{p.icon}</div>
               <h3>{p.title}</h3>
               <p>{p.desc}</p>
-            </div>
+            </Reveal>
           ))}
         </div>
       </div>

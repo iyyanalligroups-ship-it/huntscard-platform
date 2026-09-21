@@ -4,19 +4,28 @@ import { api } from '../api.js';
 import { Compiler } from 'mind-ar/src/image-target/compiler.js';
 import { Controller } from 'mind-ar/src/image-target/controller.js';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { buildCacheKey, getCachedBuffer, setCachedBuffer } from '../lib/mindCache.js';
 
 // Magic Camera -- scans every ACTIVE admin-uploaded Magic Art pack AND
 // every ACTIVE Magic Business Card at once (see backend/models/MagicArt.js
 // and MagicBusinessCard.js), automatically playing whichever one's video
 // matches the printed/on-screen image the camera is actually pointed at.
-// Video only for both -- Magic Business Card intentionally has no 3D
-// model support here (or anywhere else in the app), by explicit choice.
 // Magic Art falls back to every complete pack if none have been
 // explicitly marked active yet (older-setup compatibility); Magic
 // Business Cards have no such fallback -- only explicitly-activated ones
 // are ever scannable, since a client's draft card shouldn't be publicly
 // findable just because it happens to have an image+video uploaded.
+//
+// Magic Business Card also optionally supports an anchored 3D model
+// (doc.modelUrl/modelType, see backend/models/MagicBusinessCard.js) on
+// top of its required video -- a reversal of this file's own earlier
+// "video only, by explicit choice" note. Loaded straight into the
+// target's existing anchorGroup (see the targets.forEach loop below),
+// same box-autofit pattern as ArViewMindAR.jsx's own onModelLoaded, so it
+// inherits that anchor's pose-smoothing lerp/slerp for free -- no extra
+// stabilization work needed to keep a floated model from shaking.
 //
 // Known scaling caveat, not solved here: this compiles EVERY active
 // target (art + cards) as simultaneous mind-ar targets, same approach
@@ -97,11 +106,35 @@ async function startArVideo(video) {
 // risks slow/hung compilation on real Android hardware. Downscale via
 // canvas if needed; mind-ar's Compiler accepts a canvas the same as an
 // Image.
-// Lowered to 512 -- cuts compilation time by >60% compared to 800px while
-// preserving excellent feature detection accuracy for cards and murals.
+// 512 was already lowered once from 800 (>60% faster) -- but that's a
+// flat PER-IMAGE cap, and compile time is really ~(dimension)^2 * target
+// COUNT. It doesn't bound the TOTAL wait once enough admin-uploaded
+// pieces/cards go active at once: with 11 simultaneous targets live,
+// "Preparing the tracking targets..." was sitting well past 10s even at
+// 512px each. targetDimFor keeps total compile work roughly constant
+// instead -- shrinking each target's own cap as more of them need
+// compiling together (1/sqrt(count), since work scales with dim²),
+// floored at MIN_TARGET_DIM so any one image still has enough real
+// detail to be recognized. A single target (e.g. scoped mode, always
+// exactly one) still gets the full MAX_TARGET_DIM -- nothing lost there.
 const MAX_TARGET_DIM = 512;
+const MIN_TARGET_DIM = 260;
+// A Magic Business Card's optional 3D model's longest dimension is scaled
+// to this fraction of the tracked card's own width (1 local unit -- see
+// buildPostMatrix), then floated slightly toward the viewer (positive
+// local Z) so it stands off the flat video plane instead of clipping
+// through it. Bigger than ArLayout's own MODEL_IMAGE_BASE_FRACTION (0.25,
+// arProjection.js) -- that system floats a model as one small component
+// alongside several others; here it's meant to read as the main AR
+// sticker, closer to the card's own size.
+const MODEL_SIZE_FRACTION = 0.6;
+const MODEL_Z_OFFSET_FRACTION = 0.15;
+function targetDimFor(targetCount) {
+  if (targetCount <= 1) return MAX_TARGET_DIM;
+  return Math.max(MIN_TARGET_DIM, Math.round(MAX_TARGET_DIM / Math.sqrt(targetCount)));
+}
 
-async function prepareTargetImage(imageUrl) {
+async function prepareTargetImage(imageUrl, maxDim) {
   const img = await new Promise((resolve, reject) => {
     const i = new Image();
     i.crossOrigin = 'anonymous';
@@ -111,9 +144,9 @@ async function prepareTargetImage(imageUrl) {
   });
 
   const longest = Math.max(img.width, img.height);
-  if (longest <= MAX_TARGET_DIM) return img;
+  if (longest <= maxDim) return img;
 
-  const scale = MAX_TARGET_DIM / longest;
+  const scale = maxDim / longest;
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(img.width * scale);
   canvas.height = Math.round(img.height * scale);
@@ -425,9 +458,68 @@ export default function MagicCamera() {
     streamRef.current = null;
   }
 
+  // Compiles (or reuses an IndexedDB-cached buffer for) a target list --
+  // pulled out of handleStart so the SAME in-flight/finished promise can
+  // be kicked off proactively, before the user ever taps "Start Magic
+  // Camera" (see the prewarm effect below), instead of only starting
+  // fresh on click. compilePrewarmRef caches by target-set fingerprint,
+  // so a call here with the same targets just returns the already-
+  // running (or already-resolved) promise instead of double-compiling.
+  // Returns { buffer, targets } since a broken target (see the
+  // allSettled note below) can shrink the target list actually compiled.
+  const compilePrewarmRef = useRef(null); // { key, promise }
+  function getCompiledBuffer(targets, onProgress) {
+    // Cache key: stable fingerprint of every target's image URL. If the
+    // admin changes/re-uploads an image the URL changes, the key
+    // changes, and the old entry is never matched -- no explicit
+    // invalidation needed.
+    const cacheKey = buildCacheKey(targets.map((p) => p.imageUrl));
+    if (compilePrewarmRef.current?.key === cacheKey) {
+      return compilePrewarmRef.current.promise;
+    }
+    const promise = (async () => {
+      const cached = await getCachedBuffer(cacheKey);
+      if (cached) {
+        onProgress?.('Loading tracking data...');
+        return { buffer: cached, targets };
+      }
+
+      // Cache miss -- full compile path.
+      // Promise.allSettled, not Promise.all -- ONE broken target (a bad
+      // stored URL, a file missing on this server, a real network blip)
+      // used to reject the whole batch and take Magic Camera down for
+      // every OTHER target too, gallery-wide, from a single bad record.
+      // Skips just the broken one(s) instead.
+      const maxDim = targetDimFor(targets.length);
+      const settled = await Promise.allSettled(targets.map((p) => prepareTargetImage(p.imageUrl, maxDim)));
+      const targetImgs = [];
+      const loadedTargets = [];
+      settled.forEach((result, i) => {
+        if (result.status === 'fulfilled') {
+          targetImgs.push(result.value);
+          loadedTargets.push(targets[i]);
+        } else {
+          console.warn('[MagicCamera] Skipping a target whose image failed to load:', targets[i]?.imageUrl, result.reason);
+        }
+      });
+      if (!targetImgs.length) throw new Error('Could not load the target image');
+      const compiler = new Compiler();
+      await compiler.compileImageTargets(targetImgs, (percent) => {
+        onProgress?.(`Compiling tracking data... ${Math.round(percent)}%`);
+      });
+      const buffer = compiler.exportData();
+      // Save for next visit -- non-blocking, errors are logged but don't
+      // affect the current session.
+      setCachedBuffer(cacheKey, buffer).catch(() => {});
+      return { buffer, targets: loadedTargets };
+    })();
+    compilePrewarmRef.current = { key: cacheKey, promise };
+    return promise;
+  }
+
   async function handleStart() {
-    let targets = clientId ? (scopedCard ? [scopedCard] : []) : getActiveTargets(pieces, cards, streetArt);
-    if (!targets.length || !containerRef.current) return;
+    const initialTargets = clientId ? (scopedCard ? [scopedCard] : []) : getActiveTargets(pieces, cards, streetArt);
+    if (!initialTargets.length || !containerRef.current) return;
     setLoadError('');
     setStatus('compiling');
     setStatusMessage('Preparing the tracking targets...');
@@ -436,64 +528,19 @@ export default function MagicCamera() {
       // Compiling the tracking data and getting camera permission don't
       // depend on each other -- running them at the same time instead of
       // one after the other cuts real wait time down to whichever one is
-      // slower, instead of the sum of both. This is the safe, immediate
-      // win available without touching WHAT gets compiled (MAX_TARGET_DIM
-      // above) or avoiding a fresh per-visit compile entirely -- that's a
-      // real but bigger follow-up (pre-compiling server-side whenever the
-      // banner image actually changes, so most scans skip compiling at
-      // all), deliberately deferred, see this file's own top comment.
-      //
-      // Camera acquisition itself was ALSO already kicked off earlier (see
-      // ensureCameraStarted, called the moment scoped mode mounted, not
-      // gated on the scopedCard fetch this function itself waited for) --
-      // this just awaits whatever's already in flight instead of starting
-      // it fresh here.
-      const compilePromise = (async () => {
-        // Cache key: stable fingerprint of every target's image URL.
-        // If the admin changes/re-uploads an image the URL changes,
-        // the key changes, and the old entry is never matched --
-        // no explicit invalidation needed.
-        const cacheKey = buildCacheKey(targets.map((p) => p.imageUrl));
-        const cached = await getCachedBuffer(cacheKey);
-        if (cached) {
-          setStatusMessage('Loading tracking data...');
-          return cached;
-        }
+      // slower, instead of the sum of both. Camera acquisition itself was
+      // ALSO already kicked off earlier (see ensureCameraStarted, called
+      // the moment the page mounted) -- this just awaits whatever's
+      // already in flight instead of starting it fresh here. Likewise,
+      // getCompiledBuffer below may already be running (or done) via the
+      // prewarm effect -- most of the real wait time users notice is now
+      // absorbed before they even click Start, rather than only
+      // beginning on click. Full server-side pre-compilation (skipping a
+      // per-visit compile entirely) is a real but bigger follow-up,
+      // deliberately deferred -- see this file's own top comment.
+      const compilePromise = getCompiledBuffer(initialTargets, setStatusMessage);
 
-        // Cache miss -- full compile path.
-        // Promise.allSettled, not Promise.all -- ONE broken target (a bad
-        // stored URL, a file missing on this server, a real network
-        // blip) used to reject the whole batch and take Magic Camera
-        // down for every OTHER target too, gallery-wide, from a single
-        // bad record. Skips just the broken one(s) instead; `targets`
-        // itself is reassigned to match so every later step (dimensions
-        // indexing, targetEntries, controller.addImageTargetsFromBuffer)
-        // stays aligned with the filtered list, not the original.
-        const settled = await Promise.allSettled(targets.map((p) => prepareTargetImage(p.imageUrl)));
-        const targetImgs = [];
-        const loadedTargets = [];
-        settled.forEach((result, i) => {
-          if (result.status === 'fulfilled') {
-            targetImgs.push(result.value);
-            loadedTargets.push(targets[i]);
-          } else {
-            console.warn('[MagicCamera] Skipping a target whose image failed to load:', targets[i]?.imageUrl, result.reason);
-          }
-        });
-        if (!targetImgs.length) throw new Error('Could not load the target image');
-        targets = loadedTargets;
-        const compiler = new Compiler();
-        await compiler.compileImageTargets(targetImgs, (percent) => {
-          setStatusMessage(`Compiling tracking data... ${Math.round(percent)}%`);
-        });
-        const buffer = compiler.exportData();
-        // Save for next visit -- non-blocking, errors are logged but don't
-        // affect the current session.
-        setCachedBuffer(cacheKey, buffer).catch(() => {});
-        return buffer;
-      })();
-
-      const [buffer] = await Promise.all([compilePromise, ensureCameraStarted()]);
+      const [{ buffer, targets }] = await Promise.all([compilePromise, ensureCameraStarted()]);
       const video = cameraVideoRef.current;
 
       setStatus('starting');
@@ -533,7 +580,7 @@ export default function MagicCamera() {
         // targetMatrix: stores the latest raw tracker pose so the 60fps
         // renderLoop can glide the display toward it independently of the
         // ~30fps tracker cadence.
-        return { anchorGroup, postMatrix: new THREE.Matrix4(), videoEls: [], initialized: false, targetMatrix: new THREE.Matrix4() };
+        return { anchorGroup, postMatrix: new THREE.Matrix4(), videoEls: [], initialized: false, targetMatrix: new THREE.Matrix4(), modelMixer: null };
       });
 
       // Reusable decomposition objects for the 60fps lerp in renderLoop.
@@ -638,6 +685,35 @@ export default function MagicCamera() {
         entry.postMatrix = buildPostMatrix(markerWidth, markerHeight);
         const fullHeightUnits = markerHeight / markerWidth;
 
+        // Optional anchored 3D model (Magic Business Card only, see this
+        // file's own top comment) -- additive to the video overlay(s)
+        // below, not a replacement, so nothing else in this loop needs to
+        // change whether or not a given target has one.
+        if (piece.modelUrl) {
+          const onModelLoaded = (model, animations) => {
+            const box = new THREE.Box3().setFromObject(model);
+            const size = new THREE.Vector3();
+            const center = new THREE.Vector3();
+            box.getSize(size);
+            box.getCenter(center);
+            const maxDim = Math.max(size.x, size.y, size.z) || 1;
+            const autoFit = MODEL_SIZE_FRACTION / maxDim;
+            model.scale.setScalar(autoFit);
+            model.position.set(-center.x * autoFit, -center.y * autoFit, -center.z * autoFit + MODEL_Z_OFFSET_FRACTION);
+            entry.anchorGroup.add(model);
+            if (animations?.length) {
+              entry.modelMixer = new THREE.AnimationMixer(model);
+              entry.modelMixer.clipAction(animations[0]).play();
+            }
+          };
+          const onModelError = (err) => console.warn('[MagicCamera] Could not load a 3D model:', piece.modelUrl, err);
+          if (piece.modelType === 'fbx') {
+            new FBXLoader().load(piece.modelUrl, (fbx) => onModelLoaded(fbx, fbx.animations), undefined, onModelError);
+          } else {
+            new GLTFLoader().load(piece.modelUrl, (gltf) => onModelLoaded(gltf.scene, gltf.animations), undefined, onModelError);
+          }
+        }
+
         getTargetOverlays(piece).forEach((overlay) => {
           if (!overlay.videoUrl) return;
           const isFullBleed = overlay.x === 0 && overlay.y === 0 && overlay.width === 100 && overlay.height === 100;
@@ -723,12 +799,14 @@ export default function MagicCamera() {
       const ndcHelper = new THREE.Vector3();
       const worldHelper = new THREE.Vector3();
       const centerHelper = new THREE.Vector3();
+      const modelClock = new THREE.Clock();
       function renderLoop() {
         // 60fps lerp: glide every visible anchor's display matrix toward
         // the latest raw tracker pose stored by onUpdate. Running here
         // (every rAF) rather than in onUpdate (~30fps) doubles the
         // effective smoothing rate and eliminates the residual jitter
         // that was still visible at 30fps-only interpolation.
+        const modelDelta = modelClock.getDelta();
         targetEntries.forEach((entry) => {
           if (entry.initialized && entry.anchorGroup.visible) {
             entry.targetMatrix.decompose(_tPos, _tQuat, _tScale);
@@ -738,6 +816,7 @@ export default function MagicCamera() {
             _cScale.lerp(_tScale, LERP_ALPHA);
             entry.anchorGroup.matrix.compose(_cPos, _cQuat, _cScale);
           }
+          entry.modelMixer?.update(modelDelta);
         });
         renderer.render(scene, camera);
         const entry = targetEntries[0];
@@ -813,6 +892,22 @@ export default function MagicCamera() {
   const activeTargets = clientId ? (scopedCard ? [scopedCard] : []) : getActiveTargets(pieces, cards, streetArt);
   const hasArt = activeTargets.length > 0;
   const stillLoading = clientId ? scopedCard === undefined : !pieces || !cards || !streetArt;
+
+  // Kicks off compiling the moment there's something to compile, rather
+  // than waiting for the "Start Magic Camera" click -- on the gallery
+  // route (no clientId) that click can land seconds after the page is
+  // actually ready, time this would otherwise waste sitting idle. By the
+  // time the user does tap Start, getCompiledBuffer above usually just
+  // returns this same already-finished (or already-running) promise
+  // instead of starting from zero. Scoped mode doesn't need this: it
+  // already calls handleStart() itself the instant scopedCard resolves
+  // (see that effect above), so compiling is already starting at the
+  // earliest possible moment there.
+  useEffect(() => {
+    if (clientId || stillLoading || !hasArt) return;
+    getCompiledBuffer(activeTargets).catch(() => {}); // handleStart surfaces any real error once the user actually starts
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, stillLoading, hasArt]);
 
   // Contact/social/portfolio buttons -- scoped mode only, same underlying
   // profile fields ArView.jsx/ArViewMindAR.jsx already show, but their
@@ -1028,8 +1123,11 @@ export default function MagicCamera() {
               the OTHER lists so this can reach "idle" with content to
               scan. Surfaced here rather than silently dropped. */}
           {loadError && <p style={{ color: '#f87171', maxWidth: 320, fontSize: 13 }}>{loadError}</p>}
-          <button onClick={handleStart} style={{ width: 'auto', padding: '14px 32px', fontSize: 16 }}>
-            Start Magic Camera
+          <p className="magic-camera-start-note">Point your camera at any Magic piece, then tap to start</p>
+          <button onClick={handleStart} className="magic-camera-start-btn" aria-label="Start Magic Camera" title="Start Magic Camera">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="30" height="30">
+              <path d="M15 4V2" /><path d="M15 16v-2" /><path d="M8 9h2" /><path d="M20 9h2" /><path d="M17.8 11.8 19 13" /><path d="M15 9h0" /><path d="M17.8 6.2 19 5" /><path d="m3 21 9-9" /><path d="M12.2 6.2 13 7" />
+            </svg>
           </button>
         </div>
       )}

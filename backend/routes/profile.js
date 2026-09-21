@@ -1230,6 +1230,14 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
     // CardRequest.variantBreakdown), not reflected on the account itself.
     const primaryVariantId = variantBreakdown[0]?.variantId || null;
 
+    // A client can now own cards across several DIFFERENT plans at once
+    // (e.g. 2 Custom + 3 Limited Edition) -- a purchase here always ADDS
+    // cards, same as a repeat purchase of the same plan already did,
+    // rather than replacing whatever plan they were on before. Whether
+    // this is their very first card ever decides how the legacy
+    // Client.cardType/cardVariantId mirror below gets touched.
+    const hadAnyCardsBefore = (await Card.countDocuments({ clientId: req.user.clientId })) > 0;
+
     // Payment is verified above -- that IS the trust step now, so this
     // applies immediately rather than sitting in the admin queue waiting
     // for a manual Approve. The old manual flow (no price set) still goes
@@ -1237,16 +1245,28 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
     // there. Also sets paid: true unconditionally -- this same endpoint
     // now doubles as "get your first card" for a freshly self-registered
     // client with no cardType yet, not just later upgrades.
-    await Client.findOneAndUpdate(
-      { clientId: req.user.clientId },
-      { $set: {
-          cardType: requestedPlan.toLowerCase(),
-          paid: true,
-          cardVariantId: plan.variants.length > 0 ? primaryVariantId : null,
-          customDesignFrontUrl: plan.requiresDesignUpload ? designFrontUrl : null,
-          customDesignBackUrl: plan.requiresDesignUpload ? designBackUrl : null,
-        } }
-    );
+    const clientUpdates = { paid: true };
+    // Client.cardType/cardVariantId are a legacy mirror of "Card #1" (see
+    // Card.js's own comment) -- only meaningful to update here when this
+    // purchase actually IS creating card #1. Once a client already has at
+    // least one card, a later purchase of a DIFFERENT plan adds a new
+    // card without touching that mirror, so it doesn't get silently
+    // overwritten by whatever plan they happened to buy most recently.
+    if (!hadAnyCardsBefore) {
+      clientUpdates.cardType = requestedPlan.toLowerCase();
+      clientUpdates.cardVariantId = plan.variants.length > 0 ? primaryVariantId : null;
+    }
+    // Client-level design images are shared across every Custom-plan card
+    // on the account (there's no per-card design field) -- only ever SET
+    // here when this purchase's own plan actually needs one. Leaving them
+    // out of the update entirely (not nulling them) when it doesn't is
+    // what stops, e.g., buying a Basic card from wiping out the design
+    // already in use by an existing Custom card on the same account.
+    if (plan.requiresDesignUpload) {
+      clientUpdates.customDesignFrontUrl = designFrontUrl;
+      clientUpdates.customDesignBackUrl = designBackUrl;
+    }
+    await Client.findOneAndUpdate({ clientId: req.user.clientId }, { $set: clientUpdates });
 
     const request = await CardRequest.create({
       clientId: req.user.clientId,
@@ -1260,28 +1280,6 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
       quantity,
       variantBreakdown,
     });
-
-    // Only one plan is ever active at a time -- Premium/Elite/Apex/Custom/
-    // Nova don't mix. Switching plans REPLACES whatever the client had
-    // before: their old Card(s), plus those cards' own AR Layout / Magic
-    // Business Card customizations, are permanently deleted here, not
-    // archived. A repeat purchase of the SAME plan (e.g. a second Apex
-    // card) isn't affected -- only cards of a genuinely DIFFERENT type are
-    // removed, so createCardsForPurchase below still just adds another
-    // unit in that case. Deleted before createCardsForPurchase runs so its
-    // own cardNumber sequencing restarts clean when the plan actually changed.
-    const oldCards = await Card.find({
-      clientId: req.user.clientId,
-      cardType: { $ne: requestedPlan.toLowerCase() },
-    }).select('cardNumber');
-    if (oldCards.length > 0) {
-      const oldCardNumbers = oldCards.map((c) => c.cardNumber);
-      await Promise.all([
-        Card.deleteMany({ clientId: req.user.clientId, cardNumber: { $in: oldCardNumbers } }),
-        ArLayout.deleteMany({ clientId: req.user.clientId, cardNumber: { $in: oldCardNumbers } }),
-        MagicBusinessCard.deleteMany({ clientId: req.user.clientId, cardNumber: { $in: oldCardNumbers } }),
-      ]);
-    }
 
     // One trackable physical card per unit paid for -- a repeat purchase
     // against a client who already has a (possibly already-delivered) card

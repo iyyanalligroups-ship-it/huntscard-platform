@@ -54,6 +54,15 @@ const magicBusinessCardSchema = new mongoose.Schema(
     imageWidth: Number,
     imageHeight: Number,
     videoUrl: { type: String, trim: true },
+    // Optional 3D model shown ANCHORED to the tracked card in Magic
+    // Camera, in addition to (not instead of) the flat video above --
+    // additive so it doesn't touch the existing video-required activation
+    // rule. Same .glb/.fbx-only, extension-gated upload as Profile
+    // Settings' own arModelUrl/arModelType slot (see routes/profile.js's
+    // MODEL_EXTENSIONS) -- reusing that exact convention rather than
+    // inventing a second one.
+    modelUrl: { type: String, trim: true, default: null },
+    modelType: { type: String, enum: ['glb', 'fbx', null], default: null },
     // Audio / Sound Effect exclusively uploaded by Admin for Special Edition cards.
     audioUrl: { type: String, trim: true, default: null },
     // Display-only crop, fractional (0-1) within the ORIGINAL video's own

@@ -230,6 +230,7 @@ export default function Shop() {
   const [searchParams] = useSearchParams();
   const [plans, setPlans] = useState([]);
   const [myProfile, setMyProfile] = useState(null);
+  const [myCards, setMyCards] = useState([]); // every physical card this client owns, possibly across several DIFFERENT plans -- see api.getMyCards()
   const [selectedKey, setSelectedKey] = useState('');
   // Which variant the detail view's left-side image preview is showing --
   // browsing-only, independent of which styles/quantities are actually
@@ -272,11 +273,13 @@ export default function Shop() {
       api.listShopPlans(),
       loggedIn ? api.getProfile() : Promise.resolve(null),
       loggedIn ? api.listMyRequests() : Promise.resolve([]),
+      loggedIn ? api.getMyCards() : Promise.resolve([]),
     ])
-      .then(([pl, profile, reqs]) => {
+      .then(([pl, profile, reqs, cards]) => {
         setPlans(pl);
         setMyProfile(profile);
         setRequests(reqs.filter((r) => r.type === 'upgrade'));
+        setMyCards(cards);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -293,12 +296,18 @@ export default function Shop() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plans]);
 
-  const hasCard = Boolean(myProfile?.cardType);
-  // Show every plan, including the client's current one -- it's marked
-  // as "Current Plan" in the card below instead of being hidden, so
-  // they can see where they stand relative to the other tiers.
+  // A client can own cards across several DIFFERENT plans at once (see
+  // routes/profile.js's upgrade-confirm) -- so "do they have a card at
+  // all" and "is THIS plan one they already own" both come from the real
+  // card list now, not the single legacy myProfile.cardType field (which
+  // only ever reflects whichever plan became card #1).
+  const ownedPlanKeys = new Set(myCards.map((c) => c.cardType).filter(Boolean));
+  const hasCard = myCards.length > 0;
+  // Show every plan, including any the client already owns -- marked as
+  // "Current Plan" in the card below instead of being hidden, so they can
+  // see where they stand relative to the other tiers.
   function isCurrentPlan(p) {
-    return loggedIn && hasCard && p.key === myProfile.cardType;
+    return loggedIn && ownedPlanKeys.has(p.key);
   }
   // Fixed display order (Premium, Elite, Nova, Custom, then Apex last) --
   // independent of the plans' own DB insertion order/keys, which don't
@@ -334,7 +343,7 @@ export default function Shop() {
   // showing what they're on), otherwise just the first plan in the list.
   useEffect(() => {
     if (loading || selectedKey || visiblePlans.length === 0) return;
-    const current = loggedIn && hasCard ? visiblePlans.find((p) => p.key === myProfile.cardType) : null;
+    const current = loggedIn && hasCard ? visiblePlans.find((p) => ownedPlanKeys.has(p.key)) : null;
     setSelectedKey((current || visiblePlans[0]).key);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, visiblePlans, selectedKey]);
@@ -476,7 +485,9 @@ export default function Shop() {
       <p className="section-subheading">
         {loggedIn
           ? hasCard
-            ? `You're currently on ${myProfile.cardType}.`
+            ? `You're currently on ${[...ownedPlanKeys]
+                .map((key) => visiblePlans.find((p) => p.key === key)?.name || key)
+                .join(', ')}.`
             : "You don't have a card yet — pick a plan below."
           : "Browse freely — you'll need an account to actually buy."}
       </p>

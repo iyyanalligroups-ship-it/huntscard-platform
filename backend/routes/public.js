@@ -705,6 +705,8 @@ router.get('/magic-cards', async (req, res) => {
         imageWidth: doc.imageWidth,
         imageHeight: doc.imageHeight,
         videoUrl: doc.videoUrl,
+        modelUrl: doc.modelUrl,
+        modelType: doc.modelType,
         isSpecialEdition,
         audioUrl: isSpecialEdition ? doc.audioUrl : null,
         videoCrop: {
@@ -825,6 +827,8 @@ router.get('/magic-card/:clientId', async (req, res) => {
       imageWidth: doc.imageWidth,
       imageHeight: doc.imageHeight,
       videoUrl: doc.videoUrl,
+      modelUrl: doc.modelUrl,
+      modelType: doc.modelType,
       isSpecialEdition,
       audioUrl: isSpecialEdition ? doc.audioUrl : null,
       videoCrop: {

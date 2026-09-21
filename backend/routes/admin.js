@@ -869,6 +869,20 @@ router.post('/clients', requireAdmin, async (req, res) => {
       mustChangePassword: true,
     });
 
+    // Give a plan picked at creation an actual Card #1 too -- see the
+    // matching comment on PATCH /clients/:clientId above for why: without
+    // a real Card document, the client's own dashboard (Magic Business
+    // Card, AR Layout, the card picker) has nothing to show for this plan
+    // even though Client.cardType itself is set.
+    if (client.cardType) {
+      await Card.create({
+        clientId: client.clientId,
+        cardNumber: 1,
+        cardType: client.cardType,
+        cardVariantId: client.cardVariantId || null,
+      });
+    }
+
     res.status(201).json({
       clientId: client.clientId,
       loginEmail: client.loginEmail,
@@ -1005,6 +1019,31 @@ router.patch('/clients/:clientId', requireAdmin, async (req, res) => {
     ).select('-passwordHash -chipPasswordHash');
 
     if (!client) return res.status(404).json({ error: 'Client not found' });
+
+    // Keep Card #1 in sync when a plan is assigned/changed here.
+    // Client.cardType/cardVariantId are a LEGACY mirror (see Card.js's own
+    // comment) -- the client's actual dashboard (Magic Business Card, AR
+    // Layout, the card picker) reads real Card documents via
+    // GET /profile/cards, not these fields. Without this, an admin
+    // "assigning a plan" from this form updated Client.cardType but the
+    // client saw no change at all on their own dashboard (no Card #1 to
+    // begin with, or an existing Card #1 silently left on its old plan).
+    if (updates.cardType) {
+      const cardOne = await Card.findOne({ clientId: req.params.clientId, cardNumber: 1 });
+      if (cardOne) {
+        cardOne.cardType = updates.cardType;
+        if (updates.cardVariantId !== undefined) cardOne.cardVariantId = updates.cardVariantId;
+        await cardOne.save();
+      } else {
+        await Card.create({
+          clientId: req.params.clientId,
+          cardNumber: 1,
+          cardType: updates.cardType,
+          cardVariantId: updates.cardVariantId || null,
+        });
+      }
+    }
+
     res.json(client);
   } catch (err) {
     console.error('[admin/clients PATCH]', err);
@@ -2401,6 +2440,20 @@ const magicCardAudioUpload = multer({
     cb(null, true);
   },
 });
+// .glb/.fbx gated on file EXTENSION, not mimetype -- browsers/OSes don't
+// report a consistent mimetype for 3D model files, same reasoning as
+// routes/profile.js's own MODEL_EXTENSIONS-gated arModelUpload.
+const MAGIC_CARD_MODEL_EXTENSIONS = ['.glb', '.fbx'];
+const magicCardModelUpload = multer({
+  storage: magicCardStorage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!MAGIC_CARD_MODEL_EXTENSIONS.includes(path.extname(file.originalname).toLowerCase())) {
+      return cb(new Error('Only .glb or .fbx 3D model files are allowed'));
+    }
+    cb(null, true);
+  },
+});
 // Async -- resolves the derived image (Custom Card's checkout design, or
 // the purchased variant's own front image, see utils/cardVariant.js) the
 // same way routes/profile.js's serializeMyMagicCard does, so admin's view
@@ -2441,6 +2494,8 @@ async function serializeMagicCard(doc, card) {
     videoCropY: doc.videoCropY,
     videoCropWidth: doc.videoCropWidth,
     videoCropHeight: doc.videoCropHeight,
+    modelUrl: doc.modelUrl,
+    modelType: doc.modelType,
     audioUrl: doc.audioUrl,
     qrX: doc.qrX ?? 82,
     qrY: doc.qrY ?? 82,
@@ -2592,6 +2647,36 @@ router.post(
   }
 );
 
+// POST /api/admin/clients/:clientId/magic-card/model -- optional 3D
+// model shown ANCHORED to the tracked card in Magic Camera, additive to
+// (not a replacement for) the required video above -- see the field's own
+// comment in models/MagicBusinessCard.js.
+router.post(
+  '/clients/:clientId/magic-card/model',
+  requireAdmin,
+  magicCardModelUpload.single('model'),
+  async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+      const loaded = await loadAdminCard(req, res);
+      if (!loaded) return;
+      const doc = await findOrCreateMagicCard(req.params.clientId, loaded.cardNumber);
+      const previousUrl = doc.modelUrl;
+      doc.modelUrl = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
+      doc.modelType = path.extname(req.file.originalname).toLowerCase() === '.fbx' ? 'fbx' : 'glb';
+      doc.updatedBy = req.admin?.email || 'unknown';
+      await doc.save();
+      if (previousUrl) {
+        fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(previousUrl)), () => {});
+      }
+      res.json(await serializeMagicCard(doc, loaded.card));
+    } catch (err) {
+      const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 50MB.' : err.message;
+      res.status(400).json({ error: message });
+    }
+  }
+);
+
 // POST /api/admin/clients/:clientId/magic-card/audio
 router.post(
   '/clients/:clientId/magic-card/audio',
@@ -2622,7 +2707,7 @@ router.post(
 router.delete('/clients/:clientId/magic-card/:field', requireAdmin, async (req, res) => {
   try {
     const { field } = req.params;
-    if (field !== 'image' && field !== 'video' && field !== 'audio') {
+    if (field !== 'image' && field !== 'video' && field !== 'audio' && field !== 'model') {
       return res.status(400).json({ error: 'Unknown field' });
     }
     const loaded = await loadAdminCard(req, res);
@@ -2636,6 +2721,10 @@ router.delete('/clients/:clientId/magic-card/:field', requireAdmin, async (req, 
     } else if (field === 'audio') {
       if (doc.audioUrl) fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(doc.audioUrl)), () => {});
       doc.audioUrl = undefined;
+    } else if (field === 'model') {
+      if (doc.modelUrl) fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(doc.modelUrl)), () => {});
+      doc.modelUrl = undefined;
+      doc.modelType = undefined;
     } else {
       if (doc.videoUrl) fs.unlink(path.join(MAGIC_CARD_DIR, path.basename(doc.videoUrl)), () => {});
       doc.videoUrl = undefined;
@@ -2994,6 +3083,51 @@ router.get('/clients/:clientId/cards', requireAdmin, async (req, res) => {
     res.json(cards);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/clients/:clientId/assign-plan -- purely additive: mints
+// `quantity` brand-new Card records for this plan, appended after
+// whatever cards the client already has (of this or any other plan) --
+// never reuses/overwrites an existing card. Distinct from
+// POST /clients/:clientId/cards just below, which the encode tool uses
+// and deliberately DOES reuse an unencoded placeholder -- that reuse
+// behavior is wrong here, since admin picking "Custom x2" for a client
+// who already has an unencoded Basic placeholder should get 2 new Custom
+// cards, not have that Basic placeholder silently retyped. Same "always
+// add, never replace" principle routes/profile.js's own upgrade-confirm
+// uses for a client's self-service purchases -- this is that same
+// capability for admin, so a client can end up owning several different
+// plans at once (e.g. 2 Basic + 3 Custom).
+router.post('/clients/:clientId/assign-plan', requireAdmin, async (req, res) => {
+  try {
+    const { cardType, cardVariantId, quantity } = req.body || {};
+    if (!cardType) return res.status(400).json({ error: 'cardType is required' });
+
+    const plan = await CardPlan.findOne({ key: cardType.toLowerCase() });
+    if (!plan) return res.status(400).json({ error: 'cardType must match an existing card plan' });
+    if (cardVariantId && !plan.variants.some((v) => v._id.toString() === cardVariantId)) {
+      return res.status(400).json({ error: 'cardVariantId must match a variant on the selected plan' });
+    }
+
+    const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId');
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+
+    // Same cap Shop.jsx's own MAX_QUANTITY enforces for a self-service order.
+    const qty = Math.max(1, Math.min(20, Number(quantity) || 1));
+    const lastCard = await Card.findOne({ clientId: client.clientId }).sort({ cardNumber: -1 }).select('cardNumber');
+    let nextNumber = (lastCard?.cardNumber || 0) + 1;
+    const cardDocs = Array.from({ length: qty }, () => ({
+      clientId: client.clientId,
+      cardNumber: nextNumber++,
+      cardType: cardType.toLowerCase(),
+      cardVariantId: cardVariantId || null,
+    }));
+    const created = await Card.insertMany(cardDocs);
+    res.status(201).json(created);
+  } catch (err) {
+    console.error('[admin/clients assign-plan POST]', err);
+    res.status(500).json({ error: 'Failed to assign plan' });
   }
 });
 

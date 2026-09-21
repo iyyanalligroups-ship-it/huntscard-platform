@@ -2,6 +2,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { api, isLoggedIn } from '../api.js';
 import WhyChooseHuntsworld from '../components/WhyChooseHuntsworld.jsx';
+import BroadcastField from '../components/BroadcastField.jsx';
+import Reveal from '../components/Reveal.jsx';
 
 const SAMPLE_CARD_NAME = 'Alex Chen';
 const SAMPLE_CARD_ROLE = 'Founder, Studio Nine';
@@ -261,6 +263,7 @@ export default function Home() {
   return (
     <div>
       <div className="hero-section hero-section-split" ref={heroRef}>
+        <BroadcastField />
         <div className="circuit-grid" aria-hidden="true" />
         <div className="hero-spotlight" ref={spotlightRef} aria-hidden="true" />
         <div className="hero-scanline" aria-hidden="true" />
@@ -328,28 +331,28 @@ export default function Home() {
       </div>
 
       <div className="feature-grid">
-        {FEATURES.map((f) => (
-          <div className="feature-card" key={f.title}>
+        {FEATURES.map((f, i) => (
+          <Reveal as="div" className="feature-card" key={f.title} delay={i * 90}>
             <div className="feature-icon">{f.icon}</div>
             <h3>{f.title}</h3>
             <p>{f.desc}</p>
-          </div>
+          </Reveal>
         ))}
       </div>
 
-      <h2 className="section-heading">How it works</h2>
-      <p className="section-subheading">From order to first tap in three steps.</p>
+      <Reveal as="h2" className="section-heading">How it works</Reveal>
+      <Reveal as="p" className="section-subheading" delay={80}>From order to first tap in three steps.</Reveal>
       <div className="steps-row">
         {STEPS.map((s, i) => (
-          <div className="step-item" key={s.title}>
+          <Reveal as="div" className="step-item" key={s.title} delay={i * 120}>
             <div className="step-number">{i + 1}</div>
             <h4>{s.title}</h4>
             <p>{s.desc}</p>
-          </div>
+          </Reveal>
         ))}
       </div>
 
-      <div style={{ textAlign: 'center', marginTop: 48 }}>
+      <Reveal as="div" style={{ textAlign: 'center', marginTop: 48 }}>
         <Link
           to="/shop"
           style={{
@@ -364,7 +367,7 @@ export default function Home() {
         >
           Browse card plans
         </Link>
-      </div>
+      </Reveal>
 
       <WhyChooseHuntsworld />
     </div>
