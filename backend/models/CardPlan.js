@@ -21,6 +21,23 @@ const CardPlanVariantSchema = new mongoose.Schema(
     // until the plan itself is first saved.
     frontImageUrl: { type: String, trim: true, default: null },
     backImageUrl: { type: String, trim: true, default: null },
+    // Shared Magic Business Card AR video/model for every client on THIS
+    // variant -- for a plan whose buyers all get the exact same fixed
+    // artwork (e.g. Limited Edition), re-uploading the same video/model
+    // to every individual client's own MagicBusinessCard doc (see that
+    // model's own videoUrl/modelUrl) is redundant and drifts out of sync
+    // (see the QR-position drift this same plan just hit). A client's own
+    // doc still wins when set (an override escape hatch, same priority
+    // rule as frontImageUrl vs. a client's own imageUrl override) -- see
+    // utils/cardVariant.js's resolveCardVariant, which now also resolves
+    // these two fields.
+    videoUrl: { type: String, trim: true, default: null },
+    videoCropX: { type: Number, default: 0 },
+    videoCropY: { type: Number, default: 0 },
+    videoCropWidth: { type: Number, default: 1 },
+    videoCropHeight: { type: Number, default: 1 },
+    modelUrl: { type: String, trim: true, default: null },
+    modelType: { type: String, enum: ['glb', 'fbx', null], default: null },
   },
   { _id: true }
 );

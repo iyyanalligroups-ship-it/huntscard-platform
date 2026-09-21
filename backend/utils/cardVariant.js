@@ -52,6 +52,18 @@ async function resolveCardVariant(card, mapsOrNull) {
     variantName: variant?.name || null,
     frontImageUrl: variant?.frontImageUrl || null,
     backImageUrl: variant?.backImageUrl || null,
+    // Shared Magic Business Card video/model for this variant (see
+    // CardPlan.js's own comment on these fields) -- a per-client
+    // MagicBusinessCard doc's own upload still takes priority over this
+    // when present; callers (admin.js's serializeMagicCard, public.js's
+    // magic-card routes, profile.js's serializeMyMagicCard) apply that
+    // `doc.videoUrl || resolved.videoUrl` precedence themselves.
+    videoUrl: variant?.videoUrl || null,
+    videoCrop: variant
+      ? { x: variant.videoCropX ?? 0, y: variant.videoCropY ?? 0, width: variant.videoCropWidth ?? 1, height: variant.videoCropHeight ?? 1 }
+      : null,
+    modelUrl: variant?.modelUrl || null,
+    modelType: variant?.modelType || null,
     requiresDesignUpload: Boolean(plan?.requiresDesignUpload),
     arEnabled: Boolean(plan?.arEnabled),
     magicEnabled: Boolean(plan?.magicEnabled),

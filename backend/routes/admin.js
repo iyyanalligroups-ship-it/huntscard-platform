@@ -28,6 +28,17 @@ const MagicLayoutDefault = require('../models/MagicLayoutDefault');
 const { getGlobalMagicLayoutDefault } = require('../utils/magicLayout');
 const { buildVariantMap, resolveCardVariant } = require('../utils/cardVariant');
 const SiteSetting = require('../models/SiteSetting');
+
+// Per-plan default Magic Business Card QR position (percent, see
+// MagicBusinessCard.js's qrX/qrY) -- for a plan whose every buyer shares
+// one fixed catalog design/artwork, the "correct" QR spot is the same for
+// everyone on it, so a new client on that plan should start there instead
+// of the schema's generic 82/82 default. Used by POST /clients below;
+// admin can still drag/Save a different position per client afterward
+// (see ClientDetail.jsx's QR position control) if a plan ever needs it.
+const PLAN_DEFAULT_QR_POSITION = {
+  'joseph-vijay': { x: 71, y: 80 }, // Limited Edition -- verified against charles.bmtechx@gmail.com's real working card
+};
 const FaqEntry = require('../models/FaqEntry');
 const cardCrypto = require('../utils/crypto'); // named apart from the built-in `crypto` above (line 4)
 const { getChargeAmount } = require('../utils/pricing');
@@ -664,6 +675,139 @@ function cardPlanVariantImageSlotRoutes(slot, field) {
 cardPlanVariantImageSlotRoutes('front', 'frontImageUrl');
 cardPlanVariantImageSlotRoutes('back', 'backImageUrl');
 
+// ---------------------------------------------------------------------
+// Card Plan VARIANT shared Magic Business Card video/model (see
+// CardPlan.js's own comment on these fields) -- ONE upload per variant,
+// inherited by every client on it whose own MagicBusinessCard doc has no
+// video/model of its own (see utils/cardVariant.js's resolveCardVariant
+// and admin.js's serializeMagicCard). Same upload-dir/mime-type shape as
+// the per-client magicCardVideoUpload/magicCardModelUpload further down
+// this file, just duplicated locally (same pattern as
+// MAGIC_ART_VIDEO_MIME_TYPES/STREET_ART_VIDEO_MIME_TYPES elsewhere in this
+// file) rather than forward-referencing consts defined later in the module.
+// ---------------------------------------------------------------------
+const cardPlanVariantVideoUpload = multer({
+  storage: cardPlanVariantImageStorage,
+  limits: { fileSize: 80 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!['video/mp4', 'video/quicktime'].includes(file.mimetype)) {
+      return cb(new Error('Only MP4 or MOV videos are allowed'));
+    }
+    cb(null, true);
+  },
+});
+// .glb/.fbx gated on file EXTENSION, not mimetype -- same reasoning as
+// routes/profile.js's own MODEL_EXTENSIONS-gated arModelUpload.
+const CARD_PLAN_VARIANT_MODEL_EXTENSIONS = ['.glb', '.fbx'];
+const cardPlanVariantModelUpload = multer({
+  storage: cardPlanVariantImageStorage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!CARD_PLAN_VARIANT_MODEL_EXTENSIONS.includes(path.extname(file.originalname).toLowerCase())) {
+      return cb(new Error('Only .glb or .fbx 3D model files are allowed'));
+    }
+    cb(null, true);
+  },
+});
+
+router.post(`/plans/:planId/variants/:variantId/video`, requireAdmin, (req, res) => {
+  cardPlanVariantVideoUpload.single('video')(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'No video file received' });
+    try {
+      const plan = await CardPlan.findById(req.params.planId);
+      if (!plan) return res.status(404).json({ error: 'Plan not found' });
+      const variant = plan.variants.id(req.params.variantId);
+      if (!variant) return res.status(404).json({ error: 'Variant not found' });
+
+      const previousUrl = variant.videoUrl;
+      variant.videoUrl = `${process.env.BACKEND_URL}/uploads/plan-variants/${req.file.filename}`;
+      variant.videoCropX = Number(req.body.cropX) || 0;
+      variant.videoCropY = Number(req.body.cropY) || 0;
+      variant.videoCropWidth = Number(req.body.cropWidth) || 1;
+      variant.videoCropHeight = Number(req.body.cropHeight) || 1;
+      await plan.save();
+      if (previousUrl) {
+        fs.unlink(path.join(CARD_PLAN_VARIANTS_DIR, path.basename(previousUrl)), () => {});
+      }
+      res.status(201).json(plan);
+    } catch (err2) {
+      console.error('[admin/plans variant video POST]', err2);
+      res.status(500).json({ error: 'Failed to save video' });
+    }
+  });
+});
+
+router.delete('/plans/:planId/variants/:variantId/video', requireAdmin, async (req, res) => {
+  try {
+    const plan = await CardPlan.findById(req.params.planId);
+    if (!plan) return res.status(404).json({ error: 'Plan not found' });
+    const variant = plan.variants.id(req.params.variantId);
+    if (!variant) return res.status(404).json({ error: 'Variant not found' });
+
+    const previousUrl = variant.videoUrl;
+    variant.videoUrl = null;
+    variant.videoCropX = undefined;
+    variant.videoCropY = undefined;
+    variant.videoCropWidth = undefined;
+    variant.videoCropHeight = undefined;
+    await plan.save();
+    if (previousUrl) {
+      fs.unlink(path.join(CARD_PLAN_VARIANTS_DIR, path.basename(previousUrl)), () => {});
+    }
+    res.json(plan);
+  } catch (err2) {
+    console.error('[admin/plans variant video DELETE]', err2);
+    res.status(500).json({ error: 'Failed to remove video' });
+  }
+});
+
+router.post(`/plans/:planId/variants/:variantId/model`, requireAdmin, (req, res) => {
+  cardPlanVariantModelUpload.single('model')(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'No model file received' });
+    try {
+      const plan = await CardPlan.findById(req.params.planId);
+      if (!plan) return res.status(404).json({ error: 'Plan not found' });
+      const variant = plan.variants.id(req.params.variantId);
+      if (!variant) return res.status(404).json({ error: 'Variant not found' });
+
+      const previousUrl = variant.modelUrl;
+      variant.modelUrl = `${process.env.BACKEND_URL}/uploads/plan-variants/${req.file.filename}`;
+      variant.modelType = path.extname(req.file.originalname).toLowerCase() === '.fbx' ? 'fbx' : 'glb';
+      await plan.save();
+      if (previousUrl) {
+        fs.unlink(path.join(CARD_PLAN_VARIANTS_DIR, path.basename(previousUrl)), () => {});
+      }
+      res.status(201).json(plan);
+    } catch (err2) {
+      console.error('[admin/plans variant model POST]', err2);
+      res.status(500).json({ error: 'Failed to save model' });
+    }
+  });
+});
+
+router.delete('/plans/:planId/variants/:variantId/model', requireAdmin, async (req, res) => {
+  try {
+    const plan = await CardPlan.findById(req.params.planId);
+    if (!plan) return res.status(404).json({ error: 'Plan not found' });
+    const variant = plan.variants.id(req.params.variantId);
+    if (!variant) return res.status(404).json({ error: 'Variant not found' });
+
+    const previousUrl = variant.modelUrl;
+    variant.modelUrl = null;
+    variant.modelType = null;
+    await plan.save();
+    if (previousUrl) {
+      fs.unlink(path.join(CARD_PLAN_VARIANTS_DIR, path.basename(previousUrl)), () => {});
+    }
+    res.json(plan);
+  } catch (err2) {
+    console.error('[admin/plans variant model DELETE]', err2);
+    res.status(500).json({ error: 'Failed to remove model' });
+  }
+});
+
 // -----------------------------------------------------------------------
 // Catalog entries (card variant showcase, see models/CatalogEntry.js)
 // -----------------------------------------------------------------------
@@ -890,6 +1034,24 @@ router.post('/clients', requireAdmin, async (req, res) => {
         cardType: client.cardType,
         cardVariantId: client.cardVariantId || null,
       });
+
+      // Some plans share ONE fixed catalog design across every buyer
+      // (Limited Edition's own artwork, see MagicBusinessCardAr.jsx's own
+      // "Limited Stock" plan) -- for those, the QR's correct on-screen
+      // spot is the same for every client on it, verified against a real
+      // working card (charles.bmtechx@gmail.com's, x:71/y:80) rather than
+      // left at the schema's generic 82/82 default, which was landing
+      // visibly off from where it actually looks right on this artwork.
+      // Pre-creates the (normally lazy, see findOrCreateMagicCard) doc
+      // right away just to carry this default -- admin can still drag/
+      // Save a different spot per client afterward if ever needed.
+      const planDefaultQrPosition = PLAN_DEFAULT_QR_POSITION[client.cardType];
+      if (planDefaultQrPosition) {
+        const magicCard = await findOrCreateMagicCard(client.clientId, 1);
+        magicCard.qrX = planDefaultQrPosition.x;
+        magicCard.qrY = planDefaultQrPosition.y;
+        await magicCard.save();
+      }
     }
 
     res.status(201).json({
@@ -2487,6 +2649,19 @@ async function serializeMagicCard(doc, card) {
     imageUrl = doc.imageUrl || null; // no resolvable variant -- admin-set fallback escape hatch
   }
 
+  // Same override-escape-hatch priority as imageUrl above: this card's
+  // OWN uploaded video/model wins when set, falling back to the shared
+  // one on its plan variant (see CardPlan.js's own comment) otherwise --
+  // lets a plan like Limited Edition upload its video/model ONCE and
+  // have every client on it inherit it, without forcing a per-client
+  // re-upload of the exact same file.
+  const videoInherited = !doc.videoUrl && Boolean(resolved?.videoUrl);
+  const modelInherited = !doc.modelUrl && Boolean(resolved?.modelUrl);
+  const effectiveVideoUrl = doc.videoUrl || resolved?.videoUrl || null;
+  const effectiveVideoCrop = doc.videoUrl
+    ? { x: doc.videoCropX ?? 0, y: doc.videoCropY ?? 0, width: doc.videoCropWidth ?? 1, height: doc.videoCropHeight ?? 1 }
+    : resolved?.videoCrop || { x: 0, y: 0, width: 1, height: 1 };
+
   return {
     _id: doc._id,
     clientId: doc.clientId,
@@ -2498,13 +2673,15 @@ async function serializeMagicCard(doc, card) {
     imageUrl,
     imageWidth: doc.imageWidth,
     imageHeight: doc.imageHeight,
-    videoUrl: doc.videoUrl,
-    videoCropX: doc.videoCropX,
-    videoCropY: doc.videoCropY,
-    videoCropWidth: doc.videoCropWidth,
-    videoCropHeight: doc.videoCropHeight,
-    modelUrl: doc.modelUrl,
-    modelType: doc.modelType,
+    videoUrl: effectiveVideoUrl,
+    videoInherited,
+    videoCropX: effectiveVideoCrop.x,
+    videoCropY: effectiveVideoCrop.y,
+    videoCropWidth: effectiveVideoCrop.width,
+    videoCropHeight: effectiveVideoCrop.height,
+    modelUrl: doc.modelUrl || resolved?.modelUrl || null,
+    modelType: doc.modelUrl ? doc.modelType : resolved?.modelType || null,
+    modelInherited,
     audioUrl: doc.audioUrl,
     qrX: doc.qrX ?? 82,
     qrY: doc.qrY ?? 82,
@@ -2568,7 +2745,11 @@ router.post('/clients/:clientId/magic-card/activate', requireAdmin, async (req, 
     if (!loaded) return;
     const doc = await findOrCreateMagicCard(req.params.clientId, loaded.cardNumber);
     const serialized = await serializeMagicCard(doc, loaded.card);
-    if (!serialized.available || !doc.videoUrl) {
+    // serialized.videoUrl (not doc.videoUrl) -- a plan variant's shared
+    // video (see CardPlan.js) satisfies this too, same as a client's own
+    // upload would, so a Limited-Edition-style client never needs a
+    // redundant personal copy of the exact same file just to activate.
+    if (!serialized.available || !serialized.videoUrl) {
       return res.status(400).json({ error: 'This card needs a video (and a resolvable design) before it can be activated.' });
     }
     doc.active = true;
@@ -2711,6 +2892,32 @@ router.post(
     }
   }
 );
+
+// POST /api/admin/clients/:clientId/magic-card/qr-position -- admin-side
+// equivalent of routes/profile.js's own /magic-card/qr-position (that one
+// is client-facing but has no UI calling it anymore, see ClientDetail.jsx
+// -- admin now sets this directly instead). Same x/y-percent convention,
+// composited into the printable download at this spot (see
+// handleDownloadMagicCardWithQr in ClientDetail.jsx) and shown live in
+// the client's own Magic Business Card page.
+router.post('/clients/:clientId/magic-card/qr-position', requireAdmin, async (req, res) => {
+  try {
+    const loaded = await loadAdminCard(req, res);
+    if (!loaded) return;
+    const { x, y } = req.body;
+    if (typeof x !== 'number' || typeof y !== 'number' || x < 0 || x > 100 || y < 0 || y > 100) {
+      return res.status(400).json({ error: 'x and y must be numbers between 0 and 100' });
+    }
+    const doc = await findOrCreateMagicCard(req.params.clientId, loaded.cardNumber);
+    doc.qrX = x;
+    doc.qrY = y;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(await serializeMagicCard(doc, loaded.card));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // DELETE /api/admin/clients/:clientId/magic-card/:field?card=N
 router.delete('/clients/:clientId/magic-card/:field', requireAdmin, async (req, res) => {

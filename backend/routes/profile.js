@@ -589,6 +589,17 @@ async function serializeMyMagicCard(doc, card) {
     imageUrl = doc.imageUrl || null; // no resolvable variant -- admin-set fallback escape hatch
   }
 
+  // Same override-escape-hatch priority as imageUrl above -- a plan
+  // variant's shared video (see CardPlan.js's own comment) shows here too
+  // when this card has no video of its own, so a Limited-Edition-style
+  // client sees the real AR video in their own preview/hover-to-play
+  // instead of "no video yet" just because nothing was uploaded to THEIR
+  // specific doc.
+  const effectiveVideoUrl = doc.videoUrl || resolved?.videoUrl || null;
+  const effectiveVideoCrop = doc.videoUrl
+    ? { x: doc.videoCropX ?? 0, y: doc.videoCropY ?? 0, width: doc.videoCropWidth ?? 1, height: doc.videoCropHeight ?? 1 }
+    : resolved?.videoCrop || { x: 0, y: 0, width: 1, height: 1 };
+
   return {
     cardNumber: doc.cardNumber,
     // Derived from the card's own purchased variant, never client-set --
@@ -607,14 +618,10 @@ async function serializeMyMagicCard(doc, card) {
     imageUrl,
     imageWidth: doc.imageWidth,
     imageHeight: doc.imageHeight,
-    videoUrl: doc.videoUrl || null,
+    videoUrl: effectiveVideoUrl,
+    videoInherited: !doc.videoUrl && Boolean(resolved?.videoUrl),
     audioUrl: plan?.isSpecialEdition ? (doc.audioUrl || null) : null,
-    videoCrop: {
-      x: doc.videoCropX ?? 0,
-      y: doc.videoCropY ?? 0,
-      width: doc.videoCropWidth ?? 1,
-      height: doc.videoCropHeight ?? 1,
-    },
+    videoCrop: effectiveVideoCrop,
     active: Boolean(doc.active),
     qrPosition: { x: doc.qrX ?? 82, y: doc.qrY ?? 82 },
     componentPositions,

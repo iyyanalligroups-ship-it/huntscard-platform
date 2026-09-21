@@ -663,7 +663,12 @@ router.get('/magic-art', async (req, res) => {
 // regardless of how many active cards exist.
 router.get('/magic-cards', async (req, res) => {
   try {
-    const docs = await MagicBusinessCard.find({ active: true, videoUrl: { $ne: null } });
+    // No videoUrl filter here anymore -- a plan variant's own shared
+    // video (see CardPlan.js) can satisfy this card even when doc.videoUrl
+    // itself is null, so filtering at the query level would wrongly drop
+    // every client relying on that shared video before ever resolving it.
+    // Filtered on the EFFECTIVE video instead, inside the loop below.
+    const docs = await MagicBusinessCard.find({ active: true });
     if (docs.length === 0) {
       res.set('Cache-Control', 'no-store');
       return res.json([]);
@@ -700,21 +705,24 @@ router.get('/magic-cards', async (req, res) => {
         : doc.imageUrl || null; // admin-set fallback escape hatch
       if (!imageUrl) continue; // nothing resolvable -- not shown, same as "no active card" today
 
+      // Effective video/model -- this card's own upload wins when set,
+      // falling back to its plan variant's shared one otherwise (see
+      // CardPlan.js's own comment on these fields).
+      const videoUrl = doc.videoUrl || resolved.videoUrl || null;
+      if (!videoUrl) continue; // nothing to scan for -- same as the old query-level filter, just resolved instead of raw
+
       results.push({
         imageUrl,
         imageWidth: doc.imageWidth,
         imageHeight: doc.imageHeight,
-        videoUrl: doc.videoUrl,
-        modelUrl: doc.modelUrl,
-        modelType: doc.modelType,
+        videoUrl,
+        modelUrl: doc.modelUrl || resolved.modelUrl || null,
+        modelType: doc.modelUrl ? doc.modelType : resolved.modelType || null,
         isSpecialEdition,
         audioUrl: isSpecialEdition ? doc.audioUrl : null,
-        videoCrop: {
-          x: doc.videoCropX ?? 0,
-          y: doc.videoCropY ?? 0,
-          width: doc.videoCropWidth ?? 1,
-          height: doc.videoCropHeight ?? 1,
-        },
+        videoCrop: doc.videoUrl
+          ? { x: doc.videoCropX ?? 0, y: doc.videoCropY ?? 0, width: doc.videoCropWidth ?? 1, height: doc.videoCropHeight ?? 1 }
+          : resolved.videoCrop || { x: 0, y: 0, width: 1, height: 1 },
       });
     }
 
@@ -784,11 +792,13 @@ router.get('/street-art', async (req, res) => {
 router.get('/magic-card/:clientId', async (req, res) => {
   try {
     const cardNumber = Number(req.query.card) || 1;
+    // No videoUrl filter here anymore -- see the matching comment on
+    // GET /magic-cards above; a plan variant's shared video can satisfy
+    // this card even when doc.videoUrl is null, resolved further below.
     const doc = await MagicBusinessCard.findOne({
       clientId: req.params.clientId,
       cardNumber,
       active: true,
-      videoUrl: { $ne: null },
     });
     if (!doc) return res.status(404).json({ error: 'No active Magic Business Card for this card' });
 
@@ -796,6 +806,9 @@ router.get('/magic-card/:clientId', async (req, res) => {
     const resolved = card ? await resolveCardVariant(card) : null;
     const plan = card ? await CardPlan.findOne({ key: card.cardType }) : null;
     const isSpecialEdition = Boolean(plan?.isSpecialEdition);
+
+    const videoUrl = doc.videoUrl || resolved?.videoUrl || null;
+    if (!videoUrl) return res.status(404).json({ error: 'No active Magic Business Card for this card' });
 
     let imageUrl = null;
     if (resolved?.requiresDesignUpload) {
@@ -826,17 +839,14 @@ router.get('/magic-card/:clientId', async (req, res) => {
       imageUrl,
       imageWidth: doc.imageWidth,
       imageHeight: doc.imageHeight,
-      videoUrl: doc.videoUrl,
-      modelUrl: doc.modelUrl,
-      modelType: doc.modelType,
+      videoUrl,
+      modelUrl: doc.modelUrl || resolved?.modelUrl || null,
+      modelType: doc.modelUrl ? doc.modelType : resolved?.modelType || null,
       isSpecialEdition,
       audioUrl: isSpecialEdition ? doc.audioUrl : null,
-      videoCrop: {
-        x: doc.videoCropX ?? 0,
-        y: doc.videoCropY ?? 0,
-        width: doc.videoCropWidth ?? 1,
-        height: doc.videoCropHeight ?? 1,
-      },
+      videoCrop: doc.videoUrl
+        ? { x: doc.videoCropX ?? 0, y: doc.videoCropY ?? 0, width: doc.videoCropWidth ?? 1, height: doc.videoCropHeight ?? 1 }
+        : resolved?.videoCrop || { x: 0, y: 0, width: 1, height: 1 },
       // Only meaningful (and only sent) for this single-client route --
       // the gallery-wide /magic-cards above deliberately omits these,
       // see MagicCamera.jsx's own scoped-mode-only AR component bar.
