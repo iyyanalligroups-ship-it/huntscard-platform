@@ -512,7 +512,7 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
 
       {!visible && !cameraError && !loadError && (
         <div style={{ position: 'fixed', bottom: 40, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '10px 18px', borderRadius: 999, fontSize: 13, fontWeight: 600, textAlign: 'center', zIndex: 10 }}>
-          Point your camera at the huntsTAG QR code
+          Point your camera at the HuntsTAG QR code
         </div>
       )}
 

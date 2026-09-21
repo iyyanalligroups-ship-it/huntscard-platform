@@ -6,13 +6,13 @@ export default function Footer({ homeTheme }) {
   return (
     <footer className={`site-footer${homeTheme === 'orange' ? ' theme-orange' : homeTheme === 'cyber' ? ' theme-cyber' : ''}`}>
       <div className="site-footer-watermark-wrap" aria-hidden="true">
-        <span className="site-footer-watermark">huntsTAG</span>
+        <span className="site-footer-watermark">HuntsTAG</span>
       </div>
       <div className="site-footer-grid">
         <div className="site-footer-brand">
           <div className="brand" style={{ marginBottom: 10 }}>
             <div className="brand-mark" />
-            <span className="brand-name">huntsTAG</span>
+            <span className="brand-name">HuntsTAG</span>
           </div>
           <p className="site-footer-tagline">A smart card for a smarter first impression.</p>
         </div>
@@ -35,7 +35,7 @@ export default function Footer({ homeTheme }) {
       </div>
 
       <div className="site-footer-bottom">
-        <span>© {new Date().getFullYear()} huntsTAG. All rights reserved.</span>
+        <span>© {new Date().getFullYear()} HuntsTAG. All rights reserved.</span>
       </div>
     </footer>
   );

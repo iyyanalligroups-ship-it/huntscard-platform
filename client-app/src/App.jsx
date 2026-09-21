@@ -27,6 +27,7 @@ import Faq from './pages/Faq.jsx';
 import AboutUs from './pages/AboutUs.jsx';
 import WhatIsHuntsworld from './pages/WhatIsHuntsworld.jsx';
 import ChatSupport from './pages/ChatSupport.jsx';
+import Impersonate from './pages/Impersonate.jsx';
 
 // Lazy-loaded ("Mark 1" experiment) -- pulls in mind-ar/@tensorflow/tfjs,
 // a heavy and still-unproven dependency. Loading it eagerly like every
@@ -153,6 +154,7 @@ export default function App() {
       />
 
       <Route path="/login" element={<Login />} />
+      <Route path="/impersonate" element={<Impersonate />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />

@@ -75,7 +75,7 @@ export default function Dashboard() {
   }, [profile?.bannerUrl]);
 
   const shareUrl = profile?.clientId ? `${window.location.origin}/c/${profile.clientId}` : '';
-  const shareText = profile?.fullName ? `${profile.fullName} — huntsTAG\n${shareUrl}` : shareUrl;
+  const shareText = profile?.fullName ? `${profile.fullName} — HuntsTAG\n${shareUrl}` : shareUrl;
 
   function closeShareMenu() {
     setShareMenuOpen(false);
@@ -338,7 +338,7 @@ export default function Dashboard() {
                 </svg>
               </button>
               <a
-                href={`mailto:?subject=${encodeURIComponent(`${profile?.fullName || ''} — huntsTAG`)}&body=${encodeURIComponent(shareText)}`}
+                href={`mailto:?subject=${encodeURIComponent(`${profile?.fullName || ''} — HuntsTAG`)}&body=${encodeURIComponent(shareText)}`}
                 onClick={closeShareMenu}
                 className="share-dial-item"
                 title="Share via Email"
@@ -351,7 +351,7 @@ export default function Dashboard() {
                 </svg>
               </a>
               <a
-                href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(`${profile?.fullName || ''} — huntsTAG`)}`}
+                href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(`${profile?.fullName || ''} — HuntsTAG`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={closeShareMenu}

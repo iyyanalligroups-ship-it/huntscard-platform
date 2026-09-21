@@ -687,7 +687,7 @@ export default function Appointments() {
                   <div className="contact-row-meta">
                     {tab === 'sent' && r.toPhone}
                     {tab === 'sent' && r.invitedViaSms && !r.toClientId && (
-                      <span style={{ marginLeft: 8, color: 'var(--text-dim)' }}>· Invited via SMS, not on huntsTAG yet</span>
+                      <span style={{ marginLeft: 8, color: 'var(--text-dim)' }}>· Invited via SMS, not on HuntsTAG yet</span>
                     )}
                     {r.proposedAt && (
                       <span style={{ display: 'block', marginTop: 2, color: 'var(--holo-cyan)', fontWeight: 600 }}>

@@ -43,12 +43,25 @@ async function resolveCardVariant(card, mapsOrNull) {
   if (!variant && !card.cardVariantId && plan?.variants?.length === 1) {
     variant = plan.variants[0];
   }
+  // Shape specifically (as opposed to the exact image/finish) is often
+  // still unambiguous even across MULTIPLE variants, when every one of
+  // them happens to share the same physical shape (e.g. a plan offering
+  // 5 different vertical finishes) -- there's genuinely only one possible
+  // answer for "is this card vertical or horizontal" even though which
+  // exact finish it is stays unknown without a real cardVariantId. Falls
+  // back to that shared shape instead of the hardcoded 'horizontal'
+  // default below, without ever guessing which specific variant.
+  let fallbackShape = 'horizontal';
+  if (!variant && plan?.variants?.length > 0) {
+    const shapes = new Set(plan.variants.map((v) => v.shape));
+    if (shapes.size === 1) fallbackShape = plan.variants[0].shape;
+  }
   return {
     hasVariant: Boolean(variant),
     // Same 'horizontal' fallback routes/public.js's GET /profile/:clientId
     // already uses for a client with no variant chosen (older accounts
     // from before variants existed, or a plan with none configured).
-    shape: variant?.shape || 'horizontal',
+    shape: variant?.shape || fallbackShape,
     variantName: variant?.name || null,
     frontImageUrl: variant?.frontImageUrl || null,
     backImageUrl: variant?.backImageUrl || null,

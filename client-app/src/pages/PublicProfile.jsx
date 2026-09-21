@@ -346,7 +346,7 @@ export default function PublicProfile() {
     const url = window.location.href;
     if (navigator.share) {
       try {
-        await navigator.share({ title: `${profile.fullName} — huntsTAG`, url });
+        await navigator.share({ title: `${profile.fullName} — HuntsTAG`, url });
       } catch {
         /* cancelled */
       }
@@ -606,7 +606,7 @@ export default function PublicProfile() {
 
         <div className="pv-footer-brand">
           <div className="pv-footer-mark" />
-          huntsTAG
+          HuntsTAG
         </div>
       </div>
 

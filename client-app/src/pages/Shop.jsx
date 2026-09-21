@@ -398,7 +398,7 @@ export default function Shop() {
         amount: order.amount,
         currency: order.currency,
         order_id: order.orderId,
-        name: 'huntsTAG',
+        name: 'HuntsTAG',
         description,
         prefill: { name: myProfile?.fullName, email: myProfile?.loginEmail },
         handler: async (response) => {
@@ -532,7 +532,7 @@ export default function Shop() {
                 </p>
               )}
               <p className="shop-plan-desc">
-                {selectedPlan.description || 'A huntsTAG smart card, tap-to-share ready.'}
+                {selectedPlan.description || 'A HuntsTAG smart card, tap-to-share ready.'}
               </p>
               <PlanFeatureBadges plan={selectedPlan} />
             </div>

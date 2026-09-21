@@ -317,7 +317,7 @@ export default function HomeD1() {
       </div>
 
       <div className="d1-features-panel">
-        <div className="d1-eyebrow-row">Why huntsTAG</div>
+        <div className="d1-eyebrow-row">Why HuntsTAG</div>
         <h2 className="d1-section-headline">
           BUILT FOR THE MOMENT
           <br />

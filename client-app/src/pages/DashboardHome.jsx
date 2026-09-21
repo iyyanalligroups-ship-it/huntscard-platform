@@ -183,7 +183,7 @@ export default function DashboardHome() {
     if (!profile?.clientId || zingState === 'busy') return;
     setZingState('busy');
     const shareUrl = `${window.location.origin}/c/${profile.clientId}`;
-    const shareTitle = `${profile.fullName} — huntsTAG`;
+    const shareTitle = `${profile.fullName} — HuntsTAG`;
     // Already fetched (see the useEffect above) -- nothing async runs
     // between the click and navigator.share() below.
     const file = zingFileRef.current;
@@ -229,12 +229,19 @@ export default function DashboardHome() {
   const statusLabel = stage === -1 ? 'No order yet' : ORDER_STAGES[stage];
 
   // Whichever card the hero picker (next to the bell) has selected --
-  // falls back to profile's own (primary-card) fields while `cards` is
-  // still loading, so the preview isn't blank for a moment on first paint.
+  // falls back to profile's own (primary-card) fields ONLY while `cards`
+  // is still loading (selectedCard itself is null then), so the preview
+  // isn't blank for a moment on first paint. Using `??` here instead of
+  // this ternary used to also kick in once `cards` HAD loaded but the
+  // selected card simply had no shape/design of its own (e.g. a second
+  // card added without a design ever uploaded to it) -- silently showing
+  // a DIFFERENT card's (profile.primaryCardNumber's) shape/image instead,
+  // which looked like "the wrong card's picture" when switching the
+  // picker to a card that's genuinely still blank.
   const selectedCard = cards.find((c) => c.cardNumber === selectedCardNumber) || null;
-  const heroCardShape = selectedCard?.shape ?? profile?.cardShape;
-  const heroCardDesignUrl = selectedCard?.cardDesignUrl ?? profile?.cardFrontImageUrl;
-  const heroCardType = selectedCard?.cardType ?? profile?.cardType;
+  const heroCardShape = selectedCard ? selectedCard.shape : profile?.cardShape;
+  const heroCardDesignUrl = selectedCard ? selectedCard.cardDesignUrl : profile?.cardFrontImageUrl;
+  const heroCardType = selectedCard ? selectedCard.cardType : profile?.cardType;
   const heroCardLabel = selectedCard?.label || selectedCard?.variantName || planLabel;
 
   // Hero mini card preview -- sized to the real card's own aspect ratio
@@ -319,7 +326,7 @@ export default function DashboardHome() {
             <h1 className="dash-hero-title">Welcome back, {firstName}</h1>
             <p className="dash-hero-sub">
               {stage >= 1
-                ? 'Your huntsTAG is live. Tap stats and order progress below.'
+                ? 'Your HuntsTAG is live. Tap stats and order progress below.'
                 : profile?.paid
                   ? 'Your card is being prepared. Follow its progress below.'
                   : 'Complete your profile, then grab a card from the Shop.'}

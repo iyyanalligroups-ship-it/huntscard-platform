@@ -1119,7 +1119,7 @@ export default function ArView({ clientId, cardNumber }) {
             zIndex: 10,
           }}
         >
-          Point your camera at the huntsTAG QR code
+          Point your camera at the HuntsTAG QR code
         </div>
       )}
 

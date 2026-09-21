@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const { nanoid } = require('nanoid');
 const { requireAdmin, requireSeniorAdmin, requireEncodeAccess, requireAdminPrime } = require('../middleware/auth');
@@ -1219,6 +1220,64 @@ router.patch('/clients/:clientId', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('[admin/clients PATCH]', err);
     res.status(500).json({ error: 'Failed to update client' });
+  }
+});
+
+// POST /api/admin/clients/:clientId/reset-password -- generates a new
+// temp password and sets mustChangePassword, same handoff pattern as
+// creating a new client (POST /clients) and Admin Prime's own team
+// reset-password route -- shown once in the response, never stored/
+// logged in plaintext. Unlike the team version this isn't Admin-Prime-
+// only: resetting a CLIENT's own login password (e.g. they're locked
+// out and can't use Forgot Password) is a routine support action any
+// admin should be able to do.
+router.post('/clients/:clientId/reset-password', requireAdmin, async (req, res) => {
+  try {
+    const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId loginEmail fullName');
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+
+    const tempPassword = generateTempPassword();
+    const passwordHash = await bcrypt.hash(tempPassword, 12);
+    await Client.updateOne({ clientId: req.params.clientId }, { $set: { passwordHash, mustChangePassword: true } });
+
+    res.json({ clientId: client.clientId, loginEmail: client.loginEmail, fullName: client.fullName, tempPassword });
+  } catch (err) {
+    console.error('[admin/clients reset-password POST]', err);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// POST /api/admin/clients/:clientId/impersonate -- the secure alternative
+// to "let admin view client passwords" (which we explicitly refused:
+// passwords are bcrypt-hashed, one-way, on purpose -- see Client.js).
+// Issues a real client-scoped JWT (same `type: 'client'` shape
+// routes/auth.js's own login/register issue, so it works with every
+// existing client-app route unchanged) WITHOUT ever touching the client's
+// password. Short-lived (20 minutes, well under the normal 1h session) and
+// carries `impersonatedBy` so it's traceable to which admin started it,
+// even though nothing here persists that beyond this log line -- adding a
+// real audit trail is a bigger, separate feature if ever needed.
+router.post('/clients/:clientId/impersonate', requireAdmin, async (req, res) => {
+  try {
+    const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId loginEmail fullName blocked');
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    if (client.blocked) return res.status(403).json({ error: 'This account is blocked -- unblock it first.' });
+
+    const token = jwt.sign(
+      { type: 'client', clientId: client.clientId, loginEmail: client.loginEmail, impersonatedBy: req.admin?.email || 'unknown' },
+      process.env.JWT_SECRET,
+      { expiresIn: '20m' }
+    );
+    console.log(`[admin] ${req.admin?.email || 'unknown'} started impersonating client ${client.clientId} (${client.loginEmail})`);
+    // Built here (not in admin-huntscard) so that app never has to know
+    // client-app's own origin -- PUBLIC_BASE_URL is already the single
+    // source of truth for it (see every other `${PUBLIC_BASE_URL}/c/...`
+    // link this backend hands out).
+    const impersonateUrl = `${process.env.PUBLIC_BASE_URL}/impersonate?token=${encodeURIComponent(token)}&clientId=${encodeURIComponent(client.clientId)}`;
+    res.json({ token, clientId: client.clientId, fullName: client.fullName, impersonateUrl });
+  } catch (err) {
+    console.error('[admin/clients impersonate POST]', err);
+    res.status(500).json({ error: 'Failed to start impersonation session' });
   }
 });
 
@@ -2662,6 +2721,18 @@ async function serializeMagicCard(doc, card) {
     ? { x: doc.videoCropX ?? 0, y: doc.videoCropY ?? 0, width: doc.videoCropWidth ?? 1, height: doc.videoCropHeight ?? 1 }
     : resolved?.videoCrop || { x: 0, y: 0, width: 1, height: 1 };
 
+  // Visual-only fallback for the admin preview box -- NOT the same as
+  // `imageUrl` above, and deliberately kept separate. `imageUrl` still
+  // gates Upload/Download/"Set as active": a Custom Card client's plan
+  // catalog example is generic marketing art, not their real purchased
+  // design, so it must never silently become the file "Download card
+  // (with QR)" produces. `displayImageUrl` exists purely so the preview
+  // box shown here isn't a confusing blank/black square before any real
+  // upload exists -- same fallback client-app's own dashboard hero
+  // already shows (see profile.js's withPlanFlags).
+  const imageInherited = !imageUrl && Boolean(resolved?.frontImageUrl);
+  const displayImageUrl = imageUrl || resolved?.frontImageUrl || null;
+
   return {
     _id: doc._id,
     clientId: doc.clientId,
@@ -2671,6 +2742,8 @@ async function serializeMagicCard(doc, card) {
     requiresDesignUpload: Boolean(resolved?.requiresDesignUpload),
     isSpecialEdition: Boolean(plan?.isSpecialEdition),
     imageUrl,
+    displayImageUrl,
+    imageInherited,
     imageWidth: doc.imageWidth,
     imageHeight: doc.imageHeight,
     videoUrl: effectiveVideoUrl,

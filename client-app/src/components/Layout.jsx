@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { api, clearSession } from '../api.js';
+import { api, clearSession, getImpersonatedBy } from '../api.js';
 
 /* Inline SVG icons -- no icon library dependency, keeps the bundle lean. */
 const ICONS = {
@@ -117,6 +117,13 @@ export default function Layout() {
     navigate('/');
   }
 
+  // Never impersonate silently -- see api.js's getImpersonatedBy and the
+  // backend's POST /admin/clients/:clientId/impersonate. Purely cosmetic
+  // (nothing here gates access), but the admin viewing this dashboard
+  // should always be able to tell they're in someone else's account, not
+  // their own.
+  const impersonatedBy = getImpersonatedBy();
+
   // The overview page uses a wide (1100px, centered) grid; every other
   // page keeps the original narrow 640px centered column so existing
   // forms don't stretch. Two exceptions need more room than that:
@@ -151,7 +158,7 @@ export default function Layout() {
       <aside className={`side-nav${menuOpen ? ' open' : ''}`}>
         <Link to="/" className="side-brand" onClick={() => setMenuOpen(false)}>
           <div className="brand-mark" />
-          <span className="brand-name">huntsTAG</span>
+          <span className="brand-name">HuntsTAG</span>
         </Link>
 
         <nav className="side-links">
@@ -182,6 +189,31 @@ export default function Layout() {
       </aside>
 
       <main className={isWideColumn || isEdgeToEdge ? 'dash-main' : 'dash-main page-shell-wrap'}>
+        {impersonatedBy && (
+          <div
+            style={{
+              background: '#7c2d12',
+              color: '#fff',
+              fontSize: 13,
+              fontWeight: 600,
+              padding: '10px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <span>Viewing as this client — signed in by admin ({impersonatedBy})</span>
+            <button
+              type="button"
+              onClick={handleLogout}
+              style={{ width: 'auto', padding: '4px 12px', background: '#fff', color: '#7c2d12', fontSize: 12 }}
+            >
+              End session
+            </button>
+          </div>
+        )}
         <div className={isWideColumn ? 'dash-content' : isEdgeToEdge ? 'dash-content-full' : 'page-shell'}>
           <Outlet />
         </div>

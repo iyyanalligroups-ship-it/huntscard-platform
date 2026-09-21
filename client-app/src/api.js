@@ -18,6 +18,23 @@ export function isLoggedIn() {
   return Boolean(getToken());
 }
 
+// Reads the `impersonatedBy` claim (see backend's POST
+// /api/admin/clients/:clientId/impersonate) straight out of the current
+// JWT, client-side, purely to show the "an admin is viewing this as you"
+// banner (Layout.jsx) -- NOT a security check, the token's signature is
+// never verified here, only decoded. Every real authorization decision
+// still happens server-side, same as any other request using this token.
+export function getImpersonatedBy() {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.impersonatedBy || null;
+  } catch {
+    return null;
+  }
+}
+
 async function request(path, { method = 'GET', body, auth = true } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (auth) {

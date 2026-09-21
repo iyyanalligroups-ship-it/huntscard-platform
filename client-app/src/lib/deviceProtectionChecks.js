@@ -18,7 +18,7 @@ export async function evaluateChecks() {
       ? 'This page is loaded over a secure, encrypted (HTTPS) connection.'
       : 'This page is not loaded over a secure connection.',
     explain:
-      'HTTPS encrypts everything sent between your browser and huntsTAG so it can’t be read or altered in transit.',
+      'HTTPS encrypts everything sent between your browser and HuntsTAG so it can’t be read or altered in transit.',
   });
 
   const passCount = items.filter((item) => item.state === 'pass').length;

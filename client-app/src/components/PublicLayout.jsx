@@ -152,7 +152,7 @@ export default function PublicLayout() {
         <div className="top-nav-row">
           <div className="brand">
             <div className="brand-mark" />
-            <span className="brand-name">huntsTAG</span>
+            <span className="brand-name">HuntsTAG</span>
           </div>
 
           <div className={`nav-menu${menuOpen ? ' open' : ''}`}>

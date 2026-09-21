@@ -41,7 +41,7 @@ export default function ResetPassword() {
       <div className="shell" style={{ position: 'relative' }}>
         <div className="brand">
           <div className="brand-mark" />
-          <span className="brand-name">huntsTAG</span>
+          <span className="brand-name">HuntsTAG</span>
         </div>
 
         {!token ? (

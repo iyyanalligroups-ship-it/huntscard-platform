@@ -253,7 +253,12 @@ async function withPlanFlags(client) {
   // variant's own print image.
   if (resolved?.requiresDesignUpload) {
     const mbc = await MagicBusinessCard.findOne({ clientId: client.clientId, cardNumber: primaryCard.cardNumber }).select('imageUrl');
-    clientObj.cardFrontImageUrl = mbc?.imageUrl || client.customDesignFrontUrl || null;
+    // Falls all the way back to the purchased variant's own catalog
+    // image (resolved.frontImageUrl) when NEITHER a per-card override nor
+    // a checkout upload exists yet -- e.g. a Custom Card client onboarded
+    // without going through real checkout. Better than a blank/placeholder
+    // card; still overridden the moment they actually upload their own art.
+    clientObj.cardFrontImageUrl = mbc?.imageUrl || client.customDesignFrontUrl || resolved.frontImageUrl || null;
   } else if (resolved?.hasVariant) {
     clientObj.cardFrontImageUrl = resolved.frontImageUrl || null;
   } else {
@@ -583,6 +588,16 @@ async function serializeMyMagicCard(doc, card) {
       const client = await Client.findOne({ clientId: doc.clientId }).select('customDesignFrontUrl');
       imageUrl = client?.customDesignFrontUrl || null;
     }
+    // Deliberately NOT falling back further to the variant's own catalog
+    // image here, unlike withPlanFlags/GET '/cards' -- this `imageUrl`
+    // directly gates the "Download card (with QR)" button below (and the
+    // same field the admin panel offers for print testing). Showing the
+    // generic stock example there would make it just as downloadable/
+    // printable as a real design, silently -- a client could end up
+    // printing a photo that isn't even the one on their physical card.
+    // Purely-visual surfaces (the dashboard hero, the card picker) are
+    // the right place for that fallback; an actionable "print this" file
+    // is not.
   } else if (resolved?.hasVariant) {
     imageUrl = resolved.frontImageUrl || doc.imageUrl || null; // doc.imageUrl here is an admin-only escape hatch -- clients on this plan can't upload their own
   } else {
@@ -1011,10 +1026,12 @@ router.get('/cards', requireAuth, async (req, res) => {
       cards.map(async (c) => {
         const resolved = await resolveCardVariant(c, maps);
         // Same priority order serializeMyMagicCard uses: this card's own
-        // override, then the checkout design, then (for every other
-        // plan) the purchased variant's own image.
+        // override, then the checkout design, then the purchased
+        // variant's own catalog image as a last resort (e.g. no checkout
+        // upload exists yet), then (for every other plan) that variant
+        // image directly.
         const cardDesignUrl = resolved.requiresDesignUpload
-          ? magicImageByCardNumber[c.cardNumber] || client?.customDesignFrontUrl || null
+          ? magicImageByCardNumber[c.cardNumber] || client?.customDesignFrontUrl || resolved.frontImageUrl || null
           : resolved.frontImageUrl;
         return {
           cardNumber: c.cardNumber,
