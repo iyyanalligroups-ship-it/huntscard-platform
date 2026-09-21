@@ -517,10 +517,19 @@ router.delete('/plans/:id', requireAdmin, async (req, res) => {
     const plan = await CardPlan.findById(req.params.id);
     if (!plan) return res.status(404).json({ error: 'Plan not found' });
 
-    const clientsOnPlan = await Client.countDocuments({ cardType: plan.key });
-    if (clientsOnPlan > 0) {
+    // Named list, not just a count -- so the admin UI can show exactly
+    // who's on this plan (and link straight to them) instead of a bare
+    // "N client(s)" that leaves reassigning them a separate lookup.
+    // Capped at 20: plenty to act on individually; a plan with more than
+    // that blocked from deletion is a bulk-reassignment job anyway, not
+    // something this list is meant to drive one by one.
+    const clientsOnPlan = await Client.find({ cardType: plan.key }).select('clientId fullName loginEmail').limit(20);
+    if (clientsOnPlan.length > 0) {
+      const totalCount = await Client.countDocuments({ cardType: plan.key });
       return res.status(409).json({
-        error: `${clientsOnPlan} client(s) are currently on this plan. Reassign them first, or use Retire instead of Delete.`,
+        error: `${totalCount} client(s) are currently on this plan. Reassign them first, or use Retire instead of Delete.`,
+        clients: clientsOnPlan.map((c) => ({ clientId: c.clientId, fullName: c.fullName, loginEmail: c.loginEmail })),
+        totalCount,
       });
     }
 
