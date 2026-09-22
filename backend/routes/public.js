@@ -660,6 +660,11 @@ router.get('/magic-art', async (req, res) => {
           priceAmount: doc.priceAmount,
           discountPriceAmount: doc.discountPriceAmount,
           chargeAmount: getMagicArtChargeAmount(doc),
+          // Optional 3D model shown anchored above the tracked image --
+          // client-app's MagicCamera.jsx already renders any target's
+          // modelUrl generically (see its own targets.forEach loop).
+          modelUrl: doc.modelUrl,
+          modelType: doc.modelType,
           // One positioned box per clip (see StreetArt.js's identical
           // shape) -- consumed by client-app's MagicCamera.jsx
           // (getTargetOverlays), which renders each as its own video

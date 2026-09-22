@@ -251,16 +251,25 @@ export default function MagicCamera() {
   // -- real velocity now raises the cutoff so genuine motion is tracked
   // closely, while a still card still gets the low-cutoff smoothing.
   //
-  // missTolerance: 15 -- tracker needs 15 consecutive missed frames
-  // before declaring the target lost, eliminating single-frame drop-outs
-  // at 30fps without noticeably delaying real loss detection.
+  // missTolerance: 24 (~0.8s at 30fps) -- tracker needs 24 consecutive
+  // missed frames before declaring the target lost. Raised from the
+  // library's own lower default specifically for low-texture target
+  // images (see this file's own OVERSCAN comment further down): a
+  // target with a large flat/gradient region (little for mind-ar's
+  // feature detector to lock onto outside the face/QR area) genuinely
+  // drops below detection confidence for longer, multi-frame stretches
+  // sometimes, not just isolated single-frame blips -- this bridges
+  // those instead of it showing as a visible found/lost/found loop. This
+  // is a real mitigation, not a full fix -- the actual fix for a
+  // specific marginal target is more visual texture/contrast spread
+  // across the image, not a tracker-tolerance number.
   //
   // The remaining jitter after this filter is handled by an ADAPTIVE
   // slerp/lerp layer in renderLoop below (see POSE_SMOOTHING_MIN/MAX)
   // rather than a fixed-rate one -- same reasoning, ported from
   // ArViewMindAR.jsx's own fix for this exact "lags behind real motion"
   // problem.
-  const tuning = { filterMinCF: 0.0005, filterBeta: 300, warmupTolerance: 3, missTolerance: 15 };
+  const tuning = { filterMinCF: 0.0005, filterBeta: 300, warmupTolerance: 3, missTolerance: 24 };
 
   const containerRef = useRef(null);
   const cameraVideoRef = useRef(null);
@@ -612,9 +621,22 @@ export default function MagicCamera() {
       // tracked target's own width (see buildPostMatrix above) -- same
       // convention ArViewMindAR.jsx uses for its own version of this.
       const POSE_SMOOTHING_MIN = 0.05;
-      const POSE_SMOOTHING_MAX = 0.5;
-      const JITTER_TRANSLATION_THRESHOLD = 0.01;
-      const MAX_PLAUSIBLE_JUMP = 0.2;
+      // 0.25, not a more aggressive 0.5 first tried here -- real-device
+      // testing showed 0.5 let enough of the raw tracker's own per-frame
+      // noise through on genuine movement that the overlay visibly
+      // "ghosted"/double-imaged against the real card instead of just
+      // tracking it. 0.25 is still 5x more responsive than the original
+      // fixed 0.05 that caused the opposite (laggy) complaint, while
+      // damping more of that raw noise back out.
+      const POSE_SMOOTHING_MAX = 0.25;
+      // 0.015, not 0.01 -- real handheld tremor was consistently landing
+      // just above the tighter threshold, pushing ordinary hand-shake
+      // into the "real motion" branch instead of the noise-damping one.
+      const JITTER_TRANSLATION_THRESHOLD = 0.015;
+      // 0.15, not 0.2 -- tightened alongside POSE_SMOOTHING_MAX so more
+      // of a genuinely bad single-frame read (not real card movement)
+      // gets caught by the bad-read hold below instead of blended in.
+      const MAX_PLAUSIBLE_JUMP = 0.15;
       const foundFlags = targets.map(() => false);
 
       const controller = new Controller({

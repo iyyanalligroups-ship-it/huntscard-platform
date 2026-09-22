@@ -2155,6 +2155,20 @@ const magicArtVideoUpload = multer({
     cb(null, true);
   },
 });
+// .glb/.fbx gated on file EXTENSION, not mimetype -- browsers/OSes don't
+// report a consistent mimetype for 3D model files, same reasoning as
+// the per-client magicCardModelUpload this mirrors.
+const MAGIC_ART_MODEL_EXTENSIONS = ['.glb', '.fbx'];
+const magicArtModelUpload = multer({
+  storage: magicArtStorage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  fileFilter: (req, file, cb) => {
+    if (!MAGIC_ART_MODEL_EXTENSIONS.includes(path.extname(file.originalname).toLowerCase())) {
+      return cb(new Error('Only .glb or .fbx 3D model files are allowed'));
+    }
+    cb(null, true);
+  },
+});
 
 function serializeMagicArt(doc) {
   return {
@@ -2166,6 +2180,8 @@ function serializeMagicArt(doc) {
     imageHeight: doc.imageHeight,
     priceAmount: doc.priceAmount,
     discountPriceAmount: doc.discountPriceAmount,
+    modelUrl: doc.modelUrl,
+    modelType: doc.modelType,
     overlays: (doc.overlays || []).map((o) => ({
       _id: o._id,
       label: o.label,
@@ -2270,12 +2286,13 @@ router.post('/magic-art/:id/deactivate', requireAdmin, async (req, res) => {
 });
 
 // DELETE /api/admin/magic-art/:id -- remove a whole pack (image + every
-// overlay's video file + the doc).
+// overlay's video file + the 3D model file, if any + the doc).
 router.delete('/magic-art/:id', requireAdmin, async (req, res) => {
   try {
     const doc = await MagicArt.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'Not found' });
     if (doc.imageUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(doc.imageUrl)), () => {});
+    if (doc.modelUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(doc.modelUrl)), () => {});
     for (const o of doc.overlays || []) {
       if (o.videoUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(o.videoUrl)), () => {});
     }
@@ -2321,6 +2338,46 @@ router.delete('/magic-art/:id/image', requireAdmin, async (req, res) => {
     doc.imageUrl = undefined;
     doc.imageWidth = undefined;
     doc.imageHeight = undefined;
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    res.json(serializeMagicArt(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/magic-art/:id/model -- optional 3D model shown
+// ANCHORED above the tracked image in Magic Camera, additive to (not a
+// replacement for) the overlay video(s) -- see the field's own comment
+// in models/MagicArt.js.
+router.post('/magic-art/:id/model', requireAdmin, magicArtModelUpload.single('model'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const doc = await MagicArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    const previousUrl = doc.modelUrl;
+    doc.modelUrl = `${process.env.BACKEND_URL}/uploads/magic-art/${req.file.filename}`;
+    doc.modelType = path.extname(req.file.originalname).toLowerCase() === '.fbx' ? 'fbx' : 'glb';
+    doc.updatedBy = req.admin?.email || 'unknown';
+    await doc.save();
+    if (previousUrl) {
+      fs.unlink(path.join(MAGIC_ART_DIR, path.basename(previousUrl)), () => {});
+    }
+    res.json(serializeMagicArt(doc));
+  } catch (err) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 50MB.' : err.message;
+    res.status(400).json({ error: message });
+  }
+});
+
+// DELETE /api/admin/magic-art/:id/model
+router.delete('/magic-art/:id/model', requireAdmin, async (req, res) => {
+  try {
+    const doc = await MagicArt.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    if (doc.modelUrl) fs.unlink(path.join(MAGIC_ART_DIR, path.basename(doc.modelUrl)), () => {});
+    doc.modelUrl = undefined;
+    doc.modelType = undefined;
     doc.updatedBy = req.admin?.email || 'unknown';
     await doc.save();
     res.json(serializeMagicArt(doc));

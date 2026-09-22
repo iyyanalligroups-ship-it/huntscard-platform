@@ -54,6 +54,17 @@ const magicArtSchema = new mongoose.Schema(
     // shows no buy button on the public page.
     priceAmount: { type: Number, default: null },
     discountPriceAmount: { type: Number, default: null },
+    // Optional 3D model shown ANCHORED above the tracked image in Magic
+    // Camera (floats in front of it, like the video overlay's own plane
+    // but a real 3D object) -- additive to the overlay video(s) above,
+    // not a replacement. Same shape/convention as MagicBusinessCard.js's
+    // own modelUrl/modelType field, reused here since client-app's
+    // MagicCamera.jsx already renders any target's modelUrl generically
+    // (Magic Art and Magic Business Card are both just entries in its
+    // own `targets` array) -- this was the one piece missing to let a
+    // Magic Art pack use it too.
+    modelUrl: { type: String, trim: true, default: null },
+    modelType: { type: String, enum: ['glb', 'fbx', null], default: null },
     updatedBy: { type: String, trim: true },
   },
   { timestamps: true }
