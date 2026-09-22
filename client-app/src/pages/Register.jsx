@@ -55,8 +55,10 @@ export default function Register() {
             <input
               id="phone"
               type="tel"
+              inputMode="numeric"
+              maxLength={10}
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
               required
             />
           </div>
@@ -85,7 +87,7 @@ export default function Register() {
               type="email"
               autoComplete="username"
               value={loginEmail}
-              onChange={(e) => setLoginEmail(e.target.value)}
+              onChange={(e) => setLoginEmail(e.target.value.toLowerCase())}
               required
             />
           </div>

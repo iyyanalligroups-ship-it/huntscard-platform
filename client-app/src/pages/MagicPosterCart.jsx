@@ -5,14 +5,22 @@ import { loadRazorpayScript } from '../razorpay.js';
 import { useCart } from '../cart.jsx';
 import GeoSelect from '../components/GeoSelect.jsx';
 
+// India only, on purpose -- deliveries only ever ship within India, so
+// there's no real Country field for the person to fill in, just State ->
+// City. Kept as ISO code + display name (like the state/city values
+// below) so handleStateChange's api.getStates/getCities calls don't need
+// their own special case for it.
+const COUNTRY_ISO = 'IN';
+const COUNTRY_NAME = 'India';
+
 const EMPTY_FORM = {
   label: '',
   name: '',
   phone: '',
   line1: '',
   line2: '',
-  countryIso: '',
-  countryName: '',
+  countryIso: COUNTRY_ISO,
+  countryName: COUNTRY_NAME,
   stateIso: '',
   stateName: '',
   cityName: '',
@@ -22,10 +30,10 @@ const EMPTY_FORM = {
 // Checkout for the Magic Poster cart (see cart.jsx) -- gated entirely
 // behind login (PublicLayout's openLogin, via Outlet context, pops the
 // real login modal and sends the visitor straight back here on success),
-// then a saved-address book (pick one, or add a new one via cascading
-// Country -> State -> City dropdowns, pincode typed manually -- see
-// routes/public.js's geo endpoints for why pincode isn't auto-loaded),
-// then Razorpay payment. Same runCheckout wrapper pattern Shop.jsx uses.
+// then a saved-address book (pick one, or add a new one via a cascading
+// State -> City dropdown, pincode typed manually -- see routes/public.js's
+// geo endpoints for why pincode isn't auto-loaded), then Razorpay
+// payment. Same runCheckout wrapper pattern Shop.jsx uses.
 export default function MagicPosterCart() {
   const cart = useCart();
   const { openLogin } = useOutletContext();
@@ -35,7 +43,6 @@ export default function MagicPosterCart() {
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [countries, setCountries] = useState([]);
   const [states, setStates] = useState([]);
   const [cities, setCities] = useState([]);
   const [savingAddress, setSavingAddress] = useState(false);
@@ -62,20 +69,13 @@ export default function MagicPosterCart() {
       .getProfile()
       .then((profile) => setForm((f) => ({ ...f, name: f.name || profile.fullName || '', phone: f.phone || profile.phone || '' })))
       .catch(() => {});
-    api.getCountries().then(setCountries).catch(() => {});
+    api.getStates(COUNTRY_ISO).then(setStates).catch(() => {});
   }, [loggedIn]);
-
-  function handleCountryChange(option) {
-    setForm((f) => ({ ...f, countryIso: option.value, countryName: option.label, stateIso: '', stateName: '', cityName: '' }));
-    setStates([]);
-    setCities([]);
-    api.getStates(option.value).then(setStates).catch(() => {});
-  }
 
   function handleStateChange(option) {
     setForm((f) => ({ ...f, stateIso: option.value, stateName: option.label, cityName: '' }));
     setCities([]);
-    if (form.countryIso) api.getCities(form.countryIso, option.value).then(setCities).catch(() => {});
+    api.getCities(COUNTRY_ISO, option.value).then(setCities).catch(() => {});
   }
 
   function handleCityChange(option) {
@@ -377,11 +377,10 @@ export default function MagicPosterCart() {
                   <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, flex: 1, minWidth: 140 }}>
                     Country
                     <GeoSelect
-                      value={form.countryIso}
-                      options={countries.map((c) => ({ value: c.isoCode, label: c.name }))}
-                      onChange={handleCountryChange}
-                      placeholder="Select country"
-                      searchPlaceholder="Search countries…"
+                      value={COUNTRY_ISO}
+                      options={[{ value: COUNTRY_ISO, label: COUNTRY_NAME }]}
+                      onChange={() => {}}
+                      disabled
                     />
                   </label>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, flex: 1, minWidth: 140 }}>
@@ -392,7 +391,6 @@ export default function MagicPosterCart() {
                       onChange={handleStateChange}
                       placeholder="Select state"
                       searchPlaceholder="Search states…"
-                      disabled={!form.countryIso}
                     />
                   </label>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, flex: 1, minWidth: 140 }}>

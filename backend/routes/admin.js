@@ -40,6 +40,18 @@ const SiteSetting = require('../models/SiteSetting');
 // (see ClientDetail.jsx's QR position control) if a plan ever needs it.
 const PLAN_DEFAULT_QR_POSITION = {
   'joseph-vijay': { x: 71, y: 80 }, // Limited Edition -- verified against charles.bmtechx@gmail.com's real working card
+  // Custom Card -- every buyer's own uploaded photo/design, not one
+  // fixed artwork like joseph-vijay above, but the same bottom-right
+  // spot reads as a safe zone across those uploads too (admin-verified)
+  // -- applied below on every image (re-)upload, not just once at
+  // account creation, since a Custom client's actual Magic Business Card
+  // image is only ever set later via the admin's manual upload (see POST
+  // /clients/:clientId/magic-card/image), not at checkout. Key MUST
+  // match CardPlan.key exactly (the "Custom Card" plan's real key in the
+  // DB is 'custom-card', not the more obvious-looking 'custom') -- a
+  // wrong key here fails silently (planDefaultQrPosition is just
+  // undefined, no error), which is exactly what happened the first time.
+  'custom-card': { x: 71, y: 80 },
 };
 const FaqEntry = require('../models/FaqEntry');
 const cardCrypto = require('../utils/crypto'); // named apart from the built-in `crypto` above (line 4)
@@ -2947,6 +2959,17 @@ router.post(
       doc.imageUrl = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
       doc.imageWidth = Number(req.body.width) || undefined;
       doc.imageHeight = Number(req.body.height) || undefined;
+      // Reset the QR back to this plan's known-good default on every
+      // (re-)upload -- a position dragged/saved for the PREVIOUS image
+      // isn't guaranteed to still sit somewhere sensible on a brand new
+      // photo/design, so start from the verified default again rather
+      // than silently carrying over a spot that may no longer make sense.
+      // Admin can still drag/Save a different spot afterward as usual.
+      const planDefaultQrPosition = PLAN_DEFAULT_QR_POSITION[loaded.card.cardType];
+      if (planDefaultQrPosition) {
+        doc.qrX = planDefaultQrPosition.x;
+        doc.qrY = planDefaultQrPosition.y;
+      }
       doc.updatedBy = req.admin?.email || 'unknown';
       await doc.save();
       if (previousUrl) {

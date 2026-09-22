@@ -735,8 +735,18 @@ export default function MagicBusinessCard() {
               <div ref={previewBoxRef} style={{ position: 'relative', width: box.width, height: box.height, overflow: 'hidden', borderRadius: box.borderRadius }}>
                 <MagicHoverPreview
                   imageUrl={card.imageUrl}
-                  videoUrl={card.videoUrl}
-                  videoCrop={card.videoCrop}
+                  // One full-bleed clip, same shape MagicArt.jsx's gallery
+                  // passes for a piece with a single overlay covering the
+                  // whole image -- this card has no positioning concept of
+                  // its own, the video always covers it edge-to-edge.
+                  overlays={card.videoUrl ? [{ videoUrl: card.videoUrl, videoCrop: card.videoCrop, x: 0, y: 0, width: 100, height: 100 }] : []}
+                  // Same real dims already driving `box` above (see
+                  // cardBoxSize) -- passing them here too means this
+                  // component's own self-computed aspect-ratio box lands on
+                  // EXACTLY box.width x box.height, no fighting the outer
+                  // wrapper div's explicit size.
+                  imageWidth={imageDims?.width}
+                  imageHeight={imageDims?.height}
                   alt="Your Magic Business Card"
                   style={{ borderRadius: box.borderRadius, boxShadow: '0 10px 24px rgba(0,0,0,0.35)' }}
                 />

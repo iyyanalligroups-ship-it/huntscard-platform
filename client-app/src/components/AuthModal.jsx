@@ -324,7 +324,15 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
               </div>
               <div className="field">
                 <label htmlFor="modalPhone">Contact number</label>
-                <input id="modalPhone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+                <input
+                  id="modalPhone"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  required
+                />
               </div>
               <div className="field">
                 <label htmlFor="modalGender">Gender (optional)</label>
@@ -351,7 +359,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                   type="email"
                   autoComplete="username"
                   value={regEmail}
-                  onChange={(e) => setRegEmail(e.target.value)}
+                  onChange={(e) => setRegEmail(e.target.value.toLowerCase())}
                   required
                 />
               </div>

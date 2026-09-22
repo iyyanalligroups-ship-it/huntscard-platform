@@ -17,6 +17,21 @@ const FIELD_GROUPS = [
 
 const ORDER_STAGES = ['Order placed', 'Card created', 'Shipping', 'Delivered'];
 
+// The ACTUAL uploaded/derived design image's real pixel size, when known,
+// takes priority over the assumed 85x55mm shape ratio for sizing the hero
+// preview box -- same convention MagicBusinessCard.jsx's own cardBoxSize
+// already follows (see its comment), so a design that isn't cropped to
+// exactly that assumed ratio still fills its box edge-to-edge here too,
+// instead of this being the one place still guessing at the shape.
+function loadImageDimsFromUrl(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => reject(new Error('Could not read the card image'));
+    img.src = url;
+  });
+}
+
 function orderStage(p) {
   if (!p?.paid) return -1; // no order yet
   if (p.delivered) return 3;
@@ -30,6 +45,7 @@ export default function DashboardHome() {
   const [cards, setCards] = useState([]); // every physical card this client owns -- see api.getMyCards()
   const [selectedCardNumber, setSelectedCardNumber] = useState(null); // which one the hero preview shows -- defaults to profile.primaryCardNumber once known
   const [cardCompositeUrl, setCardCompositeUrl] = useState(null); // data URL, once composited -- see the effect below
+  const [heroImageDims, setHeroImageDims] = useState(null); // real pixel size of the currently-shown design image, see loadImageDimsFromUrl
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState('');
@@ -98,13 +114,18 @@ export default function DashboardHome() {
     if (!profile?.clientId || selectedCardNumber == null) return;
     let cancelled = false;
     setCardCompositeUrl(null); // clear the previous card's composite immediately on switch, don't show it under the new selection while the new one loads
+    setHeroImageDims(null); // same -- don't size the new card's box off the old one's dims for a frame
     api
       .getMyMagicCard(selectedCardNumber)
       .then(async (card) => {
         if (!card?.imageUrl) return;
         const qrUrl = `${API_URL}/api/public/qr/${profile.clientId}?type=ar&card=${selectedCardNumber}&fg=000000&bg=ffffff`;
         const canvas = await composeCardWithQr({ imageUrl: card.imageUrl, qrUrl, qrPos: card.qrPosition || { x: 82, y: 82 } });
-        if (!cancelled) setCardCompositeUrl(canvas.toDataURL('image/png'));
+        if (cancelled) return;
+        setCardCompositeUrl(canvas.toDataURL('image/png'));
+        // The canvas is already sized to the real design's own natural
+        // pixels (see cardComposite.js) -- free dims, no extra image load.
+        setHeroImageDims({ width: canvas.width, height: canvas.height });
       })
       .catch(() => {
         /* heroCardDesignUrl (plain design, no QR) stays as the fallback */
@@ -113,6 +134,26 @@ export default function DashboardHome() {
       cancelled = true;
     };
   }, [profile?.clientId, selectedCardNumber]);
+
+  // Fallback path -- no Magic Business Card image to composite yet, so
+  // the box falls back to the plain purchased-plan design (see
+  // heroCardDesignUrl below); still measure THAT image's real dims
+  // rather than leaving the box sized off the assumed shape ratio.
+  useEffect(() => {
+    if (cardCompositeUrl) return;
+    const selected = cards.find((c) => c.cardNumber === selectedCardNumber) || null;
+    const designUrl = selected ? selected.cardDesignUrl : profile?.cardFrontImageUrl;
+    if (!designUrl) return;
+    let cancelled = false;
+    loadImageDimsFromUrl(designUrl)
+      .then((dims) => {
+        if (!cancelled) setHeroImageDims(dims);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [cardCompositeUrl, cards, selectedCardNumber, profile?.cardFrontImageUrl]);
 
   // "Card taps" (see the KPI row below) is the one number on this page
   // that changes without the client doing anything -- someone tapping
@@ -244,15 +285,20 @@ export default function DashboardHome() {
   const heroCardType = selectedCard ? selectedCard.cardType : profile?.cardType;
   const heroCardLabel = selectedCard?.label || selectedCard?.variantName || planLabel;
 
-  // Hero mini card preview -- sized to the real card's own aspect ratio
-  // (see cardAspectFor), not a fixed square. The uploaded design is
-  // already cropped to this exact ratio at upload time (see
-  // MagicBusinessCard.jsx's CARD_UPLOAD_SIZES), so matching the box to it
-  // means the image fills the box edge-to-edge with no letterbox bars --
-  // a square box was leaving visible background strips down the sides of
-  // a vertical card, which then got caught up in the hover glow/tilt
-  // effect along with the real artwork.
-  const miniCardAspect = cardAspectFor(heroCardShape); // width / height
+  // Hero mini card preview -- sized to the real design image's own real
+  // pixel aspect ratio when known (heroImageDims, see the effects above),
+  // falling back to the assumed 85x55mm shape ratio (cardAspectFor) only
+  // until that loads. A design not cropped to EXACTLY the assumed ratio
+  // (same "real dims win" convention as MagicBusinessCard.jsx's own
+  // cardBoxSize) was otherwise getting boxed to the wrong shape -- letting
+  // `backgroundSize: contain` below still show the whole image, but
+  // squeezed/letterboxed instead of filling the box edge-to-edge like the
+  // reference previews (MagicBusinessCard.jsx, which already did use the
+  // real dims) show it. Not a fixed square either way, for the same
+  // reason: a square box was leaving visible background strips down the
+  // sides of a vertical card, caught up in the hover glow/tilt effect
+  // along with the real artwork.
+  const miniCardAspect = heroImageDims ? heroImageDims.width / heroImageDims.height : cardAspectFor(heroCardShape); // width / height
   const MINI_CARD_HEIGHT = 320; // px
   const miniCardSize = { height: MINI_CARD_HEIGHT, width: Math.round(MINI_CARD_HEIGHT * miniCardAspect) };
 
