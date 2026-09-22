@@ -239,28 +239,28 @@ export default function MagicCamera() {
   // smoothing back off in proportion to the tracked point's OWN measured
   // velocity (cutoff = filterMinCF + filterBeta * |velocity|).
   //
-  // filterBeta: 1 (was 40) -- for a static card scan, any handheld tremor
-  // registers as "velocity" to the filter, so a high beta was cancelling
-  // out the low filterMinCF floor during exactly the micro-jitter we want
-  // eliminated. Near-zero beta = pure low-pass smoothing, which is right
-  // for this use-case. Accepts marginally more lag on fast intentional
-  // pans -- acceptable trade-off since a card scanner never pans fast.
+  // A previous tuning pass set filterBeta to 0 here (completely disabling
+  // velocity adaptation, a pure low-pass at the filterMinCF floor) on the
+  // assumption that a handheld card is held nearly still and "there are
+  // no fast intentional pans to track" -- rock solid for that case, but
+  // it meant ANY real movement (someone actually turning/shaking the card
+  // to show it off) got the exact same heavy damping as hand tremor, so
+  // the overlay visibly lagged/"caught up slowly" instead of following
+  // the card. Restored to the same proven middle-ground values
+  // ArViewMindAR.jsx already uses (filterMinCF: 0.0005, filterBeta: 300)
+  // -- real velocity now raises the cutoff so genuine motion is tracked
+  // closely, while a still card still gets the low-cutoff smoothing.
   //
-  // missTolerance: 12 (was 5) -- tracker needs 12 consecutive missed
-  // frames before declaring the target lost. Eliminates brief pop-offs
-  // from a single bad frame without noticeably delaying loss detection.
+  // missTolerance: 15 -- tracker needs 15 consecutive missed frames
+  // before declaring the target lost, eliminating single-frame drop-outs
+  // at 30fps without noticeably delaying real loss detection.
   //
-  // Additionally, an slerp/lerp visual interpolation layer (see onUpdate
-  // below) further smooths the rendered matrix between tracker updates
-  // independent of these filter params.
-  // filterBeta: 0 = completely disables velocity adaptation in the
-  // One-Euro filter, making it a pure low-pass at the filterMinCF cutoff.
-  // For a static-card scanner this is ideal: handheld tremor must NEVER
-  // raise the cutoff, and there are no fast intentional pans to track.
-  // missTolerance:15 = 15 consecutive missed frames before declaring lost,
-  // eliminating single-frame drop-outs entirely at 30fps.
-  // The final smoothing layer is a 60fps slerp/lerp in renderLoop below.
-  const tuning = { filterMinCF: 0.00001, filterBeta: 0, warmupTolerance: 3, missTolerance: 15 };
+  // The remaining jitter after this filter is handled by an ADAPTIVE
+  // slerp/lerp layer in renderLoop below (see POSE_SMOOTHING_MIN/MAX)
+  // rather than a fixed-rate one -- same reasoning, ported from
+  // ArViewMindAR.jsx's own fix for this exact "lags behind real motion"
+  // problem.
+  const tuning = { filterMinCF: 0.0005, filterBeta: 300, warmupTolerance: 3, missTolerance: 15 };
 
   const containerRef = useRef(null);
   const cameraVideoRef = useRef(null);
@@ -591,11 +591,30 @@ export default function MagicCamera() {
       const _cPos = new THREE.Vector3();
       const _cQuat = new THREE.Quaternion();
       const _cScale = new THREE.Vector3();
-      // Per-frame lerp alpha at 60fps. 0.05 = heavily smooths out the
-      // remaining micro-jitter from handheld shake, resulting in a rock
-      // solid fit for static card scanning at the cost of slight lag
-      // during fast pans.
-      const LERP_ALPHA = 0.05;
+      // Adaptive per-frame lerp alpha at 60fps, same strategy as
+      // ArViewMindAR.jsx's own pose-smoothing layer (ported here for the
+      // same reason): a single FIXED alpha can't be both "rock solid
+      // while still" and "keeps up while moving" -- a low fixed value
+      // (the previous LERP_ALPHA = 0.05, always) looked great held still
+      // but visibly lagged/"caught up slowly" the moment the card was
+      // actually turned or shaken, which is exactly the bug being fixed
+      // here. Instead: barely-moved deltas (below JITTER_TRANSLATION_
+      // THRESHOLD) are near-certainly detection jitter and get damped
+      // hard at POSE_SMOOTHING_MIN; large deltas are real motion and get
+      // tracked closely at up to POSE_SMOOTHING_MAX, scaled linearly
+      // between the two by how big the jump actually was. A single-frame
+      // jump past MAX_PLAUSIBLE_JUMP is treated as a bad read (motion
+      // blur/occlusion), not the card teleporting -- held at the last
+      // good pose instead of snapped to, giving the next frame a chance
+      // to confirm it before following.
+      //
+      // Both thresholds are in "anchorGroup units", where 1.0 == the
+      // tracked target's own width (see buildPostMatrix above) -- same
+      // convention ArViewMindAR.jsx uses for its own version of this.
+      const POSE_SMOOTHING_MIN = 0.05;
+      const POSE_SMOOTHING_MAX = 0.5;
+      const JITTER_TRANSLATION_THRESHOLD = 0.01;
+      const MAX_PLAUSIBLE_JUMP = 0.2;
       const foundFlags = targets.map(() => false);
 
       const controller = new Controller({
@@ -811,10 +830,25 @@ export default function MagicCamera() {
           if (entry.initialized && entry.anchorGroup.visible) {
             entry.targetMatrix.decompose(_tPos, _tQuat, _tScale);
             entry.anchorGroup.matrix.decompose(_cPos, _cQuat, _cScale);
-            _cPos.lerp(_tPos, LERP_ALPHA);
-            _cQuat.slerp(_tQuat, LERP_ALPHA);
-            _cScale.lerp(_tScale, LERP_ALPHA);
-            entry.anchorGroup.matrix.compose(_cPos, _cQuat, _cScale);
+            const jumpDist = _cPos.distanceTo(_tPos);
+            if (jumpDist <= MAX_PLAUSIBLE_JUMP) {
+              const alpha =
+                jumpDist <= JITTER_TRANSLATION_THRESHOLD
+                  ? POSE_SMOOTHING_MIN
+                  : THREE.MathUtils.clamp(
+                      POSE_SMOOTHING_MIN +
+                        ((jumpDist - JITTER_TRANSLATION_THRESHOLD) / (MAX_PLAUSIBLE_JUMP - JITTER_TRANSLATION_THRESHOLD)) *
+                          (POSE_SMOOTHING_MAX - POSE_SMOOTHING_MIN),
+                      POSE_SMOOTHING_MIN,
+                      POSE_SMOOTHING_MAX
+                    );
+              _cPos.lerp(_tPos, alpha);
+              _cQuat.slerp(_tQuat, alpha);
+              _cScale.lerp(_tScale, alpha);
+              entry.anchorGroup.matrix.compose(_cPos, _cQuat, _cScale);
+            }
+            // else: implausible one-frame jump -- hold the last good pose,
+            // let the next frame confirm before following it.
           }
           entry.modelMixer?.update(modelDelta);
         });

@@ -2346,14 +2346,17 @@ router.post('/magic-art/:id/overlays', requireAdmin, async (req, res) => {
 
 // PATCH /api/admin/magic-art/:id/overlays/:overlayId -- update one
 // overlay's label and/or position/size (x/y/width/height, dragged in the
-// admin's positioning canvas).
+// admin's positioning canvas), and/or its video crop (videoCropX/Y/
+// Width/Height -- MagicArt.jsx's "Edit crop" flow re-crops an ALREADY-
+// uploaded video without re-uploading the file, see that page's own
+// handleConfirmCrop 'video-edit' branch).
 router.patch('/magic-art/:id/overlays/:overlayId', requireAdmin, async (req, res) => {
   try {
     const doc = await MagicArt.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'Not found' });
     const overlay = doc.overlays.id(req.params.overlayId);
     if (!overlay) return res.status(404).json({ error: 'Overlay not found' });
-    for (const field of ['label', 'x', 'y', 'width', 'height']) {
+    for (const field of ['label', 'x', 'y', 'width', 'height', 'videoCropX', 'videoCropY', 'videoCropWidth', 'videoCropHeight']) {
       if (req.body[field] !== undefined) overlay[field] = req.body[field];
     }
     doc.updatedBy = req.admin?.email || 'unknown';
@@ -2895,8 +2898,22 @@ router.post('/clients/:clientId/magic-card/activate', requireAdmin, async (req, 
     // video (see CardPlan.js) satisfies this too, same as a client's own
     // upload would, so a Limited-Edition-style client never needs a
     // redundant personal copy of the exact same file just to activate.
-    if (!serialized.available || !serialized.videoUrl) {
-      return res.status(400).json({ error: 'This card needs a video (and a resolvable design) before it can be activated.' });
+    // Checked -- and reported -- separately, not as one combined message:
+    // the preview box can be playing a video just fine (from serialized.
+    // videoUrl) while serialized.available is still false, because
+    // available is gated on a REAL uploaded design (serialized.imageUrl),
+    // not the plan's generic catalog example the preview falls back to
+    // showing (see serialized.imageInherited) -- a combined "needs a
+    // video AND a design" message read as confusing/wrong when the video
+    // half was visibly already there.
+    if (!serialized.videoUrl) {
+      return res.status(400).json({ error: 'This card needs a video before it can be activated.' });
+    }
+    if (!serialized.available) {
+      return res.status(400).json({
+        error:
+          "This card needs a real uploaded design before it can be activated -- the preview shown is just the plan's generic catalog example, not this client's actual design. Upload one in the Image section below.",
+      });
     }
     doc.active = true;
     doc.updatedBy = req.admin?.email || 'unknown';
