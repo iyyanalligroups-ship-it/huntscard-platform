@@ -83,9 +83,13 @@ const magicBusinessCardSchema = new mongoose.Schema(
     // download at this exact spot (see handleDownloadImage) rather than
     // shipping as a separate QR file the client has to place themselves.
     // Defaults to the bottom-right corner, clear of a typically-centered
-    // design.
-    qrX: { type: Number, min: 0, max: 100, default: 82 },
-    qrY: { type: Number, min: 0, max: 100, default: 82 },
+    // design -- 71/80, not a rounder-looking 82/82, verified against a
+    // real working card (see routes/admin.js's DEFAULT_QR_POSITION,
+    // applied there on every image (re-)upload so an existing doc still
+    // sitting at the old 82/82 default gets corrected too, not just
+    // brand new ones).
+    qrX: { type: Number, min: 0, max: 100, default: 71 },
+    qrY: { type: Number, min: 0, max: 100, default: 80 },
     // AR component positions (contact/portfolio/social/huntsworld -- the
     // same 4 built-ins the main AR Layout system has) -- deliberately
     // separate from that system's own positions, not derived/synced from

@@ -31,28 +31,19 @@ const { getGlobalMagicLayoutDefault } = require('../utils/magicLayout');
 const { buildVariantMap, resolveCardVariant } = require('../utils/cardVariant');
 const SiteSetting = require('../models/SiteSetting');
 
-// Per-plan default Magic Business Card QR position (percent, see
-// MagicBusinessCard.js's qrX/qrY) -- for a plan whose every buyer shares
-// one fixed catalog design/artwork, the "correct" QR spot is the same for
-// everyone on it, so a new client on that plan should start there instead
-// of the schema's generic 82/82 default. Used by POST /clients below;
-// admin can still drag/Save a different position per client afterward
-// (see ClientDetail.jsx's QR position control) if a plan ever needs it.
-const PLAN_DEFAULT_QR_POSITION = {
-  'joseph-vijay': { x: 71, y: 80 }, // Limited Edition -- verified against charles.bmtechx@gmail.com's real working card
-  // Custom Card -- every buyer's own uploaded photo/design, not one
-  // fixed artwork like joseph-vijay above, but the same bottom-right
-  // spot reads as a safe zone across those uploads too (admin-verified)
-  // -- applied below on every image (re-)upload, not just once at
-  // account creation, since a Custom client's actual Magic Business Card
-  // image is only ever set later via the admin's manual upload (see POST
-  // /clients/:clientId/magic-card/image), not at checkout. Key MUST
-  // match CardPlan.key exactly (the "Custom Card" plan's real key in the
-  // DB is 'custom-card', not the more obvious-looking 'custom') -- a
-  // wrong key here fails silently (planDefaultQrPosition is just
-  // undefined, no error), which is exactly what happened the first time.
-  'custom-card': { x: 71, y: 80 },
-};
+// Default Magic Business Card QR position (percent, see
+// MagicBusinessCard.js's qrX/qrY) -- ONE universal spot for every client
+// on every plan (verified against real working cards), not per-plan --
+// a per-plan lookup here previously left any client on a plan with no
+// entry (or with cardType still null, before a plan's even assigned)
+// stuck on the schema's old generic default, which is exactly the bug
+// this replaced. Used both by POST /clients below and by the manual
+// image-upload route further down (see its own comment for why a
+// Custom Card client needs it applied THERE too, not just at creation).
+// MagicBusinessCard.js's own schema default matches this -- kept
+// explicit here anyway so an EXISTING doc still at the old default gets
+// corrected on its next image (re-)upload too, not just brand new docs.
+const DEFAULT_QR_POSITION = { x: 71, y: 80 };
 const FaqEntry = require('../models/FaqEntry');
 const cardCrypto = require('../utils/crypto'); // named apart from the built-in `crypto` above (line 4)
 const { getChargeAmount, getMagicArtChargeAmount } = require('../utils/pricing');
@@ -1051,23 +1042,13 @@ router.post('/clients', requireAdmin, async (req, res) => {
         cardVariantId: client.cardVariantId || null,
       });
 
-      // Some plans share ONE fixed catalog design across every buyer
-      // (Limited Edition's own artwork, see MagicBusinessCardAr.jsx's own
-      // "Limited Stock" plan) -- for those, the QR's correct on-screen
-      // spot is the same for every client on it, verified against a real
-      // working card (charles.bmtechx@gmail.com's, x:71/y:80) rather than
-      // left at the schema's generic 82/82 default, which was landing
-      // visibly off from where it actually looks right on this artwork.
       // Pre-creates the (normally lazy, see findOrCreateMagicCard) doc
-      // right away just to carry this default -- admin can still drag/
-      // Save a different spot per client afterward if ever needed.
-      const planDefaultQrPosition = PLAN_DEFAULT_QR_POSITION[client.cardType];
-      if (planDefaultQrPosition) {
-        const magicCard = await findOrCreateMagicCard(client.clientId, 1);
-        magicCard.qrX = planDefaultQrPosition.x;
-        magicCard.qrY = planDefaultQrPosition.y;
-        await magicCard.save();
-      }
+      // right away just to carry DEFAULT_QR_POSITION -- admin can still
+      // drag/Save a different spot per client afterward if ever needed.
+      const magicCard = await findOrCreateMagicCard(client.clientId, 1);
+      magicCard.qrX = DEFAULT_QR_POSITION.x;
+      magicCard.qrY = DEFAULT_QR_POSITION.y;
+      await magicCard.save();
     }
 
     res.status(201).json({
@@ -2959,17 +2940,17 @@ router.post(
       doc.imageUrl = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
       doc.imageWidth = Number(req.body.width) || undefined;
       doc.imageHeight = Number(req.body.height) || undefined;
-      // Reset the QR back to this plan's known-good default on every
-      // (re-)upload -- a position dragged/saved for the PREVIOUS image
-      // isn't guaranteed to still sit somewhere sensible on a brand new
-      // photo/design, so start from the verified default again rather
-      // than silently carrying over a spot that may no longer make sense.
-      // Admin can still drag/Save a different spot afterward as usual.
-      const planDefaultQrPosition = PLAN_DEFAULT_QR_POSITION[loaded.card.cardType];
-      if (planDefaultQrPosition) {
-        doc.qrX = planDefaultQrPosition.x;
-        doc.qrY = planDefaultQrPosition.y;
-      }
+      // Reset the QR back to the known-good default on every (re-)upload,
+      // for every client regardless of plan -- a position dragged/saved
+      // for the PREVIOUS image isn't guaranteed to still sit somewhere
+      // sensible on a brand new photo/design, so start from the verified
+      // default again rather than silently carrying over a spot that may
+      // no longer make sense (or, for a client with no default ever
+      // applied at all -- e.g. cardType still null pre-purchase -- was
+      // just stuck on the schema's old generic value). Admin can still
+      // drag/Save a different spot afterward as usual.
+      doc.qrX = DEFAULT_QR_POSITION.x;
+      doc.qrY = DEFAULT_QR_POSITION.y;
       doc.updatedBy = req.admin?.email || 'unknown';
       await doc.save();
       if (previousUrl) {
