@@ -40,6 +40,7 @@ export default function MagicPosterCart() {
   const loggedIn = isLoggedIn();
 
   const [addresses, setAddresses] = useState(null); // null = loading
+  const [pricing, setPricing] = useState(null); // { deliveryFee, gstPercent }, display-only
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -70,6 +71,7 @@ export default function MagicPosterCart() {
       .then((profile) => setForm((f) => ({ ...f, name: f.name || profile.fullName || '', phone: f.phone || profile.phone || '' })))
       .catch(() => {});
     api.getStates(COUNTRY_ISO).then(setStates).catch(() => {});
+    api.getMagicPosterPricing().then(setPricing).catch(() => {});
   }, [loggedIn]);
 
   function handleStateChange(option) {
@@ -211,6 +213,17 @@ export default function MagicPosterCart() {
     }
   }
 
+  // Display-only breakdown -- mirrors the server's computeMagicPosterTotals
+  // math (backend/utils/pricing.js) so the checkout screen can show a
+  // total before payment. The actual charge is always recomputed +
+  // snapshotted server-side in api.createMagicPosterOrder, never trusted
+  // from this client-side calculation.
+  const subtotal = cart.totalAmount;
+  const deliveryFee = pricing?.deliveryFee ?? 0;
+  const gstPercent = pricing?.gstPercent ?? 0;
+  const gstAmount = Math.round((subtotal + deliveryFee) * (gstPercent / 100));
+  const total = subtotal + deliveryFee + gstAmount;
+
   if (!loggedIn) {
     return (
       <div className="card" style={{ maxWidth: 420, margin: '60px auto', textAlign: 'center' }}>
@@ -288,9 +301,23 @@ export default function MagicPosterCart() {
                 </button>
               </div>
             ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, fontWeight: 700 }}>
-              <span>Total</span>
-              <span>₹{cart.totalAmount}</span>
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, display: 'grid', gap: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Subtotal</span>
+                <span>₹{subtotal}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Delivery</span>
+                <span>₹{deliveryFee}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>GST ({gstPercent}%)</span>
+                <span>₹{gstAmount}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 16 }}>
+                <span>Total</span>
+                <span>₹{total}</span>
+              </div>
             </div>
           </div>
 
@@ -424,7 +451,7 @@ export default function MagicPosterCart() {
           </div>
 
           <button type="button" disabled={submitting || !selectedAddressId} onClick={handlePay}>
-            {submitting ? 'Processing…' : `Pay ₹${cart.totalAmount}`}
+            {submitting ? 'Processing…' : `Pay ₹${total}`}
           </button>
         </>
       )}

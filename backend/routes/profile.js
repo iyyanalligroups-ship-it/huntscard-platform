@@ -16,7 +16,9 @@ const AttributeDefinition = require('../models/AttributeDefinition');
 const MagicArt = require('../models/MagicArt');
 const MagicPosterOrder = require('../models/MagicPosterOrder');
 const ClientAddress = require('../models/ClientAddress');
-const { getChargeAmount, getMagicArtChargeAmount } = require('../utils/pricing');
+const SiteSetting = require('../models/SiteSetting');
+const { getChargeAmount, getMagicArtChargeAmount, computeMagicPosterTotals } = require('../utils/pricing');
+const { buildInvoicePdf } = require('../utils/invoice');
 const { sendEmail } = require('../utils/email');
 const { getGlobalMagicLayoutDefault, mergeMagicLayout } = require('../utils/magicLayout');
 const { buildVariantMap, resolveCardVariant } = require('../utils/cardVariant');
@@ -1409,6 +1411,16 @@ router.delete('/addresses/:id', requireAuth, async (req, res) => {
 
 const MAX_MAGIC_POSTER_ITEM_QUANTITY = 20;
 
+// GET /api/profile/magic-poster/pricing -- current delivery fee + GST%,
+// for the checkout screen's price breakdown display. Display-only: the
+// actual charged amount is always recomputed + snapshotted server-side in
+// POST /magic-poster/order below, never trusted from what this endpoint
+// returns or from anything the client sends.
+router.get('/magic-poster/pricing', requireAuth, async (req, res) => {
+  const settings = await SiteSetting.findOne({ key: 'global' });
+  res.json({ deliveryFee: settings?.deliveryFee ?? 0, gstPercent: settings?.gstPercent ?? 0 });
+});
+
 // POST /api/profile/magic-poster/order
 router.post('/magic-poster/order', requireAuth, async (req, res) => {
   try {
@@ -1443,19 +1455,36 @@ router.post('/magic-poster/order', requireAuth, async (req, res) => {
       resolvedItems.push({ magicArtId: piece._id, name: piece.name || '', unitPrice, quantity });
     }
 
-    const amount = resolvedItems.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+    const subtotal = resolvedItems.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+
+    // Delivery fee + GST are a global admin setting, snapshotted onto this
+    // order now -- a later change to SiteSetting must never rewrite what
+    // this order actually charges (same principle as resolvedItems'
+    // unitPrice above, never trusting anything client-sent for the total).
+    const settings = await SiteSetting.findOne({ key: 'global' });
+    const totals = computeMagicPosterTotals(subtotal, settings?.deliveryFee ?? 0, settings?.gstPercent ?? 0);
 
     const order = await razorpay.orders.create({
-      amount: Math.round(amount * 100), // paise
+      amount: Math.round(totals.amount * 100), // paise
       currency: 'INR',
       receipt: `mpo_${req.user.clientId}_${Date.now()}`,
       notes: { clientId: req.user.clientId, kind: 'magic-poster' },
     });
 
+    // orderNumber is assigned here (not just once paid) so an order can be
+    // looked up from the moment it's placed -- trackingId doesn't exist
+    // until it ships, so it's useless for a brand-new order.
+    const orderNumber = `MO${nanoid(10).toUpperCase()}`;
+
     const doc = await MagicPosterOrder.create({
       clientId: req.user.clientId,
+      orderNumber,
       items: resolvedItems,
-      amount,
+      subtotal: totals.subtotal,
+      deliveryFee: totals.deliveryFee,
+      gstPercent: totals.gstPercent,
+      gstAmount: totals.gstAmount,
+      amount: totals.amount,
       razorpayOrderId: order.id,
       delivery: {
         name: d.name, phone: d.phone, line1: d.line1, line2: d.line2 || '', country: d.country, state: d.state, city: d.city, pincode: d.pincode,
@@ -1468,6 +1497,8 @@ router.post('/magic-poster/order', requireAuth, async (req, res) => {
       currency: order.currency,
       keyId: process.env.RAZORPAY_KEY_ID,
       mongoOrderId: doc._id,
+      orderNumber: doc.orderNumber,
+      breakdown: totals,
     });
   } catch (err) {
     console.error('[profile/magic-poster/order POST]', err);
@@ -1526,17 +1557,20 @@ router.post('/magic-poster/confirm', requireAuth, async (req, res) => {
 // admin's GET /api/admin/magic-poster-orders, scoped to just this client
 // and with no need to join in a client name).
 //
-// Two modes: a plain `?trackingId=` lookup (the dashboard's search box --
-// a case-insensitive partial match, still scoped to this client's own
-// orders only), or the default paginated browse (`?skip=&limit=`, "Load
-// more" style -- fetches one extra row past `limit` to cheaply know
-// `hasMore` without a separate count query).
+// Two modes: a plain `?q=` lookup (the dashboard's search box -- a
+// case-insensitive partial match against either orderNumber or trackingId,
+// still scoped to this client's own orders only -- orderNumber exists from
+// the moment an order is placed, trackingId only once it ships), or the
+// default paginated browse (`?skip=&limit=`, "Load more" style -- fetches
+// one extra row past `limit` to cheaply know `hasMore` without a separate
+// count query).
 router.get('/magic-poster/orders', requireAuth, async (req, res) => {
   const filter = { clientId: req.user.clientId, paymentStatus: 'paid' };
 
-  if (req.query.trackingId) {
-    const escaped = String(req.query.trackingId).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    filter.trackingId = { $regex: new RegExp(escaped, 'i') };
+  if (req.query.q) {
+    const escaped = String(req.query.q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rx = new RegExp(escaped, 'i');
+    filter.$or = [{ orderNumber: rx }, { trackingId: rx }];
     const orders = await MagicPosterOrder.find(filter).sort({ createdAt: -1 });
     return res.json({ orders, hasMore: false });
   }
@@ -1545,6 +1579,21 @@ router.get('/magic-poster/orders', requireAuth, async (req, res) => {
   const skip = Math.max(0, parseInt(req.query.skip, 10) || 0);
   const orders = await MagicPosterOrder.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit + 1);
   res.json({ orders: orders.slice(0, limit), hasMore: orders.length > limit });
+});
+
+// GET /api/profile/magic-poster/orders/:id/invoice -- GST invoice PDF for
+// one of this client's own PAID orders. Ownership-checked (clientId must
+// match) and paymentStatus-checked (no invoice for an unpaid/abandoned
+// cart), same scoping as every other client-scoped route in this file.
+router.get('/magic-poster/orders/:id/invoice', requireAuth, async (req, res) => {
+  const order = await MagicPosterOrder.findOne({ _id: req.params.id, clientId: req.user.clientId, paymentStatus: 'paid' });
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+  const client = await Client.findOne({ clientId: req.user.clientId }).select('fullName');
+  res.set({
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `attachment; filename="invoice-${order.orderNumber}.pdf"`,
+  });
+  buildInvoicePdf(order, client, res);
 });
 
 // -----------------------------------------------------------------------

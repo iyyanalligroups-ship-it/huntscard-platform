@@ -280,16 +280,41 @@ export const api = {
   createMagicPosterOrder: (items, delivery) =>
     request('/api/profile/magic-poster/order', { method: 'POST', body: { items, delivery } }),
   confirmMagicPosterPayment: (payload) => request('/api/profile/magic-poster/confirm', { method: 'POST', body: payload }),
-  // `opts`: { skip, limit } for the paginated browse, or { trackingId }
-  // for a direct search -- see routes/profile.js's own comment. Returns
-  // { orders, hasMore }.
+  // Current delivery fee + GST%, for the checkout screen's price
+  // breakdown -- display-only, see routes/profile.js's own comment.
+  getMagicPosterPricing: () => request('/api/profile/magic-poster/pricing'),
+  // `opts`: { skip, limit } for the paginated browse, or { q } for a
+  // direct search matching either orderNumber or trackingId -- see
+  // routes/profile.js's own comment. Returns { orders, hasMore }.
   listMyMagicPosterOrders: (opts = {}) => {
     const params = new URLSearchParams();
-    if (opts.trackingId) params.set('trackingId', opts.trackingId);
+    if (opts.q) params.set('q', opts.q);
     if (opts.skip) params.set('skip', opts.skip);
     if (opts.limit) params.set('limit', opts.limit);
     const qs = params.toString();
     return request(`/api/profile/magic-poster/orders${qs ? `?${qs}` : ''}`);
+  },
+  // GST invoice PDF for a paid Magic Poster order -- same manual-fetch/
+  // blob pattern as exportContacts below (a file response, not JSON, so
+  // it can't go through the generic request() helper).
+  downloadMagicPosterInvoice: async (orderId, orderNumber) => {
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/profile/magic-poster/orders/${orderId}/invoice`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Download failed (${res.status})`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `invoice-${orderNumber || orderId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   },
 
   // Saved delivery addresses -- the Magic Poster checkout's address book.

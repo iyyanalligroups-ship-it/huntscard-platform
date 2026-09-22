@@ -15,6 +15,7 @@ const ArLayout = require('../models/ArLayout');
 const ArIcon = require('../models/ArIcon');
 const MagicArt = require('../models/MagicArt');
 const MagicPosterOrder = require('../models/MagicPosterOrder');
+const { buildInvoicePdf } = require('../utils/invoice');
 const StreetArt = require('../models/StreetArt');
 const MagicBusinessCard = require('../models/MagicBusinessCard');
 const AttributeDefinition = require('../models/AttributeDefinition');
@@ -181,7 +182,11 @@ function slugify(name) {
 router.get('/site-settings', requireAdmin, async (req, res) => {
   try {
     const doc = await SiteSetting.findOne({ key: 'global' });
-    res.json({ homeTheme: doc?.homeTheme || 'default' });
+    res.json({
+      homeTheme: doc?.homeTheme || 'default',
+      deliveryFee: doc?.deliveryFee ?? 0,
+      gstPercent: doc?.gstPercent ?? 0,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -189,18 +194,37 @@ router.get('/site-settings', requireAdmin, async (req, res) => {
 
 // PATCH /api/admin/site-settings -- upserts the singleton doc, since
 // nobody's touched this setting yet the first time it's ever changed.
+// Each field is independently optional in the request body, so the
+// homepage-theme toggle and the Magic Poster Settings page (deliveryFee/
+// gstPercent) can each PATCH just their own field without clobbering
+// whatever the other one last set.
 router.patch('/site-settings', requireAdmin, async (req, res) => {
-  const { homeTheme } = req.body;
-  if (!['default', 'orange', 'cyber'].includes(homeTheme)) {
-    return res.status(400).json({ error: 'homeTheme must be "default", "orange", or "cyber"' });
+  const update = { updatedBy: req.admin?.email || 'unknown' };
+
+  if (req.body.homeTheme !== undefined) {
+    if (!['default', 'orange', 'cyber'].includes(req.body.homeTheme)) {
+      return res.status(400).json({ error: 'homeTheme must be "default", "orange", or "cyber"' });
+    }
+    update.homeTheme = req.body.homeTheme;
   }
+  if (req.body.deliveryFee !== undefined) {
+    const fee = Number(req.body.deliveryFee);
+    if (!Number.isFinite(fee) || fee < 0) {
+      return res.status(400).json({ error: 'deliveryFee must be a non-negative number' });
+    }
+    update.deliveryFee = fee;
+  }
+  if (req.body.gstPercent !== undefined) {
+    const pct = Number(req.body.gstPercent);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+      return res.status(400).json({ error: 'gstPercent must be a number between 0 and 100' });
+    }
+    update.gstPercent = pct;
+  }
+
   try {
-    const doc = await SiteSetting.findOneAndUpdate(
-      { key: 'global' },
-      { homeTheme, updatedBy: req.admin?.email || 'unknown' },
-      { upsert: true, new: true }
-    );
-    res.json({ homeTheme: doc.homeTheme });
+    const doc = await SiteSetting.findOneAndUpdate({ key: 'global' }, update, { upsert: true, new: true });
+    res.json({ homeTheme: doc.homeTheme, deliveryFee: doc.deliveryFee ?? 0, gstPercent: doc.gstPercent ?? 0 });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -346,7 +370,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
     // raw message count (one chatty client shouldn't inflate this past
     // "1 conversation waiting").
     ChatMessage.distinct('clientId', { sender: 'client', read: false }).then((ids) => ids.length),
-    MagicPosterOrder.countDocuments({ paymentStatus: 'paid', status: 'pending' }),
+    MagicPosterOrder.countDocuments({ paymentStatus: 'paid', status: 'ordered' }),
   ]);
 
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1749,11 +1773,14 @@ router.delete('/requests', requireAdmin, async (req, res) => {
 // abandoned cart, not a real order worth admin's attention.
 // -----------------------------------------------------------------------
 
-// GET /api/admin/magic-poster-orders?status=pending
+// GET /api/admin/magic-poster-orders?status=ordered
 // `startDate`/`endDate` (plain "YYYY-MM-DD", from a <input type="date">)
-// filter on createdAt, inclusive of the whole end day. `skip`/`limit`
-// page through the results 10-at-a-time-by-default ("Load more" on the
-// admin page) -- fetches one extra row past `limit` to cheaply know
+// filter on createdAt, inclusive of the whole end day. `q` does a
+// case-insensitive partial match against either orderNumber or trackingId
+// (an order always has the former; the latter only once it's shipped),
+// composed with the other filters rather than a separate mode. `skip`/
+// `limit` page through the results 10-at-a-time-by-default ("Load more" on
+// the admin page) -- fetches one extra row past `limit` to cheaply know
 // `hasMore` without a separate count query, same trick as the client
 // dashboard's own GET /api/profile/magic-poster/orders.
 router.get('/magic-poster-orders', requireAdmin, async (req, res) => {
@@ -1763,6 +1790,11 @@ router.get('/magic-poster-orders', requireAdmin, async (req, res) => {
     filter.createdAt = {};
     if (req.query.startDate) filter.createdAt.$gte = new Date(`${req.query.startDate}T00:00:00.000Z`);
     if (req.query.endDate) filter.createdAt.$lte = new Date(`${req.query.endDate}T23:59:59.999Z`);
+  }
+  if (req.query.q) {
+    const escaped = String(req.query.q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rx = new RegExp(escaped, 'i');
+    filter.$or = [{ orderNumber: rx }, { trackingId: rx }];
   }
 
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
@@ -1782,25 +1814,34 @@ router.get('/magic-poster-orders', requireAdmin, async (req, res) => {
 });
 
 // PATCH /api/admin/magic-poster-orders/:id -- forward-only status move
-// (pending -> delivery -> completed). Moving to 'delivery' auto-generates
-// a tracking ID when the order doesn't already have one -- there's no
-// real courier integration behind this (unlike Card fulfillment's
-// admin-typed-in trackingId from an actual shipping provider), so asking
-// admin to make one up by hand on every order is pure friction. An
-// explicit `trackingId` in the body still wins, in case admin ever wants
-// to set a real one instead.
+// (ordered -> shipping -> delivery -> completed). Moving to 'shipping'
+// auto-generates a tracking ID when the order doesn't already have one --
+// there's no real courier integration behind this (unlike Card
+// fulfillment's admin-typed-in trackingId from an actual shipping
+// provider), so asking admin to make one up by hand on every order is
+// pure friction. An explicit `trackingId` in the body still wins, in case
+// admin ever wants to set a real one instead.
+const MAGIC_POSTER_STATUS_ORDER = ['ordered', 'shipping', 'delivery', 'completed'];
 router.patch('/magic-poster-orders/:id', requireAdmin, async (req, res) => {
   try {
     const { status, trackingId } = req.body;
-    if (!['pending', 'delivery', 'completed'].includes(status)) {
+    if (!MAGIC_POSTER_STATUS_ORDER.includes(status)) {
       return res.status(400).json({ error: 'Invalid status' });
     }
     const order = await MagicPosterOrder.findById(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    // Forward-only -- guards against a double-click/stale-tab moving an
+    // order backward (e.g. re-submitting an older tab's "Mark as Shipping"
+    // after another tab already advanced it to Delivery).
+    if (MAGIC_POSTER_STATUS_ORDER.indexOf(status) <= MAGIC_POSTER_STATUS_ORDER.indexOf(order.status)) {
+      return res.status(400).json({ error: `Order is already at or past "${order.status}"` });
+    }
+
     order.status = status;
     if (trackingId !== undefined) {
       order.trackingId = trackingId || null;
-    } else if (status === 'delivery' && !order.trackingId) {
+    } else if (status === 'shipping' && !order.trackingId) {
       order.trackingId = `MP${nanoid(10).toUpperCase()}`;
     }
     await order.save();
@@ -1809,6 +1850,20 @@ router.patch('/magic-poster-orders/:id', requireAdmin, async (req, res) => {
     console.error('[admin/magic-poster-orders PATCH]', err);
     res.status(500).json({ error: 'Failed to update order' });
   }
+});
+
+// GET /api/admin/magic-poster-orders/:id/invoice -- GST invoice PDF for
+// any paid order, no ownership restriction (unlike the client-side
+// version in routes/profile.js).
+router.get('/magic-poster-orders/:id/invoice', requireAdmin, async (req, res) => {
+  const order = await MagicPosterOrder.findOne({ _id: req.params.id, paymentStatus: 'paid' });
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+  const client = await Client.findOne({ clientId: order.clientId }).select('fullName');
+  res.set({
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `attachment; filename="invoice-${order.orderNumber}.pdf"`,
+  });
+  buildInvoicePdf(order, client, res);
 });
 
 // -----------------------------------------------------------------------

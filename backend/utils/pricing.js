@@ -27,4 +27,18 @@ function getMagicArtChargeAmount(art) {
   return null;
 }
 
-module.exports = { getChargeAmount, getMagicArtChargeAmount };
+// Magic Poster checkout total, from a cart subtotal and the current (or
+// snapshotted) global delivery fee + GST%. GST is charged on
+// (subtotal + deliveryFee) -- the whole taxable value including shipping
+// when billed on one invoice, the common convention for India e-commerce --
+// not on subtotal alone. Rounded to the nearest rupee, matching this
+// model's existing whole-rupee `amount` convention.
+function computeMagicPosterTotals(subtotal, deliveryFee, gstPercent) {
+  const fee = Number(deliveryFee) || 0;
+  const pct = Number(gstPercent) || 0;
+  const taxable = subtotal + fee;
+  const gstAmount = Math.round(taxable * (pct / 100));
+  return { subtotal, deliveryFee: fee, gstPercent: pct, gstAmount, amount: taxable + gstAmount };
+}
+
+module.exports = { getChargeAmount, getMagicArtChargeAmount, computeMagicPosterTotals };

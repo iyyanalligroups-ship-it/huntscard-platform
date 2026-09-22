@@ -15,6 +15,13 @@ const siteSettingSchema = new mongoose.Schema(
     // .theme-cyber dashboard palette, same scope theme-orange had at
     // first before HomeD1.jsx existed.
     homeTheme: { type: String, enum: ['default', 'orange', 'cyber'], default: 'default' },
+    // Magic Poster checkout -- flat rupee delivery charge + GST percentage,
+    // both admin-editable any time (see admin-huntscard's Magic Poster
+    // Settings page). GST is applied to (subtotal + deliveryFee). Each
+    // MagicPosterOrder snapshots these at creation time -- changing these
+    // here never rewrites a past order's charged amount.
+    deliveryFee: { type: Number, default: 0 },
+    gstPercent: { type: Number, default: 0 },
     updatedBy: { type: String, trim: true },
   },
   { timestamps: true }

@@ -27,12 +27,29 @@ const MagicPosterOrderSchema = new mongoose.Schema(
   {
     clientId: { type: String, required: true, index: true },
     items: { type: [magicPosterOrderItemSchema], default: [] },
+    // Pricing breakdown -- subtotal/deliveryFee/gstPercent/gstAmount are all
+    // SNAPSHOTS of SiteSetting's global delivery/GST config at the moment
+    // this order was created, same snapshot principle as items[].unitPrice
+    // above -- a later admin change to the global fee/GST% must never
+    // rewrite what this order actually charged. amount = the grand total
+    // (subtotal + deliveryFee + gstAmount), whole rupees -- this is what
+    // Razorpay actually charges (see routes/profile.js).
+    subtotal: { type: Number, required: true },
+    deliveryFee: { type: Number, required: true, default: 0 },
+    gstPercent: { type: Number, required: true, default: 0 },
+    gstAmount: { type: Number, required: true, default: 0 },
     amount: { type: Number, required: true }, // expected total, whole rupees, set at order-creation
     amountPaid: { type: Number, default: null }, // set once confirmed
     paymentStatus: { type: String, enum: ['unpaid', 'paid'], default: 'unpaid' },
-    // Delivery tracking -- Pending -> Delivery -> Completed, forward-only
-    // (see admin.js's PATCH /magic-poster-orders/:id).
-    status: { type: String, enum: ['pending', 'delivery', 'completed'], default: 'pending' },
+    // Delivery tracking -- Ordered -> Shipping -> Delivery -> Completed,
+    // forward-only (see admin.js's PATCH /magic-poster-orders/:id).
+    // trackingId auto-generates the moment an order moves to 'shipping'.
+    status: { type: String, enum: ['ordered', 'shipping', 'delivery', 'completed'], default: 'ordered' },
+    // Human-readable order number, assigned at creation (unlike trackingId,
+    // which only exists once an order ships) -- lets a client/admin look an
+    // order up from the moment it's placed. See routes/profile.js POST
+    // /magic-poster/order.
+    orderNumber: { type: String, required: true, unique: true, index: true },
     razorpayOrderId: { type: String, default: null },
     razorpayPaymentId: { type: String, default: null },
     // Snapshot of the ClientAddress the buyer picked (or newly added) at
