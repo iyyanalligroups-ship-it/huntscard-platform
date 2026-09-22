@@ -25,7 +25,8 @@ const MagicBusinessCard = require('../models/MagicBusinessCard');
 const AttributeDefinition = require('../models/AttributeDefinition');
 const SiteSetting = require('../models/SiteSetting');
 const FaqEntry = require('../models/FaqEntry');
-const { getChargeAmount } = require('../utils/pricing');
+const { getChargeAmount, getMagicArtChargeAmount } = require('../utils/pricing');
+const { Country, State, City } = require('country-state-city');
 const { getGlobalMagicLayoutDefault, mergeMagicLayout } = require('../utils/magicLayout');
 const { buildVariantMap, resolveCardVariant } = require('../utils/cardVariant');
 
@@ -604,6 +605,39 @@ router.get('/ar-icons', async (req, res) => {
   }
 });
 
+// -----------------------------------------------------------------------
+// Country/state/city reference data -- powers the cascading dropdowns on
+// the Magic Poster checkout's address form (see client-app's
+// MagicPosterCart.jsx). Backed by the `country-state-city` package's own
+// bundled dataset (no network call out, no API key), just re-served here
+// as small JSON lists rather than shipping the whole dataset to the
+// browser. Pincode is NOT included -- one city can have many postal
+// codes and there's no reliable free dataset mapping city -> pincode, so
+// that field stays a plain manual input on the form.
+// -----------------------------------------------------------------------
+
+// GET /api/public/geo/countries
+router.get('/geo/countries', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.json(Country.getAllCountries().map((c) => ({ name: c.name, isoCode: c.isoCode })));
+});
+
+// GET /api/public/geo/states?country=IN
+router.get('/geo/states', (req, res) => {
+  const { country } = req.query;
+  if (!country) return res.status(400).json({ error: 'country is required' });
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.json(State.getStatesOfCountry(country).map((s) => ({ name: s.name, isoCode: s.isoCode })));
+});
+
+// GET /api/public/geo/cities?country=IN&state=TN
+router.get('/geo/cities', (req, res) => {
+  const { country, state } = req.query;
+  if (!country || !state) return res.status(400).json({ error: 'country and state are required' });
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.json(City.getCitiesOfState(country, state).map((c) => c.name));
+});
+
 // GET /api/public/magic-art -- every COMPLETE admin-managed Magic Art
 // pack (see backend/models/MagicArt.js), oldest first. Read-only, no
 // auth. Filtered to packs with an image and at least one overlay clip
@@ -623,6 +657,9 @@ router.get('/magic-art', async (req, res) => {
           imageUrl: doc.imageUrl,
           imageWidth: doc.imageWidth,
           imageHeight: doc.imageHeight,
+          priceAmount: doc.priceAmount,
+          discountPriceAmount: doc.discountPriceAmount,
+          chargeAmount: getMagicArtChargeAmount(doc),
           // One positioned box per clip (see StreetArt.js's identical
           // shape) -- consumed by client-app's MagicCamera.jsx
           // (getTargetOverlays), which renders each as its own video

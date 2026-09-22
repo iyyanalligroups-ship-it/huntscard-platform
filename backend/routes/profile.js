@@ -13,7 +13,10 @@ const CardRequest = require('../models/CardRequest');
 const CardPlan = require('../models/CardPlan');
 const Card = require('../models/Card');
 const AttributeDefinition = require('../models/AttributeDefinition');
-const { getChargeAmount } = require('../utils/pricing');
+const MagicArt = require('../models/MagicArt');
+const MagicPosterOrder = require('../models/MagicPosterOrder');
+const ClientAddress = require('../models/ClientAddress');
+const { getChargeAmount, getMagicArtChargeAmount } = require('../utils/pricing');
 const { sendEmail } = require('../utils/email');
 const { getGlobalMagicLayoutDefault, mergeMagicLayout } = require('../utils/magicLayout');
 const { buildVariantMap, resolveCardVariant } = require('../utils/cardVariant');
@@ -1321,6 +1324,227 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
     console.error('[profile/upgrade-confirm POST]', err);
     res.status(500).json({ error: 'Failed to confirm payment' });
   }
+});
+
+// -----------------------------------------------------------------------
+// Saved delivery addresses -- an address book a client builds up, picked
+// from at Magic Poster checkout (see client-app's MagicPosterCart.jsx)
+// instead of retyping the same address every order.
+// -----------------------------------------------------------------------
+
+// GET /api/profile/addresses
+router.get('/addresses', requireAuth, async (req, res) => {
+  const addresses = await ClientAddress.find({ clientId: req.user.clientId }).sort({ isDefault: -1, createdAt: -1 });
+  res.json(addresses);
+});
+
+// POST /api/profile/addresses
+router.post('/addresses', requireAuth, async (req, res) => {
+  try {
+    const { label, name, phone, line1, line2, country, state, city, pincode, isDefault } = req.body;
+    if (!name || !phone || !line1 || !country || !state || !city || !pincode) {
+      return res.status(400).json({ error: 'Name, phone, address line 1, country, state, city and pincode are required.' });
+    }
+    if (isDefault) {
+      await ClientAddress.updateMany({ clientId: req.user.clientId }, { $set: { isDefault: false } });
+    }
+    const address = await ClientAddress.create({
+      clientId: req.user.clientId,
+      label,
+      name,
+      phone,
+      line1,
+      line2,
+      country,
+      state,
+      city,
+      pincode,
+      isDefault: Boolean(isDefault),
+    });
+    res.status(201).json(address);
+  } catch (err) {
+    console.error('[profile/addresses POST]', err);
+    res.status(500).json({ error: 'Failed to save address' });
+  }
+});
+
+// PATCH /api/profile/addresses/:id
+router.patch('/addresses/:id', requireAuth, async (req, res) => {
+  try {
+    const address = await ClientAddress.findOne({ _id: req.params.id, clientId: req.user.clientId });
+    if (!address) return res.status(404).json({ error: 'Address not found' });
+    for (const field of ['label', 'name', 'phone', 'line1', 'line2', 'country', 'state', 'city', 'pincode']) {
+      if (req.body[field] !== undefined) address[field] = req.body[field];
+    }
+    if (req.body.isDefault === true) {
+      await ClientAddress.updateMany({ clientId: req.user.clientId, _id: { $ne: address._id } }, { $set: { isDefault: false } });
+      address.isDefault = true;
+    } else if (req.body.isDefault === false) {
+      address.isDefault = false;
+    }
+    await address.save();
+    res.json(address);
+  } catch (err) {
+    console.error('[profile/addresses PATCH]', err);
+    res.status(500).json({ error: 'Failed to update address' });
+  }
+});
+
+// DELETE /api/profile/addresses/:id
+router.delete('/addresses/:id', requireAuth, async (req, res) => {
+  const address = await ClientAddress.findOneAndDelete({ _id: req.params.id, clientId: req.user.clientId });
+  if (!address) return res.status(404).json({ error: 'Address not found' });
+  res.json({ ok: true });
+});
+
+// -----------------------------------------------------------------------
+// Magic Poster cart checkout -- unlike upgrade-order above, the
+// MagicPosterOrder doc is created up front (paymentStatus 'unpaid'), not
+// only after payment confirms. A cart's items + delivery address don't
+// fit safely in Razorpay's own small `notes` fields the way a single
+// plan/quantity does, so there's nowhere else to carry them across the
+// create-order -> confirm gap. An abandoned/unpaid doc is harmless --
+// admin's order list only ever shows paymentStatus 'paid' rows.
+// -----------------------------------------------------------------------
+
+const MAX_MAGIC_POSTER_ITEM_QUANTITY = 20;
+
+// POST /api/profile/magic-poster/order
+router.post('/magic-poster/order', requireAuth, async (req, res) => {
+  try {
+    const razorpay = getRazorpay();
+    if (!razorpay) {
+      return res.status(503).json({ error: 'Payments are not configured yet.' });
+    }
+
+    const { items, delivery } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Your cart is empty.' });
+    }
+    const d = delivery || {};
+    if (!d.name || !d.phone || !d.line1 || !d.country || !d.state || !d.city || !d.pincode) {
+      return res.status(400).json({ error: 'Full delivery details are required.' });
+    }
+
+    // Resolve + price every item server-side -- never trust a unitPrice
+    // from the request body, same principle as upgrade-order trusting
+    // only the plan record's own price, not anything the client sends.
+    const artIds = [...new Set(items.map((i) => i.magicArtId))];
+    const pieces = await MagicArt.find({ _id: { $in: artIds } });
+    const pieceById = Object.fromEntries(pieces.map((p) => [p._id.toString(), p]));
+
+    const resolvedItems = [];
+    for (const raw of items) {
+      const piece = pieceById[raw.magicArtId];
+      if (!piece) return res.status(400).json({ error: 'One of the posters in your cart no longer exists.' });
+      const unitPrice = getMagicArtChargeAmount(piece);
+      if (!unitPrice) return res.status(400).json({ error: `"${piece.name || 'This poster'}" isn't available for purchase yet.` });
+      const quantity = Math.min(MAX_MAGIC_POSTER_ITEM_QUANTITY, Math.max(1, parseInt(raw.quantity, 10) || 1));
+      resolvedItems.push({ magicArtId: piece._id, name: piece.name || '', unitPrice, quantity });
+    }
+
+    const amount = resolvedItems.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+
+    const order = await razorpay.orders.create({
+      amount: Math.round(amount * 100), // paise
+      currency: 'INR',
+      receipt: `mpo_${req.user.clientId}_${Date.now()}`,
+      notes: { clientId: req.user.clientId, kind: 'magic-poster' },
+    });
+
+    const doc = await MagicPosterOrder.create({
+      clientId: req.user.clientId,
+      items: resolvedItems,
+      amount,
+      razorpayOrderId: order.id,
+      delivery: {
+        name: d.name, phone: d.phone, line1: d.line1, line2: d.line2 || '', country: d.country, state: d.state, city: d.city, pincode: d.pincode,
+      },
+    });
+
+    res.json({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: process.env.RAZORPAY_KEY_ID,
+      mongoOrderId: doc._id,
+    });
+  } catch (err) {
+    console.error('[profile/magic-poster/order POST]', err);
+    res.status(500).json({ error: 'Failed to start payment' });
+  }
+});
+
+// POST /api/profile/magic-poster/confirm
+router.post('/magic-poster/confirm', requireAuth, async (req, res) => {
+  try {
+    if (!process.env.RAZORPAY_KEY_SECRET) {
+      return res.status(503).json({ error: 'Payments are not configured yet.' });
+    }
+
+    const { mongoOrderId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    if (!mongoOrderId || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ error: 'Missing payment verification fields' });
+    }
+
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ error: 'Payment verification failed -- signature mismatch.' });
+    }
+
+    // A retried/duplicate confirm for a payment already recorded -- return
+    // the existing order instead of re-running the write below.
+    const existing = await MagicPosterOrder.findOne({ razorpayPaymentId: razorpay_payment_id });
+    if (existing) return res.status(200).json(existing);
+
+    // Must be the SAME order this client created at checkout-start -- stops
+    // someone confirming a payment against an order that isn't theirs.
+    const doc = await MagicPosterOrder.findOne({
+      _id: mongoOrderId,
+      clientId: req.user.clientId,
+      razorpayOrderId: razorpay_order_id,
+    });
+    if (!doc) return res.status(404).json({ error: 'Order not found' });
+
+    doc.paymentStatus = 'paid';
+    doc.amountPaid = doc.amount;
+    doc.razorpayPaymentId = razorpay_payment_id;
+    await doc.save();
+
+    res.status(201).json(doc);
+  } catch (err) {
+    console.error('[profile/magic-poster/confirm POST]', err);
+    res.status(500).json({ error: 'Failed to confirm payment' });
+  }
+});
+
+// GET /api/profile/magic-poster/orders -- this client's own paid Magic
+// Poster orders, for the dashboard's own order-tracking view (mirrors
+// admin's GET /api/admin/magic-poster-orders, scoped to just this client
+// and with no need to join in a client name).
+//
+// Two modes: a plain `?trackingId=` lookup (the dashboard's search box --
+// a case-insensitive partial match, still scoped to this client's own
+// orders only), or the default paginated browse (`?skip=&limit=`, "Load
+// more" style -- fetches one extra row past `limit` to cheaply know
+// `hasMore` without a separate count query).
+router.get('/magic-poster/orders', requireAuth, async (req, res) => {
+  const filter = { clientId: req.user.clientId, paymentStatus: 'paid' };
+
+  if (req.query.trackingId) {
+    const escaped = String(req.query.trackingId).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    filter.trackingId = { $regex: new RegExp(escaped, 'i') };
+    const orders = await MagicPosterOrder.find(filter).sort({ createdAt: -1 });
+    return res.json({ orders, hasMore: false });
+  }
+
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
+  const skip = Math.max(0, parseInt(req.query.skip, 10) || 0);
+  const orders = await MagicPosterOrder.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit + 1);
+  res.json({ orders: orders.slice(0, limit), hasMore: orders.length > limit });
 });
 
 // -----------------------------------------------------------------------

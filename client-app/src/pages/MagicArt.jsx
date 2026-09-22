@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, API_URL } from '../api.js';
+import { useCart } from '../cart.jsx';
 import MagicHoverPreview from '../components/MagicHoverPreview.jsx';
 
 // Fixed target (no dynamic input), rendered server-side by
@@ -26,12 +27,15 @@ const MAGIC_CAMERA_QR_URL = `${API_URL}/api/public/qr/magic-camera`;
 // popup (see the reference screenshot this was built from), except
 // scanning this QR opens straight in the browser, no app install.
 export default function MagicArt() {
+  const cart = useCart();
   const [pieces, setPieces] = useState(null);
   const [error, setError] = useState('');
   // Which piece's "scan to see the effect" popup is open, if any -- shows
   // that piece's own image alongside the (fixed) Magic Camera QR, so the
   // popup always reflects the artwork the visitor actually clicked.
   const [qrTarget, setQrTarget] = useState(null);
+  const [qty, setQty] = useState({}); // { [pieceId]: quantity } -- the picker below "Add to cart", defaults to 1
+  const [addedId, setAddedId] = useState(''); // transient "Added ✓" confirmation, see flashAdded
 
   useEffect(() => {
     api
@@ -40,12 +44,31 @@ export default function MagicArt() {
       .catch((err) => setError(err.message));
   }, []);
 
+  function getQty(id) {
+    return qty[id] || 1;
+  }
+
+  function handleAddToCart(piece) {
+    cart.addItem(piece, getQty(piece._id));
+    setAddedId(piece._id);
+    setTimeout(() => setAddedId((id) => (id === piece._id ? '' : id)), 1500);
+  }
+
   return (
     <div>
-      <h1 className="section-heading" style={{ marginTop: 0 }}>Magic Poster</h1>
-      <p className="section-subheading">
-        Open Magic Camera -- no login needed -- and point it at one of the images below to see it come alive.
-      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <h1 className="section-heading" style={{ marginTop: 0 }}>Magic Poster</h1>
+          <p className="section-subheading">
+            Open Magic Camera -- no login needed -- and point it at one of the images below to see it come alive.
+          </p>
+        </div>
+        {cart.totalCount > 0 && (
+          <Link to="/magic-poster-cart" className="pill-outline" style={{ whiteSpace: 'nowrap' }}>
+            🛒 Cart ({cart.totalCount}) · ₹{cart.totalAmount}
+          </Link>
+        )}
+      </div>
 
       {error && <div className="error-banner">{error}</div>}
 
@@ -64,8 +87,9 @@ export default function MagicArt() {
                 <MagicHoverPreview
                   className="magic-art-lightbox-trigger"
                   imageUrl={piece.imageUrl}
-                  videoUrl={piece.videoUrl}
-                  videoCrop={piece.videoCrop}
+                  overlays={piece.overlays}
+                  imageWidth={piece.imageWidth}
+                  imageHeight={piece.imageHeight}
                   alt={piece.name || `Magic Art ${i + 1}`}
                   onClick={() => setQrTarget(piece)}
                 />
@@ -83,6 +107,46 @@ export default function MagicArt() {
               </button>
 
               {piece.description && <p className="magic-art-card-description">{piece.description}</p>}
+
+              {piece.chargeAmount ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '10px 0' }}>
+                  <span style={{ fontWeight: 700 }}>
+                    ₹{piece.chargeAmount}
+                    {piece.discountPriceAmount > 0 && piece.priceAmount > piece.discountPriceAmount && (
+                      <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--text-dim)', textDecoration: 'line-through' }}>
+                        ₹{piece.priceAmount}
+                      </span>
+                    )}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button
+                      type="button"
+                      className="secondary"
+                      style={{ width: 28, height: 28, padding: 0 }}
+                      onClick={() => setQty((q) => ({ ...q, [piece._id]: Math.max(1, getQty(piece._id) - 1) }))}
+                    >
+                      −
+                    </button>
+                    <span style={{ minWidth: 18, textAlign: 'center' }}>{getQty(piece._id)}</span>
+                    <button
+                      type="button"
+                      className="secondary"
+                      style={{ width: 28, height: 28, padding: 0 }}
+                      onClick={() => setQty((q) => ({ ...q, [piece._id]: getQty(piece._id) + 1 }))}
+                    >
+                      +
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ width: 'auto', padding: '6px 14px' }}
+                    onClick={() => handleAddToCart(piece)}
+                  >
+                    {addedId === piece._id ? 'Added ✓' : 'Add to cart'}
+                  </button>
+                </div>
+              ) : null}
 
               <div className="magic-art-card-steps">
                 <p className="magic-art-card-steps-title">How it works</p>

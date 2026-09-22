@@ -14,6 +14,7 @@ const CatalogEntry = require('../models/CatalogEntry');
 const ArLayout = require('../models/ArLayout');
 const ArIcon = require('../models/ArIcon');
 const MagicArt = require('../models/MagicArt');
+const MagicPosterOrder = require('../models/MagicPosterOrder');
 const StreetArt = require('../models/StreetArt');
 const MagicBusinessCard = require('../models/MagicBusinessCard');
 const AttributeDefinition = require('../models/AttributeDefinition');
@@ -42,7 +43,7 @@ const PLAN_DEFAULT_QR_POSITION = {
 };
 const FaqEntry = require('../models/FaqEntry');
 const cardCrypto = require('../utils/crypto'); // named apart from the built-in `crypto` above (line 4)
-const { getChargeAmount } = require('../utils/pricing');
+const { getChargeAmount, getMagicArtChargeAmount } = require('../utils/pricing');
 
 const router = express.Router();
 
@@ -303,7 +304,7 @@ router.delete('/faq/:id', requireAdmin, async (req, res) => {
 
 // GET /api/admin/stats
 router.get('/stats', requireAdmin, async (req, res) => {
-  const [totalClients, paid, encoded, adminCount, planCount, latestClient, monthlyAgg, pendingRequests, cardsByPlanAgg, recentClients, unclaimedOrders, unreadMessages, openCardTickets, unreadChats] = await Promise.all([
+  const [totalClients, paid, encoded, adminCount, planCount, latestClient, monthlyAgg, pendingRequests, cardsByPlanAgg, recentClients, unclaimedOrders, unreadMessages, openCardTickets, unreadChats, pendingMagicPosterOrders] = await Promise.all([
     Client.countDocuments({}),
     Client.countDocuments({ paid: true }),
     Client.countDocuments({ chipEncoded: true }),
@@ -342,6 +343,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
     // raw message count (one chatty client shouldn't inflate this past
     // "1 conversation waiting").
     ChatMessage.distinct('clientId', { sender: 'client', read: false }).then((ids) => ids.length),
+    MagicPosterOrder.countDocuments({ paymentStatus: 'paid', status: 'pending' }),
   ]);
 
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -377,6 +379,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
     unreadMessages,
     openCardTickets,
     unreadChats,
+    pendingMagicPosterOrders,
   };
 
   // Revenue -- Admin Prime only (see models/Admin.js's role comment).
@@ -1747,6 +1750,75 @@ router.delete('/requests', requireAdmin, async (req, res) => {
 });
 
 // -----------------------------------------------------------------------
+// Magic Poster orders -- paid cart checkouts from the public Magic Poster
+// shop (see routes/profile.js's /magic-poster/order + /confirm). Only
+// paymentStatus 'paid' rows ever show here -- an 'unpaid' doc is just an
+// abandoned cart, not a real order worth admin's attention.
+// -----------------------------------------------------------------------
+
+// GET /api/admin/magic-poster-orders?status=pending
+// `startDate`/`endDate` (plain "YYYY-MM-DD", from a <input type="date">)
+// filter on createdAt, inclusive of the whole end day. `skip`/`limit`
+// page through the results 10-at-a-time-by-default ("Load more" on the
+// admin page) -- fetches one extra row past `limit` to cheaply know
+// `hasMore` without a separate count query, same trick as the client
+// dashboard's own GET /api/profile/magic-poster/orders.
+router.get('/magic-poster-orders', requireAdmin, async (req, res) => {
+  const filter = { paymentStatus: 'paid' };
+  if (req.query.status) filter.status = req.query.status;
+  if (req.query.startDate || req.query.endDate) {
+    filter.createdAt = {};
+    if (req.query.startDate) filter.createdAt.$gte = new Date(`${req.query.startDate}T00:00:00.000Z`);
+    if (req.query.endDate) filter.createdAt.$lte = new Date(`${req.query.endDate}T23:59:59.999Z`);
+  }
+
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
+  const skip = Math.max(0, parseInt(req.query.skip, 10) || 0);
+  const orders = await MagicPosterOrder.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit + 1);
+  const hasMore = orders.length > limit;
+  const page = orders.slice(0, limit);
+
+  const clientIds = [...new Set(page.map((o) => o.clientId))];
+  const clients = await Client.find({ clientId: { $in: clientIds } }).select('clientId fullName');
+  const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c.fullName]));
+
+  res.json({
+    orders: page.map((o) => ({ ...o.toObject(), clientName: clientMap[o.clientId] || '(deleted client)' })),
+    hasMore,
+  });
+});
+
+// PATCH /api/admin/magic-poster-orders/:id -- forward-only status move
+// (pending -> delivery -> completed). Moving to 'delivery' auto-generates
+// a tracking ID when the order doesn't already have one -- there's no
+// real courier integration behind this (unlike Card fulfillment's
+// admin-typed-in trackingId from an actual shipping provider), so asking
+// admin to make one up by hand on every order is pure friction. An
+// explicit `trackingId` in the body still wins, in case admin ever wants
+// to set a real one instead.
+router.patch('/magic-poster-orders/:id', requireAdmin, async (req, res) => {
+  try {
+    const { status, trackingId } = req.body;
+    if (!['pending', 'delivery', 'completed'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    const order = await MagicPosterOrder.findById(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    order.status = status;
+    if (trackingId !== undefined) {
+      order.trackingId = trackingId || null;
+    } else if (status === 'delivery' && !order.trackingId) {
+      order.trackingId = `MP${nanoid(10).toUpperCase()}`;
+    }
+    await order.save();
+    res.json(order);
+  } catch (err) {
+    console.error('[admin/magic-poster-orders PATCH]', err);
+    res.status(500).json({ error: 'Failed to update order' });
+  }
+});
+
+// -----------------------------------------------------------------------
 // Contact messages -- submissions from the public Contact Us page.
 // -----------------------------------------------------------------------
 
@@ -2099,6 +2171,8 @@ function serializeMagicArt(doc) {
     imageUrl: doc.imageUrl,
     imageWidth: doc.imageWidth,
     imageHeight: doc.imageHeight,
+    priceAmount: doc.priceAmount,
+    discountPriceAmount: doc.discountPriceAmount,
     overlays: (doc.overlays || []).map((o) => ({
       _id: o._id,
       label: o.label,
@@ -2146,6 +2220,12 @@ router.patch('/magic-art/:id', requireAdmin, async (req, res) => {
     if (!doc) return res.status(404).json({ error: 'Not found' });
     if (req.body.name !== undefined) doc.name = req.body.name;
     if (req.body.description !== undefined) doc.description = req.body.description;
+    if (req.body.priceAmount !== undefined) {
+      doc.priceAmount = req.body.priceAmount === '' || req.body.priceAmount === null ? null : Number(req.body.priceAmount);
+    }
+    if (req.body.discountPriceAmount !== undefined) {
+      doc.discountPriceAmount = req.body.discountPriceAmount === '' || req.body.discountPriceAmount === null ? null : Number(req.body.discountPriceAmount);
+    }
     doc.updatedBy = req.admin?.email || 'unknown';
     await doc.save();
     res.json(serializeMagicArt(doc));

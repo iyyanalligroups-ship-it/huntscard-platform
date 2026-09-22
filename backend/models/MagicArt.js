@@ -46,6 +46,14 @@ const magicArtSchema = new mongoose.Schema(
     // has been picked yet, MagicCamera.jsx falls back to every complete
     // pack so existing setups keep working unchanged.
     active: { type: Boolean, default: false },
+    // Selling price for the public Magic Poster shop -- same
+    // Number/whole-rupees/null-until-set convention as CardPlan's
+    // priceAmount (see utils/pricing.js). priceAmount is the real/MRP
+    // price; discountPriceAmount, when set, is what's actually charged
+    // (see getMagicArtChargeAmount). A piece with neither set just
+    // shows no buy button on the public page.
+    priceAmount: { type: Number, default: null },
+    discountPriceAmount: { type: Number, default: null },
     updatedBy: { type: String, trim: true },
   },
   { timestamps: true }

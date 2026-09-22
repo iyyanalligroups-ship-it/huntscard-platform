@@ -17,4 +17,14 @@ function getChargeAmount(plan) {
   return amount > 0 ? amount : null;
 }
 
-module.exports = { getChargeAmount };
+// Same idea as getChargeAmount above, for MagicArt's two price fields
+// instead of CardPlan's price/priceAmount pair. discountPriceAmount
+// (the actual selling price) wins when set; priceAmount (the real/MRP
+// price) is the fallback; null means "not for sale yet."
+function getMagicArtChargeAmount(art) {
+  if (art.discountPriceAmount > 0) return art.discountPriceAmount;
+  if (art.priceAmount > 0) return art.priceAmount;
+  return null;
+}
+
+module.exports = { getChargeAmount, getMagicArtChargeAmount };

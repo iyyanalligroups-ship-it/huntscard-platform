@@ -7,7 +7,7 @@ import { api, setSession } from '../api.js';
 // itself regardless of what this button shows.
 const OTP_RESEND_COOLDOWN_SECONDS = 45;
 
-export default function AuthModal({ mode: initialMode, onClose }) {
+export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
   const [loginMethod, setLoginMethod] = useState('password'); // 'password' | 'otp'
   const navigate = useNavigate();
@@ -83,7 +83,7 @@ export default function AuthModal({ mode: initialMode, onClose }) {
   function onSession(res) {
     setSession({ token: res.token, clientId: res.clientId });
     onClose();
-    navigate(res.mustChangePassword ? '/change-password' : '/');
+    navigate(res.mustChangePassword ? '/change-password' : redirectTo || '/');
   }
 
   async function handleLogin(e) {
@@ -159,7 +159,7 @@ export default function AuthModal({ mode: initialMode, onClose }) {
       });
       setSession({ token: res.token, clientId: res.clientId });
       onClose();
-      navigate('/dashboard');
+      navigate(redirectTo || '/dashboard');
     } catch (err) {
       setError(err.message);
     } finally {

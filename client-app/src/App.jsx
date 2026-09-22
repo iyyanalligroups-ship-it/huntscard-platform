@@ -22,6 +22,8 @@ import Contacts from './pages/Contacts.jsx';
 import Appointments from './pages/Appointments.jsx';
 import PublicProfile from './pages/PublicProfile.jsx';
 import MagicArt from './pages/MagicArt.jsx';
+import MagicPosterCart from './pages/MagicPosterCart.jsx';
+import MyMagicPosterOrders from './pages/MyMagicPosterOrders.jsx';
 import MagicBusinessCard from './pages/MagicBusinessCard.jsx';
 import Faq from './pages/Faq.jsx';
 import AboutUs from './pages/AboutUs.jsx';
@@ -110,6 +112,7 @@ export default function App() {
         <Route path="catalog" element={<Catalog />} />
         <Route path="contact" element={<ContactUs />} />
         <Route path="magic-art" element={<MagicArt />} />
+        <Route path="magic-poster-cart" element={<MagicPosterCart />} />
         <Route path="faq" element={<Faq />} />
         <Route path="about" element={<AboutUs />} />
         <Route path="huntsworld" element={<WhatIsHuntsworld />} />
@@ -195,6 +198,7 @@ export default function App() {
         <Route path="ar-layout" element={<ArLayout />} />
         <Route path="upgrade" element={<Shop />} />
         <Route path="track" element={<Track />} />
+        <Route path="magic-poster-orders" element={<MyMagicPosterOrders />} />
         <Route path="account-settings" element={<Settings />} />
         <Route path="contacts" element={<Contacts />} />
       </Route>

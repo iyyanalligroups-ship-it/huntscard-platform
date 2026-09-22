@@ -275,6 +275,36 @@ export const api = {
   createNewCardOrder: (payload) => request('/api/profile/new-card-order', { method: 'POST', body: payload }),
   confirmNewCardPayment: (payload) => request('/api/profile/new-card-confirm', { method: 'POST', body: payload }),
 
+  // Magic Poster cart checkout -- `items`: [{magicArtId, quantity}],
+  // `delivery`: {name, phone, line1, line2, country, state, city, pincode}.
+  createMagicPosterOrder: (items, delivery) =>
+    request('/api/profile/magic-poster/order', { method: 'POST', body: { items, delivery } }),
+  confirmMagicPosterPayment: (payload) => request('/api/profile/magic-poster/confirm', { method: 'POST', body: payload }),
+  // `opts`: { skip, limit } for the paginated browse, or { trackingId }
+  // for a direct search -- see routes/profile.js's own comment. Returns
+  // { orders, hasMore }.
+  listMyMagicPosterOrders: (opts = {}) => {
+    const params = new URLSearchParams();
+    if (opts.trackingId) params.set('trackingId', opts.trackingId);
+    if (opts.skip) params.set('skip', opts.skip);
+    if (opts.limit) params.set('limit', opts.limit);
+    const qs = params.toString();
+    return request(`/api/profile/magic-poster/orders${qs ? `?${qs}` : ''}`);
+  },
+
+  // Saved delivery addresses -- the Magic Poster checkout's address book.
+  listAddresses: () => request('/api/profile/addresses'),
+  createAddress: (payload) => request('/api/profile/addresses', { method: 'POST', body: payload }),
+  updateAddress: (id, payload) => request(`/api/profile/addresses/${id}`, { method: 'PATCH', body: payload }),
+  deleteAddress: (id) => request(`/api/profile/addresses/${id}`, { method: 'DELETE' }),
+
+  // Country/state/city reference data for the address form's cascading
+  // dropdowns -- no login needed, it's just static reference data.
+  getCountries: () => request('/api/public/geo/countries', { auth: false }),
+  getStates: (country) => request(`/api/public/geo/states?country=${encodeURIComponent(country)}`, { auth: false }),
+  getCities: (country, state) =>
+    request(`/api/public/geo/cities?country=${encodeURIComponent(country)}&state=${encodeURIComponent(state)}`, { auth: false }),
+
   // Public shop -- no login required, this IS how a new visitor gets an account
   listShopPlans: () => request('/api/public/plans', { auth: false }),
   createShopOrder: (payload) => request('/api/public/shop-order', { method: 'POST', body: payload, auth: false }),

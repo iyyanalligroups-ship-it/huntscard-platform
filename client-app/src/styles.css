@@ -318,6 +318,75 @@ input, select, textarea {
   transition: border-color 0.15s;
 }
 textarea { resize: vertical; min-height: 72px; }
+/* The width:100%/padding/background rule above targets text-style inputs
+   -- a radio/checkbox isn't one, but without this override it inherits
+   that same width:100% + 12px/13px padding, stretching its native circle/
+   box across the whole flex row (see MagicPosterCart.jsx's address-picker
+   radios, where this showed up as a huge gap before the label text). */
+input[type='radio'],
+input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  padding: 0;
+  background: none;
+  border: none;
+}
+
+/* Themed Country/State/City dropdown (see components/GeoSelect.jsx) --
+   its own panel + option list instead of a native <select>'s OS-rendered
+   popup, so it actually matches the app's dark theme. */
+.geo-select { position: relative; }
+.geo-select-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-border);
+  border-radius: 9px;
+  padding: 12px 13px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  text-align: left;
+}
+.geo-select-trigger:disabled { opacity: 0.5; cursor: not-allowed; }
+.geo-select-placeholder { color: var(--text-dim); }
+.geo-select-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: var(--panel);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--panel-border);
+  border-radius: 9px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.geo-select-search {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--panel-border);
+  border-radius: 0;
+  background: transparent;
+  font-size: 14px;
+}
+.geo-select-list { max-height: 220px; overflow-y: auto; }
+.geo-select-option {
+  padding: 9px 13px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.geo-select-option:hover { background: rgba(255, 255, 255, 0.06); }
+.geo-select-option.selected { background: rgba(139, 92, 246, 0.18); font-weight: 600; }
+.geo-select-empty { padding: 9px 13px; font-size: 13px; color: var(--text-dim); }
 /* A <select>'s OPEN dropdown list is rendered by the OS/browser, not by
    the CSS above -- Chrome/Edge on Windows popped it with a plain white
    background while still inheriting this dark theme's white `color`,

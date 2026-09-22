@@ -1,15 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, clearSession, isLoggedIn } from '../api.js';
+import { useCart } from '../cart.jsx';
 import AuthModal from './AuthModal.jsx';
 import NotificationBell from './NotificationBell.jsx';
 import Footer from './Footer.jsx';
 
 export default function PublicLayout() {
   const loggedIn = isLoggedIn();
+  const cart = useCart();
   const navigate = useNavigate();
   const location = useLocation();
   const [authMode, setAuthMode] = useState(null); // 'login' | 'register' | null
+  // Where to send the visitor back to after a successful login/register
+  // triggered from a child page (e.g. MagicPosterCart's login gate) --
+  // null keeps the default '/'/'/dashboard' AuthModal already used.
+  const [authRedirect, setAuthRedirect] = useState(null);
+  function openAuth(mode, redirectTo = null) {
+    setAuthMode(mode);
+    setAuthRedirect(redirectTo);
+  }
   const [menuOpen, setMenuOpen] = useState(false);
   // Same admin-toggled setting HomeSwitch reads for which hero to render
   // -- here it adds/removes .theme-orange on the header and (via a prop)
@@ -113,6 +123,26 @@ export default function PublicLayout() {
               ))}
             </nav>
             <div className="nav-actions">
+              <NavLink to="/magic-poster-cart" onClick={() => setMenuOpen(false)} className="pill-outline" style={{ position: 'relative' }}>
+                🛒
+                {cart.totalCount > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: -6,
+                      right: -6,
+                      background: 'var(--holo-gradient)',
+                      color: '#fff',
+                      fontSize: 10,
+                      fontWeight: 700,
+                      borderRadius: 999,
+                      padding: '1px 5px',
+                    }}
+                  >
+                    {cart.totalCount}
+                  </span>
+                )}
+              </NavLink>
               {loggedIn && <NotificationBell />}
               <span className="status-indicator">
                 <span className="status-dot" />
@@ -125,7 +155,7 @@ export default function PublicLayout() {
                   </button>
                 ) : (
                   <>
-                    <button className="pill-outline" onClick={() => setAuthMode('login')}>
+                    <button className="pill-outline" onClick={() => openAuth('login')}>
                       Log in
                     </button>
                     <button
@@ -135,7 +165,7 @@ export default function PublicLayout() {
                         color: homeTheme === 'orange' ? '#1a0e04' : '#06120f',
                         border: 'none',
                       }}
-                      onClick={() => setAuthMode('register')}
+                      onClick={() => openAuth('register')}
                     >
                       Register
                     </button>
@@ -162,12 +192,21 @@ export default function PublicLayout() {
       </header>
 
       <main className="public-page-shell">
-        <Outlet />
+        <Outlet context={{ openLogin: (redirectTo) => openAuth('login', redirectTo) }} />
       </main>
 
       <Footer homeTheme={homeTheme} />
 
-      {authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} />}
+      {authMode && (
+        <AuthModal
+          mode={authMode}
+          redirectTo={authRedirect}
+          onClose={() => {
+            setAuthMode(null);
+            setAuthRedirect(null);
+          }}
+        />
+      )}
     </div>
   );
 }
