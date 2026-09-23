@@ -588,8 +588,18 @@ export default function MagicCamera() {
         // target pose; subsequent frames lerp toward it in renderLoop.
         // targetMatrix: stores the latest raw tracker pose so the 60fps
         // renderLoop can glide the display toward it independently of the
-        // ~30fps tracker cadence.
-        return { anchorGroup, postMatrix: new THREE.Matrix4(), videoEls: [], initialized: false, targetMatrix: new THREE.Matrix4(), modelMixer: null };
+        // ~30fps tracker cadence. stuckFrames: consecutive render frames
+        // an implausible jump has been rejected for -- see
+        // MAX_CONSECUTIVE_REJECTS below.
+        return {
+          anchorGroup,
+          postMatrix: new THREE.Matrix4(),
+          videoEls: [],
+          initialized: false,
+          targetMatrix: new THREE.Matrix4(),
+          modelMixer: null,
+          stuckFrames: 0,
+        };
       });
 
       // Reusable decomposition objects for the 60fps lerp in renderLoop.
@@ -633,10 +643,28 @@ export default function MagicCamera() {
       // just above the tighter threshold, pushing ordinary hand-shake
       // into the "real motion" branch instead of the noise-damping one.
       const JITTER_TRANSLATION_THRESHOLD = 0.015;
-      // 0.15, not 0.2 -- tightened alongside POSE_SMOOTHING_MAX so more
-      // of a genuinely bad single-frame read (not real card movement)
-      // gets caught by the bad-read hold below instead of blended in.
-      const MAX_PLAUSIBLE_JUMP = 0.15;
+      // 0.35, not 0.15 -- at normal handheld viewing distance a card
+      // fills enough of the frame that even an ordinary (not fast/
+      // aggressive) repositioning easily moves it more than 0.15
+      // card-widths between renders, which was getting flagged as
+      // implausible for completely everyday movement, not just real bad
+      // reads. Since _cPos here only moves when a jump is accepted, a
+      // rejected frame leaves it frozen while the card keeps moving --
+      // the NEXT frame's jumpDist is then even bigger and fails the same
+      // check again, cascading into a display that stops following the
+      // card at all rather than a brief one-frame hiccup. See
+      // MAX_CONSECUTIVE_REJECTS below for the other half of this fix --
+      // raising this threshold alone only delays when the cascade can
+      // start, it doesn't make the system unable to get stuck.
+      const MAX_PLAUSIBLE_JUMP = 0.35;
+      // How many render frames in a row an implausible jump can be held
+      // for before forcibly blending toward the latest reading anyway
+      // (still through the normal alpha blend below, not an instant
+      // teleport) -- guarantees this self-heals within ~6 frames
+      // (~100ms at 60fps) no matter how far/fast the card actually moved,
+      // instead of waiting indefinitely for it to coincidentally drift
+      // back within MAX_PLAUSIBLE_JUMP of wherever the display got stuck.
+      const MAX_CONSECUTIVE_REJECTS = 6;
       const foundFlags = targets.map(() => false);
 
       const controller = new Controller({
@@ -853,7 +881,16 @@ export default function MagicCamera() {
             entry.targetMatrix.decompose(_tPos, _tQuat, _tScale);
             entry.anchorGroup.matrix.decompose(_cPos, _cQuat, _cScale);
             const jumpDist = _cPos.distanceTo(_tPos);
-            if (jumpDist <= MAX_PLAUSIBLE_JUMP) {
+            const implausible = jumpDist > MAX_PLAUSIBLE_JUMP;
+            if (implausible && entry.stuckFrames < MAX_CONSECUTIVE_REJECTS) {
+              // Implausible one-frame jump -- hold the last good pose,
+              // let the next frame confirm before following it. Only up
+              // to MAX_CONSECUTIVE_REJECTS frames in a row, though -- see
+              // that constant's own comment for why this can't just keep
+              // rejecting forever.
+              entry.stuckFrames++;
+            } else {
+              entry.stuckFrames = 0;
               const alpha =
                 jumpDist <= JITTER_TRANSLATION_THRESHOLD
                   ? POSE_SMOOTHING_MIN
@@ -869,8 +906,6 @@ export default function MagicCamera() {
               _cScale.lerp(_tScale, alpha);
               entry.anchorGroup.matrix.compose(_cPos, _cQuat, _cScale);
             }
-            // else: implausible one-frame jump -- hold the last good pose,
-            // let the next frame confirm before following it.
           }
           entry.modelMixer?.update(modelDelta);
         });

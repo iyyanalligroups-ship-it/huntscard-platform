@@ -232,13 +232,31 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
     // thresholds, since this engine tracks the whole card rather than
     // just the QR corner. Starting points; may need real-device tuning.
     const JITTER_TRANSLATION_THRESHOLD = 0.01; // below this frame-to-frame move = sub-pixel detection noise
-    const MAX_PLAUSIBLE_JUMP = 0.15; // above this in one update = a bad read (motion blur/occlusion), not real movement
+    // 0.35, not 0.15 -- at normal handheld viewing distance a card fills
+    // enough of the frame that even an ordinary (not fast/aggressive)
+    // repositioning easily moves it more than 0.15 card-widths in one
+    // ~33ms tracker update, which was getting flagged as "implausible"
+    // for completely everyday movement, not just real bad reads.
+    const MAX_PLAUSIBLE_JUMP = 0.35; // above this in one update = a bad read (motion blur/occlusion), not real movement
     const MIN_PLAUSIBLE_ROTATION_SIMILARITY = 0.5; // |quat dot| below this = a >~120 degree flip in one update -- also a bad read
+    // A rejected update freezes smoothedPos in place while the card keeps
+    // moving -- rawPos on the NEXT update is then even further away, so
+    // it fails the same check again, and again, for as long as the card
+    // keeps moving in that direction. Without a way out, that's a
+    // permanent freeze, not a brief hiccup: the content stops following
+    // the card entirely until it happens to drift back within
+    // MAX_PLAUSIBLE_JUMP of wherever the display got stuck. Capping how
+    // many REAL rejections in a row are tolerated before forcibly
+    // accepting the latest reading anyway (still through the normal
+    // blend, not an instant teleport) guarantees it self-heals within a
+    // bounded number of updates regardless of how fast the card moves.
+    const MAX_CONSECUTIVE_REJECTS = 3;
 
     let smoothedPos = null; // THREE.Vector3 | null -- null means "no confirmed pose yet"
     let smoothedQuat = null;
     let smoothedScale = null;
     let lastSeenAt = 0;
+    let consecutiveRejects = 0;
     const rawMatrix = new THREE.Matrix4();
     const rawPos = new THREE.Vector3();
     const rawQuat = new THREE.Quaternion();
@@ -272,13 +290,19 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
         if (smoothedPos) {
           const jumpDist = smoothedPos.distanceTo(rawPos);
           const rotationSimilarity = Math.abs(smoothedQuat.dot(rawQuat));
-          if (jumpDist > MAX_PLAUSIBLE_JUMP || rotationSimilarity < MIN_PLAUSIBLE_ROTATION_SIMILARITY) {
+          const implausible = jumpDist > MAX_PLAUSIBLE_JUMP || rotationSimilarity < MIN_PLAUSIBLE_ROTATION_SIMILARITY;
+          if (implausible && consecutiveRejects < MAX_CONSECUTIVE_REJECTS) {
             // Implausible one-update jump -- freeze on the last good
             // pose rather than snap to a probably-bad reading; the next
             // update gets another chance to confirm before anything moves.
+            // Only up to MAX_CONSECUTIVE_REJECTS times in a row, though --
+            // see that constant's own comment for why this can't just
+            // keep rejecting forever.
+            consecutiveRejects++;
             lastSeenAt = performance.now();
             return;
           }
+          consecutiveRejects = 0;
           const t = Math.min(1, jumpDist / JITTER_TRANSLATION_THRESHOLD);
           const alpha = POSE_SMOOTHING_MIN + (POSE_SMOOTHING_MAX - POSE_SMOOTHING_MIN) * t;
           smoothedPos.lerp(rawPos, alpha);
@@ -429,6 +453,7 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
         smoothedPos = null;
         smoothedQuat = null;
         smoothedScale = null;
+        consecutiveRejects = 0;
       }
 
       mixerRef.current?.update(clock.getDelta());
