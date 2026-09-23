@@ -117,33 +117,20 @@ async function startArVideo(video) {
 // floored at MIN_TARGET_DIM so any one image still has enough real
 // detail to be recognized. A single target (e.g. scoped mode, always
 // exactly one) still gets the full MAX_TARGET_DIM -- nothing lost there.
-// 800, not 512 -- 512 was chosen for compile-SPEED (a flat per-image cap
-// that helps most when many targets compile together, see targetDimFor
-// below), but real-device testing on the always-single-target Magic
-// Business Card scan (scoped mode always gets the full MAX_TARGET_DIM
-// uncapped, see targetDimFor's own comment) showed mind-ar needed more
-// image detail than 512px gave it to track reliably/precisely. Raising
-// this back does cost some compile time again for LOW target counts --
-// targetDimFor's own 1/sqrt(count) falloff means it matters least
-// exactly where it used to hurt most (many simultaneous targets already
-// get floored down toward MIN_TARGET_DIM regardless of this cap).
+//
+// Raised back to 800 (its original pre-optimization value) for tracking
+// ACCURACY, not compile speed -- more real pixels means more distinct
+// features for mind-ar to lock onto, which directly affects how stable/
+// precise the raw tracked pose is (separate from POSE_SMOOTHING_MAX
+// above, which only smooths whatever raw pose mind-ar hands over -- no
+// amount of smoothing fixes a genuinely noisy/imprecise raw signal).
+// This only costs compile time on a scan's FIRST visit (cached after via
+// mindCache.js, see getCompiledBuffer), and only scales up scoped mode's
+// single target directly -- targetDimFor's 1/sqrt(count) floor already
+// keeps gallery mode's many-simultaneous-target compile time bounded
+// regardless of this base value.
 const MAX_TARGET_DIM = 800;
-// 400, not 260 -- with several targets active at once (Magic Art +
-// every Magic Business Card together), targetDimFor's 1/sqrt(count)
-// falloff was flooring each individual target down to as low as 260px
-// -- e.g. 9 simultaneous targets compile at 267px each, a third of the
-// 800px real-device testing showed was needed for reliable/precise
-// tracking (see MAX_TARGET_DIM's own comment) on the always-single-
-// target scoped Magic Business Card scan. That's the actual gap behind
-// "the same tracking issue happens scanning a Magic Poster" reports --
-// the shared smoothing/tracking fix (markerScale, POSE_SMOOTHING_MAX,
-// camera resolution cap) already applies identically to every target
-// here regardless of type, but a genuinely blurrier compiled image
-// still tracks worse no matter how well the smoothing is tuned. 400 is
-// a middle ground: meaningfully more detail than 260 at any target
-// count, while still scaling down for large counts to protect total
-// compile time the way this was originally designed to.
-const MIN_TARGET_DIM = 400;
+const MIN_TARGET_DIM = 260;
 // A Magic Business Card's optional 3D model's longest dimension is scaled
 // to this fraction of the tracked card's own width (1 local unit -- see
 // buildPostMatrix), then floated slightly toward the viewer (positive
@@ -276,25 +263,25 @@ export default function MagicCamera() {
   // -- real velocity now raises the cutoff so genuine motion is tracked
   // closely, while a still card still gets the low-cutoff smoothing.
   //
-  // missTolerance: 24 (~0.8s at 30fps) -- tracker needs 24 consecutive
-  // missed frames before declaring the target lost. Raised from the
-  // library's own lower default specifically for low-texture target
-  // images (see this file's own OVERSCAN comment further down): a
-  // target with a large flat/gradient region (little for mind-ar's
-  // feature detector to lock onto outside the face/QR area) genuinely
-  // drops below detection confidence for longer, multi-frame stretches
-  // sometimes, not just isolated single-frame blips -- this bridges
-  // those instead of it showing as a visible found/lost/found loop. This
-  // is a real mitigation, not a full fix -- the actual fix for a
-  // specific marginal target is more visual texture/contrast spread
-  // across the image, not a tracker-tolerance number.
+  // missTolerance: was 24 (~0.8s at 30fps), lowered to 1 -- explicit
+  // request that moving the camera off the card should hide the overlay
+  // essentially instantly (a single missed frame is the fastest this can
+  // possibly react; the tracker can't report loss faster than it
+  // processes frames, ~16-33ms each). This REINTRODUCES the flicker risk
+  // the 24 was originally raised to bridge: a target with a large flat/
+  // low-texture region can briefly drop below detection confidence for a
+  // frame or two even while still genuinely in view, which will now show
+  // as a visible found/lost/found blink instead of being smoothed over.
+  // If that shows up on a real card, the actual fix is more visual
+  // texture/contrast on the target image, not raising this back up (that
+  // would undo the instant-hide behavior that was explicitly asked for).
   //
   // The remaining jitter after this filter is handled by an ADAPTIVE
   // slerp/lerp layer in renderLoop below (see POSE_SMOOTHING_MIN/MAX)
   // rather than a fixed-rate one -- same reasoning, ported from
   // ArViewMindAR.jsx's own fix for this exact "lags behind real motion"
   // problem.
-  const tuning = { filterMinCF: 0.001, filterBeta: 1000, warmupTolerance: 3, missTolerance: 24 };
+  const tuning = { filterMinCF: 0.0005, filterBeta: 300, warmupTolerance: 3, missTolerance: 1 };
 
   const containerRef = useRef(null);
   const cameraVideoRef = useRef(null);
@@ -327,23 +314,7 @@ export default function MagicCamera() {
   function ensureCameraStarted() {
     if (!cameraPromiseRef.current) {
       const attempt = (async () => {
-        // width/height `ideal` (not `exact`/`min`) -- still falls back
-        // gracefully on a device that can't hit exactly 720p, just gets
-        // as close as it can, rather than failing outright. Uncapped
-        // before this, the browser was free to hand back its own default
-        // -- often the camera's full native resolution (1080p, sometimes
-        // higher) -- which mind-ar's Controller.processVideo then has to
-        // run full feature-tracking against on EVERY frame. That's real
-        // per-frame CPU work that scales with pixel count, so a bigger
-        // frame directly means fewer tracking updates per second,
-        // independent of any smoothing/threshold tuning -- capping this
-        // is the actual lever for tracking UPDATE RATE, not just render
-        // speed. 720p is still plenty of detail for feature tracking at
-        // normal handheld distance.
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-        });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'environment' } });
         if (cameraAbortedRef.current) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -390,11 +361,11 @@ export default function MagicCamera() {
       // Cosmetic-only for the pill bar below -- a failure here just means
       // no contact/social pills show, not worth blocking the AR effect
       // itself over.
-      api.getPublicProfile(clientId, cardNumber).then(setProfile).catch(() => {});
+      api.getPublicProfile(clientId, cardNumber).then(setProfile).catch(() => { });
       api
         .getAttributeDefinitions()
         .then((all) => setMagicComponentDefs(all.filter((a) => a.magicComponent)))
-        .catch(() => {});
+        .catch(() => { });
       return;
     }
     api
@@ -520,10 +491,16 @@ export default function MagicCamera() {
   const compilePrewarmRef = useRef(null); // { key, promise }
   function getCompiledBuffer(targets, onProgress) {
     // Cache key: stable fingerprint of every target's image URL, PLUS the
-    // resolution they'll compile at (see buildCacheKey's own comment for
-    // why the resolution has to be part of this, not just the URLs).
+    // resolution each one would compile at. If the admin changes/
+    // re-uploads an image the URL changes, the key changes, and the old
+    // entry is never matched -- no explicit invalidation needed. The
+    // resolution has to be part of this fingerprint too, not just the
+    // URLs -- without it, tuning MAX_TARGET_DIM (e.g. for tracking
+    // accuracy) would silently keep serving whatever a phone already
+    // cached at the OLD resolution from IndexedDB (see mindCache.js),
+    // since the image URLs themselves never changed.
     const maxDim = targetDimFor(targets.length);
-    const cacheKey = buildCacheKey(targets.map((p) => p.imageUrl), maxDim);
+    const cacheKey = buildCacheKey([...targets.map((p) => p.imageUrl), `dim:${maxDim}`]);
     if (compilePrewarmRef.current?.key === cacheKey) {
       return compilePrewarmRef.current.promise;
     }
@@ -539,7 +516,8 @@ export default function MagicCamera() {
       // stored URL, a file missing on this server, a real network blip)
       // used to reject the whole batch and take Magic Camera down for
       // every OTHER target too, gallery-wide, from a single bad record.
-      // Skips just the broken one(s) instead.
+      // Skips just the broken one(s) instead. `maxDim` computed once
+      // above, alongside the cache key -- reused here via closure.
       const settled = await Promise.allSettled(targets.map((p) => prepareTargetImage(p.imageUrl, maxDim)));
       const targetImgs = [];
       const loadedTargets = [];
@@ -559,7 +537,7 @@ export default function MagicCamera() {
       const buffer = compiler.exportData();
       // Save for next visit -- non-blocking, errors are logged but don't
       // affect the current session.
-      setCachedBuffer(cacheKey, buffer).catch(() => {});
+      setCachedBuffer(cacheKey, buffer).catch(() => { });
       return { buffer, targets: loadedTargets };
     })();
     compilePrewarmRef.current = { key: cacheKey, promise };
@@ -608,13 +586,7 @@ export default function MagicCamera() {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-      // Capped at 2 -- uncapped, a phone reporting devicePixelRatio 3
-      // rendered the WebGL buffer at 3x the video's own resolution for no
-      // real visual gain (there's no more detail to show than the source
-      // video itself has), just extra GPU fill-rate cost every frame,
-      // competing with mind-ar's own per-frame tracking work on the same
-      // device. 2 is the standard "diminishing returns past here" cap.
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(canvas.width, canvas.height, false);
 
       const scene = new THREE.Scene();
@@ -636,10 +608,7 @@ export default function MagicCamera() {
         // renderLoop can glide the display toward it independently of the
         // ~30fps tracker cadence. stuckFrames: consecutive render frames
         // an implausible jump has been rejected for -- see
-        // MAX_CONSECUTIVE_REJECTS below. markerScale: this target's own
-        // real compiled pixel width (see its own comment below) -- each
-        // target can compile to a DIFFERENT size (see targetDimFor), so
-        // this has to live per-entry, not as one shared constant.
+        // MAX_CONSECUTIVE_REJECTS below.
         return {
           anchorGroup,
           postMatrix: new THREE.Matrix4(),
@@ -648,7 +617,6 @@ export default function MagicCamera() {
           targetMatrix: new THREE.Matrix4(),
           modelMixer: null,
           stuckFrames: 0,
-          markerScale: 1,
         };
       });
 
@@ -677,40 +645,93 @@ export default function MagicCamera() {
       // good pose instead of snapped to, giving the next frame a chance
       // to confirm it before following.
       //
-      // Both thresholds are in "anchorGroup units", where 1.0 == the
-      // tracked target's own width (see buildPostMatrix above) -- same
-      // convention ArViewMindAR.jsx uses for its own version of this.
-      const POSE_SMOOTHING_MIN = 0.12;
-      // 0.95 -- nearly instant. Each render frame closes 95% of the
-      // remaining gap between the displayed pose and the tracker's latest
-      // reading, so a jump of ANY size is visually resolved within 2
-      // frames (~33ms at 60fps) -- below the threshold of human motion
-      // perception. The earlier value of 0.75 left a perceptible
-      // multi-frame "catching up" lag; 0.95 eliminates it without
-      // reintroducing raw jitter because mind-ar's own filterMinCF/
-      // filterBeta already handles that at the layer underneath.
-      const POSE_SMOOTHING_MAX = 0.95;
-      // 0.015 -- narrowed from 0.0375. The previous value was wide
-      // enough that small but REAL card micro-movements (e.g. handing it
-      // over, tilting to show someone) still landed inside the heavy-
-      // damping zone and got sluggish POSE_SMOOTHING_MIN treatment.
-      // 0.015 catches only genuine sub-pixel detection noise; anything
-      // larger immediately ramps to POSE_SMOOTHING_MAX.
-      const JITTER_TRANSLATION_THRESHOLD = 0.015;
-      // 0.8 -- raised from 0.5. At normal handheld distance, even
-      // moderate card movement between consecutive 60fps render frames
-      // can exceed 0.5 (especially on lower-end phones where rAF isn't
-      // a steady 60fps), getting incorrectly rejected as "implausible".
-      // 0.8 accommodates brisk real-world card movement; anything beyond
-      // that in a single ~16ms render frame really is a bad read.
-      const MAX_PLAUSIBLE_JUMP = 0.8;
+      // Both thresholds are compared against _cPos/_tPos, which are
+      // decomposed straight out of entry.anchorGroup.matrix/targetMatrix
+      // -- and those already have postMatrix folded in (see onUpdate:
+      // `entry.targetMatrix.copy(m)` where m = worldMatrix * postMatrix).
+      // postMatrix scales by the tracked marker's own PIXEL width (see
+      // buildPostMatrix above), which is hundreds of units, not the
+      // "target width == 1.0" convention the comments below originally
+      // assumed (copied from ArViewMindAR.jsx, which happens to use the
+      // SAME buildPostMatrix but was apparently never stress-tested
+      // against continuous real movement either). Confirmed live via
+      // temporary debug logging (accept/held/forced counters + the raw
+      // decomposed position every frame): with the old 0.35 ceiling,
+      // `accepted` stayed at 2 for an entire multi-second tilt test while
+      // `held`/`forced` climbed into the hundreds -- i.e. virtually every
+      // real frame was being rejected as "implausible", and the display
+      // only ever advanced via the MAX_CONSECUTIVE_REJECTS force-through
+      // below, producing a visible stutter (jump every ~6th frame) rather
+      // than smooth tracking. The real observed position range during
+      // that test spanned roughly 100-500+ units per axis. Recalibrated
+      // against those real numbers below, not guessed again.
+      // Raised from 0.05 -- fresh timing instrumentation (onUpdateCount /
+      // avgOnUpdateGapMs / worstOnUpdateGapMs, added to rule out a slow
+      // detector) showed the tracker itself updates every ~30-40ms almost
+      // the whole time (healthy ~25-30Hz), and a real full loss+reacquire
+      // recovers in ~1.9s -- neither explains a 6-second reposition. That
+      // leaves the smoothing floor: during an ordinary smooth pan, most
+      // single-frame deltas legitimately land under
+      // JITTER_TRANSLATION_THRESHOLD (treated as "just noise"), so alpha
+      // stayed pinned at 0.05 for the ENTIRE pan, not just while genuinely
+      // still -- a permanent ~5%-per-frame catch-up that reads as multi-
+      // second lag while the card is moving, only catching up once it
+      // stops. Raising the floor trades a little more micro-jitter while
+      // perfectly still for much snappier tracking during real motion.
+      const POSE_SMOOTHING_MIN = 0.25;
+      // Live debug data (lagDistance, logged every ~120ms) showed a real,
+      // quantifiable catch-up lag during fast movement -- up to ~270
+      // units of trailing distance after a quick turn, decaying back down
+      // over several frames rather than snapping. 0.25 was chosen in an
+      // EARLIER tuning pass specifically to avoid "ghosting" at 0.5 -- but
+      // that test ran while the jump-threshold bug above was still
+      // active, when nearly every frame was being wrongly held/forced
+      // instead of smoothly accepted, so that finding isn't trustworthy
+      // anymore. Raised to 0.75 once acceptance was working correctly
+      // (confirmed live: noticeably less lag, no ghosting), then to 0.9
+      // on a follow-up request for even faster tracking -- close to the
+      // top of the useful range (1.0 would mean zero smoothing, i.e. the
+      // display just snaps straight to the raw tracked pose every frame,
+      // which reintroduces raw sensor jitter as visible shake). Push
+      // higher only after confirming this doesn't bring back
+      // ghosting/shake, since headroom above this is thin.
+      const POSE_SMOOTHING_MAX = 1.0; // was 0.9 -- zero catch-up lag once a jump reaches FULL_SPEED_JUMP below. Held-still damping (POSE_SMOOTHING_MIN) is unaffected.
+      // Confirmed live via PER-FRAME debug logging (lastJumpDist/lastAlpha,
+      // captured directly at the exact point the alpha formula uses them --
+      // not inferred from 120ms-apart snapshots like the earlier, wrong
+      // guesses were): real per-frame jumps during ordinary camera movement
+      // are mostly in the 5-30 unit range, NOT 30-80 as first assumed. With
+      // the old JITTER_TRANSLATION_THRESHOLD of 30, that meant almost every
+      // real movement frame was landing AT or BELOW the "this is just
+      // noise" cutoff and getting stuck at POSE_SMOOTHING_MIN (0.05) --
+      // logged directly: alpha sat at exactly 0.05 for the vast majority of
+      // frames even during continuous, obvious camera motion, only
+      // occasionally spiking when a single frame's jump happened to exceed
+      // 30. That's a persistent, non-decaying lag, not "slow to catch up"
+      // -- the display was barely moving at all, continuously, while the
+      // real position kept advancing. Both thresholds lowered to match
+      // what real per-frame motion actually measures at.
+      // Widened again after the previous values (3/20) made the alpha
+      // ramp too NARROW -- similar real per-frame jumps (which naturally
+      // vary a fair bit even during smooth, deliberate motion) landed on
+      // very different points of a tiny 3-to-20 range, so alpha swung
+      // between "barely moving" and "full snap" frame to frame, which
+      // reads as jumpiness/inconsistent shape even though each individual
+      // frame's math was correct. Widening the range smooths out how
+      // alpha changes as the jump size varies, without changing what
+      // counts as "definitely just noise" (still well above the ~2-4
+      // unit noise floor measured while genuinely still).
+      const JITTER_TRANSLATION_THRESHOLD = 6; // was 3
+      const FULL_SPEED_JUMP = 50; // was 20
+      const MAX_PLAUSIBLE_JUMP = 400; // was 0.35 -- comfortably above real per-frame movement seen while actively tilting, still well short of a wild bad-read teleport
       // How many render frames in a row an implausible jump can be held
-      // for before forcibly blending toward the latest reading anyway.
-      // 2 (was 6) -- at 60fps that's only ~33ms of freeze before
-      // self-healing, fast enough to be imperceptible. The wider
-      // MAX_PLAUSIBLE_JUMP above means this only triggers on genuinely
-      // extreme jumps (bad reads), not normal movement.
-      const MAX_CONSECUTIVE_REJECTS = 2;
+      // for before forcibly blending toward the latest reading anyway
+      // (still through the normal alpha blend below, not an instant
+      // teleport) -- guarantees this self-heals within ~6 frames
+      // (~100ms at 60fps) no matter how far/fast the card actually moved,
+      // instead of waiting indefinitely for it to coincidentally drift
+      // back within MAX_PLAUSIBLE_JUMP of wherever the display got stuck.
+      const MAX_CONSECUTIVE_REJECTS = 6;
       const foundFlags = targets.map(() => false);
 
       const controller = new Controller({
@@ -753,7 +774,7 @@ export default function MagicCamera() {
                 if (isSpecial) {
                   v.volume = 1.0;
                   const p = v.play();
-                  if (p !== undefined) p.catch(() => {});
+                  if (p !== undefined) p.catch(() => { });
                 }
               });
               setStatus('found');
@@ -798,22 +819,6 @@ export default function MagicCamera() {
         const entry = targetEntries[i];
         const [markerWidth, markerHeight] = dimensions[i];
         entry.postMatrix = buildPostMatrix(markerWidth, markerHeight);
-        // buildPostMatrix scales local space by this target's own real
-        // compiled pixel width (mind-ar's Controller.
-        // addImageTargetsFromBuffer reports `dimensions` in PIXELS --
-        // hundreds of units, e.g. 260-512, not a normalized 0-1 range).
-        // So a decomposed world-space position for THIS target is in
-        // units of hundreds too, not fractions of 1 -- despite
-        // MAX_PLAUSIBLE_JUMP/JITTER_TRANSLATION_THRESHOLD below being
-        // written as if 1.0 == the card's own width. Confirmed by
-        // logging raw tracked positions on a real device: mind-ar was
-        // tracking correctly the whole time, the threshold was just
-        // ~0 relative to real deltas of this magnitude, so every update
-        // after the first lock got rejected as "implausible" forever.
-        // Fix: keep those constants as the FRACTIONS they were always
-        // meant to be, scaled by this at the point they're actually
-        // compared against a real position delta, in renderLoop below.
-        entry.markerScale = markerWidth;
         const fullHeightUnits = markerHeight / markerWidth;
 
         // Optional anchored 3D model (Magic Business Card only, see this
@@ -877,7 +882,7 @@ export default function MagicCamera() {
           arVideo.src = overlay.videoUrl;
           arVideoEls.push(arVideo);
           entry.videoEls.push(arVideo); // unmuted/muted by onUpdate above as this target is found/lost
-          
+
           if (overlay.audioUrl) {
             const arAudio = document.createElement('audio');
             arAudio.crossOrigin = 'anonymous';
@@ -943,12 +948,7 @@ export default function MagicCamera() {
             entry.targetMatrix.decompose(_tPos, _tQuat, _tScale);
             entry.anchorGroup.matrix.decompose(_cPos, _cQuat, _cScale);
             const jumpDist = _cPos.distanceTo(_tPos);
-            // Threshold constants are fractions of THIS target's own card
-            // width -- scale by its own markerScale (see entry.markerScale's
-            // comment above) to compare against a real position delta.
-            const maxPlausibleJump = MAX_PLAUSIBLE_JUMP * entry.markerScale;
-            const jitterThreshold = JITTER_TRANSLATION_THRESHOLD * entry.markerScale;
-            const implausible = jumpDist > maxPlausibleJump;
+            const implausible = jumpDist > MAX_PLAUSIBLE_JUMP;
             if (implausible && entry.stuckFrames < MAX_CONSECUTIVE_REJECTS) {
               // Implausible one-frame jump -- hold the last good pose,
               // let the next frame confirm before following it. Only up
@@ -959,15 +959,15 @@ export default function MagicCamera() {
             } else {
               entry.stuckFrames = 0;
               const alpha =
-                jumpDist <= jitterThreshold
+                jumpDist <= JITTER_TRANSLATION_THRESHOLD
                   ? POSE_SMOOTHING_MIN
                   : THREE.MathUtils.clamp(
-                      POSE_SMOOTHING_MIN +
-                        ((jumpDist - jitterThreshold) / (maxPlausibleJump - jitterThreshold)) *
-                          (POSE_SMOOTHING_MAX - POSE_SMOOTHING_MIN),
-                      POSE_SMOOTHING_MIN,
-                      POSE_SMOOTHING_MAX
-                    );
+                    POSE_SMOOTHING_MIN +
+                    ((jumpDist - JITTER_TRANSLATION_THRESHOLD) / (FULL_SPEED_JUMP - JITTER_TRANSLATION_THRESHOLD)) *
+                    (POSE_SMOOTHING_MAX - POSE_SMOOTHING_MIN),
+                    POSE_SMOOTHING_MIN,
+                    POSE_SMOOTHING_MAX
+                  );
               _cPos.lerp(_tPos, alpha);
               _cQuat.slerp(_tQuat, alpha);
               _cScale.lerp(_tScale, alpha);
@@ -1005,6 +1005,7 @@ export default function MagicCamera() {
         } else if (clientId && pillLayoutRef.current.length) {
           setPillScreens([]);
         }
+
         rafRef.current = requestAnimationFrame(renderLoop);
       }
       renderLoop();
@@ -1063,7 +1064,7 @@ export default function MagicCamera() {
   // earliest possible moment there.
   useEffect(() => {
     if (clientId || stillLoading || !hasArt) return;
-    getCompiledBuffer(activeTargets).catch(() => {}); // handleStart surfaces any real error once the user actually starts
+    getCompiledBuffer(activeTargets).catch(() => { }); // handleStart surfaces any real error once the user actually starts
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, stillLoading, hasArt]);
 
