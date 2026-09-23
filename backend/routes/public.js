@@ -308,11 +308,34 @@ router.post('/design-upload', (req, res) => {
 // POST /api/public/contact
 router.post('/contact', async (req, res) => {
   try {
-    const { name, email, message } = req.body;
-    if (!name || !email || !message) {
-      return res.status(400).json({ error: 'name, email, and message are required' });
+    const { name, email, phone, message } = req.body || {};
+    const trimmedName = (name || '').toString().trim();
+    if (!trimmedName) {
+      return res.status(400).json({ error: 'Name is required' });
     }
-    await ContactMessage.create({ name, email: email.toLowerCase(), message });
+
+    const cleanPhone = (phone || '').toString().trim().replace(/\D/g, '');
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      return res.status(400).json({ error: 'Phone number must be exactly 10 digits' });
+    }
+
+    const cleanEmail = (email || '').toString().trim().toLowerCase();
+    const emailRegex = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+
+    const trimmedMessage = (message || '').toString().trim();
+    if (!trimmedMessage) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    await ContactMessage.create({
+      name: trimmedName,
+      email: cleanEmail,
+      phone: cleanPhone,
+      message: trimmedMessage,
+    });
     res.status(201).json({ ok: true });
   } catch (err) {
     console.error('[public/contact POST]', err);

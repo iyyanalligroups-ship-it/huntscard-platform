@@ -163,7 +163,21 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
 
     let stream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'environment' } });
+      // width/height `ideal` (not `exact`/`min`) -- still falls back
+      // gracefully on a device that can't hit exactly 720p. Uncapped
+      // before this, the browser was free to hand back its own default
+      // -- often the camera's full native resolution -- which mind-ar's
+      // Controller.processVideo then has to run full feature-tracking
+      // against on EVERY frame, real per-frame CPU work that scales with
+      // pixel count. A bigger frame directly means fewer tracking
+      // updates per second, independent of any smoothing/threshold
+      // tuning -- this is the actual lever for tracking UPDATE RATE, not
+      // just render speed. 720p is still plenty of detail for feature
+      // tracking at normal handheld distance.
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
     } catch (err) {
       setCameraError(err.message);
       return;
@@ -184,7 +198,12 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
+    // Capped at 2 -- uncapped, a phone reporting devicePixelRatio 3
+    // rendered the WebGL buffer at 3x for no real visual gain, just extra
+    // GPU fill-rate cost every frame competing with mind-ar's own
+    // per-frame tracking work on the same device. 2 is the standard
+    // "diminishing returns past here" cap.
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(canvas.width, canvas.height, false);
 
     const scene = new THREE.Scene();
@@ -242,51 +261,26 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
     // decomposed world matrix (position/quaternion/scale) instead of
     // POSIT's rotation-matrix/translation-vector pair.
     const COAST_MS = 600; // keep the last-known pose rendered this long after tracking drops out, instead of flickering
-    const POSE_SMOOTHING_MIN = 0.05; // blend-in per update when the pose barely moved (treat as noise, damp hard)
-    // 0.75, not 0.3 -- the ramp from MIN to MAX finishes almost
-    // immediately (by JITTER_TRANSLATION_THRESHOLD, a tiny fraction of
-    // card width -- see below), so for any real movement alpha is
-    // already sitting at MAX for the rest of the motion. At 0.3, closing
-    // 95% of a gap takes ~8 updates (~270ms at mind-ar's ~30fps update
-    // rate) -- exactly the "comes slowly instead of fast" lag reported.
-    // The earlier, more conservative value here was chosen before the
-    // markerScale units bug above was found and fixed; the "ghosting"
-    // that led to it was very likely that freeze-then-jump bug, not
-    // genuine overshoot from a high alpha -- now that positions are
-    // compared at the correct scale, this can track much more closely
-    // without reintroducing raw jitter (mind-ar's own filterMinCF/
-    // filterBeta above already handles that at the layer underneath).
-    const POSE_SMOOTHING_MAX = 0.75; // blend-in per update when the pose moved a lot (treat as real motion, track it)
-    // Both thresholds are in "anchorGroup units", where 1.0 == the
-    // tracked card's own width (see buildPostMatrix/layoutPctToLocal
-    // above) -- NOT the same unit system as ArView.jsx's QR-side-length
-    // thresholds, since this engine tracks the whole card rather than
-    // just the QR corner. Starting points; may need real-device tuning.
-    // 0.0375 -- same device-verified calibration as MagicCamera.jsx's own
-    // JITTER_TRANSLATION_THRESHOLD (that file's sibling engine, identical
-    // buildPostMatrix/markerScale architecture): ordinary handheld tremor
-    // lands well under this, genuine repositioning clears it immediately.
-    const JITTER_TRANSLATION_THRESHOLD = 0.0375; // below this frame-to-frame move = sub-pixel detection noise
-    // 0.5 -- same device-verified calibration as MagicCamera.jsx's own
-    // MAX_PLAUSIBLE_JUMP. At normal handheld viewing distance a card fills
-    // enough of the frame that even an ordinary (not fast/aggressive)
-    // repositioning easily exceeds a too-tight threshold in one ~33ms
-    // tracker update, which was getting flagged as "implausible" for
-    // completely everyday movement, not just real bad reads.
-    const MAX_PLAUSIBLE_JUMP = 0.5; // above this in one update = a bad read (motion blur/occlusion), not real movement
+    const POSE_SMOOTHING_MIN = 0.12; // blend-in per update when the pose barely moved (treat as noise, damp hard)
+    // 0.95 -- nearly instant. Each tracker update closes 95% of the
+    // remaining gap, so real card movement is resolved in 1-2 updates
+    // (~33-66ms at mind-ar's ~30fps) -- below the threshold of human
+    // motion perception. The earlier 0.75 left a visible multi-frame
+    // "catching up" lag when moving the card.
+    const POSE_SMOOTHING_MAX = 0.95; // blend-in per update when the pose moved a lot (treat as real motion, track it)
+    // 0.015 -- narrowed from 0.0375. The previous value was wide enough
+    // that small but REAL card movements still landed inside the heavy-
+    // damping zone. 0.015 catches only genuine sub-pixel detection noise.
+    const JITTER_TRANSLATION_THRESHOLD = 0.015; // below this frame-to-frame move = sub-pixel detection noise
+    // 0.8 -- raised from 0.5. At normal handheld distance, even moderate
+    // card movement between consecutive ~33ms tracker updates can exceed
+    // 0.5, getting incorrectly rejected as "implausible" and freezing
+    // the display. 0.8 accommodates brisk real-world movement.
+    const MAX_PLAUSIBLE_JUMP = 0.8; // above this in one update = a bad read (motion blur/occlusion), not real movement
     const MIN_PLAUSIBLE_ROTATION_SIMILARITY = 0.5; // |quat dot| below this = a >~120 degree flip in one update -- also a bad read
-    // A rejected update freezes smoothedPos in place while the card keeps
-    // moving -- rawPos on the NEXT update is then even further away, so
-    // it fails the same check again, and again, for as long as the card
-    // keeps moving in that direction. Without a way out, that's a
-    // permanent freeze, not a brief hiccup: the content stops following
-    // the card entirely until it happens to drift back within
-    // MAX_PLAUSIBLE_JUMP of wherever the display got stuck. Capping how
-    // many REAL rejections in a row are tolerated before forcibly
-    // accepting the latest reading anyway (still through the normal
-    // blend, not an instant teleport) guarantees it self-heals within a
-    // bounded number of updates regardless of how fast the card moves.
-    const MAX_CONSECUTIVE_REJECTS = 3;
+    // 2 (was 3) -- at ~30fps that's only ~66ms of freeze before
+    // self-healing, fast enough to be imperceptible.
+    const MAX_CONSECUTIVE_REJECTS = 2;
 
     let smoothedPos = null; // THREE.Vector3 | null -- null means "no confirmed pose yet"
     let smoothedQuat = null;
@@ -314,8 +308,8 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
       // Mark 1's value. The pose-smoothing pass above is the second,
       // independent layer that further stabilizes whatever noise this
       // first layer still lets through.
-      filterMinCF: 0.0005,
-      filterBeta: 300,
+      filterMinCF: 0.001,
+      filterBeta: 1000,
       onUpdate: (data) => {
         if (data.type !== 'updateMatrix') return;
         const { worldMatrix } = data;

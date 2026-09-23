@@ -361,8 +361,16 @@ router.get('/stats', requireAdmin, async (req, res) => {
       .select('fullName clientId cardType paid chipEncoded createdAt')
       .sort({ createdAt: -1 })
       .limit(8),
-    // Fulfillment badge count -- paid orders nobody has claimed yet.
-    Client.countDocuments({ paid: true, claimedBy: null }),
+    // Match Fulfillment.jsx's visible "Unclaimed" stage exactly. This is
+    // card-level (not the legacy client-level paid/claimedBy fields), so
+    // the sidebar badge and the table always describe the same records.
+    Card.countDocuments({
+      delivered: { $ne: true },
+      dispatched: { $ne: true },
+      encoded: { $ne: true },
+      assignedTo: { $in: [null, ''] },
+      claimedBy: { $in: [null, ''] },
+    }),
     ContactMessage.countDocuments({ read: false }),
     CardTicket.countDocuments({ status: 'open' }),
     // Distinct clients with at least one unread client->admin chat
@@ -1398,6 +1406,7 @@ router.get('/fulfillment', requireAdmin, async (req, res) => {
       trackingId: obj.trackingId,
       delivered: obj.delivered,
       deliveredAt: obj.deliveredAt,
+      createdAt: obj.createdAt,
     });
   }
 
@@ -1872,8 +1881,31 @@ router.get('/magic-poster-orders/:id/invoice', requireAdmin, async (req, res) =>
 
 // GET /api/admin/contact-messages
 router.get('/contact-messages', requireAdmin, async (req, res) => {
-  const messages = await ContactMessage.find({}).sort({ createdAt: -1 });
-  res.json(messages);
+  const filter = {};
+  if (req.query.startDate || req.query.endDate) {
+    filter.createdAt = {};
+    if (req.query.startDate) filter.createdAt.$gte = new Date(`${req.query.startDate}T00:00:00.000Z`);
+    if (req.query.endDate) filter.createdAt.$lte = new Date(`${req.query.endDate}T23:59:59.999Z`);
+  }
+
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
+  const skip = Math.max(0, parseInt(req.query.skip, 10) || 0);
+
+  const [total, unreadCount, messages] = await Promise.all([
+    ContactMessage.countDocuments(filter),
+    ContactMessage.countDocuments({ read: false }),
+    ContactMessage.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit + 1),
+  ]);
+
+  const hasMore = messages.length > limit;
+  const page = messages.slice(0, limit);
+
+  res.json({
+    messages: page,
+    hasMore,
+    total,
+    unreadCount,
+  });
 });
 
 // PATCH /api/admin/contact-messages/:id -- mark read/unread

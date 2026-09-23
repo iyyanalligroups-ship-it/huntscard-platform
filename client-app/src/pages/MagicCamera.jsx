@@ -128,7 +128,22 @@ async function startArVideo(video) {
 // exactly where it used to hurt most (many simultaneous targets already
 // get floored down toward MIN_TARGET_DIM regardless of this cap).
 const MAX_TARGET_DIM = 800;
-const MIN_TARGET_DIM = 260;
+// 400, not 260 -- with several targets active at once (Magic Art +
+// every Magic Business Card together), targetDimFor's 1/sqrt(count)
+// falloff was flooring each individual target down to as low as 260px
+// -- e.g. 9 simultaneous targets compile at 267px each, a third of the
+// 800px real-device testing showed was needed for reliable/precise
+// tracking (see MAX_TARGET_DIM's own comment) on the always-single-
+// target scoped Magic Business Card scan. That's the actual gap behind
+// "the same tracking issue happens scanning a Magic Poster" reports --
+// the shared smoothing/tracking fix (markerScale, POSE_SMOOTHING_MAX,
+// camera resolution cap) already applies identically to every target
+// here regardless of type, but a genuinely blurrier compiled image
+// still tracks worse no matter how well the smoothing is tuned. 400 is
+// a middle ground: meaningfully more detail than 260 at any target
+// count, while still scaling down for large counts to protect total
+// compile time the way this was originally designed to.
+const MIN_TARGET_DIM = 400;
 // A Magic Business Card's optional 3D model's longest dimension is scaled
 // to this fraction of the tracked card's own width (1 local unit -- see
 // buildPostMatrix), then floated slightly toward the viewer (positive
@@ -279,7 +294,7 @@ export default function MagicCamera() {
   // rather than a fixed-rate one -- same reasoning, ported from
   // ArViewMindAR.jsx's own fix for this exact "lags behind real motion"
   // problem.
-  const tuning = { filterMinCF: 0.0005, filterBeta: 300, warmupTolerance: 3, missTolerance: 24 };
+  const tuning = { filterMinCF: 0.001, filterBeta: 1000, warmupTolerance: 3, missTolerance: 24 };
 
   const containerRef = useRef(null);
   const cameraVideoRef = useRef(null);
@@ -312,7 +327,23 @@ export default function MagicCamera() {
   function ensureCameraStarted() {
     if (!cameraPromiseRef.current) {
       const attempt = (async () => {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'environment' } });
+        // width/height `ideal` (not `exact`/`min`) -- still falls back
+        // gracefully on a device that can't hit exactly 720p, just gets
+        // as close as it can, rather than failing outright. Uncapped
+        // before this, the browser was free to hand back its own default
+        // -- often the camera's full native resolution (1080p, sometimes
+        // higher) -- which mind-ar's Controller.processVideo then has to
+        // run full feature-tracking against on EVERY frame. That's real
+        // per-frame CPU work that scales with pixel count, so a bigger
+        // frame directly means fewer tracking updates per second,
+        // independent of any smoothing/threshold tuning -- capping this
+        // is the actual lever for tracking UPDATE RATE, not just render
+        // speed. 720p is still plenty of detail for feature tracking at
+        // normal handheld distance.
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+        });
         if (cameraAbortedRef.current) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -577,7 +608,13 @@ export default function MagicCamera() {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-      renderer.setPixelRatio(window.devicePixelRatio);
+      // Capped at 2 -- uncapped, a phone reporting devicePixelRatio 3
+      // rendered the WebGL buffer at 3x the video's own resolution for no
+      // real visual gain (there's no more detail to show than the source
+      // video itself has), just extra GPU fill-rate cost every frame,
+      // competing with mind-ar's own per-frame tracking work on the same
+      // device. 2 is the standard "diminishing returns past here" cap.
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.setSize(canvas.width, canvas.height, false);
 
       const scene = new THREE.Scene();
@@ -643,50 +680,37 @@ export default function MagicCamera() {
       // Both thresholds are in "anchorGroup units", where 1.0 == the
       // tracked target's own width (see buildPostMatrix above) -- same
       // convention ArViewMindAR.jsx uses for its own version of this.
-      const POSE_SMOOTHING_MIN = 0.05;
-      // 0.75, not the more conservative 0.25 tried before entry.markerScale
-      // (above) was found and fixed. The ramp from MIN to MAX finishes
-      // almost immediately (by JITTER_TRANSLATION_THRESHOLD, a tiny
-      // fraction of card width), so for any real movement alpha is
-      // already sitting at MAX for the rest of the motion -- at 0.25,
-      // closing 95% of a gap takes ~10 render frames (~170ms at 60fps),
-      // which is exactly the "comes slowly instead of fast" lag reported.
-      // The "ghosting" that earlier led to dialing this back down was
-      // very likely the freeze-then-jump units bug, not genuine overshoot
-      // from a high alpha -- now that positions are compared at the
-      // correct real scale, this can track much more closely without
-      // reintroducing raw jitter (mind-ar's own filterMinCF/filterBeta,
-      // see `tuning` above, already handles that at the layer underneath).
-      const POSE_SMOOTHING_MAX = 0.75;
-      // 0.0375 (~30 units at the MAX_TARGET_DIM=800 this was calibrated
-      // against, before entry.markerScale converts it back to a fraction
-      // here) -- device-verified via temporary on-phone debug logging of
-      // real tracked positions: ordinary handheld tremor lands well under
-      // this, genuine repositioning clears it immediately.
-      const JITTER_TRANSLATION_THRESHOLD = 0.0375;
-      // 0.5 (~400 units at MAX_TARGET_DIM=800, same device-verified
-      // calibration as JITTER_TRANSLATION_THRESHOLD above) -- at normal
-      // handheld viewing distance a card fills enough of the frame that
-      // even an ordinary (not fast/aggressive) repositioning easily
-      // exceeds a too-tight threshold between renders, which was getting
-      // flagged as implausible for completely everyday movement, not just
-      // real bad reads. Since _cPos here only moves when a jump is
-      // accepted, a rejected frame leaves it frozen while the card keeps
-      // moving -- the NEXT frame's jumpDist is then even bigger and fails
-      // the same check again, cascading into a display that stops
-      // following the card at all rather than a brief one-frame hiccup.
-      // See MAX_CONSECUTIVE_REJECTS below for the other half of this fix
-      // -- raising this threshold alone only delays when the cascade can
-      // start, it doesn't make the system unable to get stuck.
-      const MAX_PLAUSIBLE_JUMP = 0.5;
+      const POSE_SMOOTHING_MIN = 0.12;
+      // 0.95 -- nearly instant. Each render frame closes 95% of the
+      // remaining gap between the displayed pose and the tracker's latest
+      // reading, so a jump of ANY size is visually resolved within 2
+      // frames (~33ms at 60fps) -- below the threshold of human motion
+      // perception. The earlier value of 0.75 left a perceptible
+      // multi-frame "catching up" lag; 0.95 eliminates it without
+      // reintroducing raw jitter because mind-ar's own filterMinCF/
+      // filterBeta already handles that at the layer underneath.
+      const POSE_SMOOTHING_MAX = 0.95;
+      // 0.015 -- narrowed from 0.0375. The previous value was wide
+      // enough that small but REAL card micro-movements (e.g. handing it
+      // over, tilting to show someone) still landed inside the heavy-
+      // damping zone and got sluggish POSE_SMOOTHING_MIN treatment.
+      // 0.015 catches only genuine sub-pixel detection noise; anything
+      // larger immediately ramps to POSE_SMOOTHING_MAX.
+      const JITTER_TRANSLATION_THRESHOLD = 0.015;
+      // 0.8 -- raised from 0.5. At normal handheld distance, even
+      // moderate card movement between consecutive 60fps render frames
+      // can exceed 0.5 (especially on lower-end phones where rAF isn't
+      // a steady 60fps), getting incorrectly rejected as "implausible".
+      // 0.8 accommodates brisk real-world card movement; anything beyond
+      // that in a single ~16ms render frame really is a bad read.
+      const MAX_PLAUSIBLE_JUMP = 0.8;
       // How many render frames in a row an implausible jump can be held
-      // for before forcibly blending toward the latest reading anyway
-      // (still through the normal alpha blend below, not an instant
-      // teleport) -- guarantees this self-heals within ~6 frames
-      // (~100ms at 60fps) no matter how far/fast the card actually moved,
-      // instead of waiting indefinitely for it to coincidentally drift
-      // back within MAX_PLAUSIBLE_JUMP of wherever the display got stuck.
-      const MAX_CONSECUTIVE_REJECTS = 6;
+      // for before forcibly blending toward the latest reading anyway.
+      // 2 (was 6) -- at 60fps that's only ~33ms of freeze before
+      // self-healing, fast enough to be imperceptible. The wider
+      // MAX_PLAUSIBLE_JUMP above means this only triggers on genuinely
+      // extreme jumps (bad reads), not normal movement.
+      const MAX_CONSECUTIVE_REJECTS = 2;
       const foundFlags = targets.map(() => false);
 
       const controller = new Controller({
