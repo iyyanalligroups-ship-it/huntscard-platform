@@ -243,19 +243,37 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
     // POSIT's rotation-matrix/translation-vector pair.
     const COAST_MS = 600; // keep the last-known pose rendered this long after tracking drops out, instead of flickering
     const POSE_SMOOTHING_MIN = 0.05; // blend-in per update when the pose barely moved (treat as noise, damp hard)
-    const POSE_SMOOTHING_MAX = 0.3; // blend-in per update when the pose moved a lot (treat as real motion, track it)
+    // 0.75, not 0.3 -- the ramp from MIN to MAX finishes almost
+    // immediately (by JITTER_TRANSLATION_THRESHOLD, a tiny fraction of
+    // card width -- see below), so for any real movement alpha is
+    // already sitting at MAX for the rest of the motion. At 0.3, closing
+    // 95% of a gap takes ~8 updates (~270ms at mind-ar's ~30fps update
+    // rate) -- exactly the "comes slowly instead of fast" lag reported.
+    // The earlier, more conservative value here was chosen before the
+    // markerScale units bug above was found and fixed; the "ghosting"
+    // that led to it was very likely that freeze-then-jump bug, not
+    // genuine overshoot from a high alpha -- now that positions are
+    // compared at the correct scale, this can track much more closely
+    // without reintroducing raw jitter (mind-ar's own filterMinCF/
+    // filterBeta above already handles that at the layer underneath).
+    const POSE_SMOOTHING_MAX = 0.75; // blend-in per update when the pose moved a lot (treat as real motion, track it)
     // Both thresholds are in "anchorGroup units", where 1.0 == the
     // tracked card's own width (see buildPostMatrix/layoutPctToLocal
     // above) -- NOT the same unit system as ArView.jsx's QR-side-length
     // thresholds, since this engine tracks the whole card rather than
     // just the QR corner. Starting points; may need real-device tuning.
-    const JITTER_TRANSLATION_THRESHOLD = 0.01; // below this frame-to-frame move = sub-pixel detection noise
-    // 0.35, not 0.15 -- at normal handheld viewing distance a card fills
+    // 0.0375 -- same device-verified calibration as MagicCamera.jsx's own
+    // JITTER_TRANSLATION_THRESHOLD (that file's sibling engine, identical
+    // buildPostMatrix/markerScale architecture): ordinary handheld tremor
+    // lands well under this, genuine repositioning clears it immediately.
+    const JITTER_TRANSLATION_THRESHOLD = 0.0375; // below this frame-to-frame move = sub-pixel detection noise
+    // 0.5 -- same device-verified calibration as MagicCamera.jsx's own
+    // MAX_PLAUSIBLE_JUMP. At normal handheld viewing distance a card fills
     // enough of the frame that even an ordinary (not fast/aggressive)
-    // repositioning easily moves it more than 0.15 card-widths in one
-    // ~33ms tracker update, which was getting flagged as "implausible"
-    // for completely everyday movement, not just real bad reads.
-    const MAX_PLAUSIBLE_JUMP = 0.35; // above this in one update = a bad read (motion blur/occlusion), not real movement
+    // repositioning easily exceeds a too-tight threshold in one ~33ms
+    // tracker update, which was getting flagged as "implausible" for
+    // completely everyday movement, not just real bad reads.
+    const MAX_PLAUSIBLE_JUMP = 0.5; // above this in one update = a bad read (motion blur/occlusion), not real movement
     const MIN_PLAUSIBLE_ROTATION_SIMILARITY = 0.5; // |quat dot| below this = a >~120 degree flip in one update -- also a bad read
     // A rejected update freezes smoothedPos in place while the card keeps
     // moving -- rawPos on the NEXT update is then even further away, so

@@ -117,7 +117,17 @@ async function startArVideo(video) {
 // floored at MIN_TARGET_DIM so any one image still has enough real
 // detail to be recognized. A single target (e.g. scoped mode, always
 // exactly one) still gets the full MAX_TARGET_DIM -- nothing lost there.
-const MAX_TARGET_DIM = 512;
+// 800, not 512 -- 512 was chosen for compile-SPEED (a flat per-image cap
+// that helps most when many targets compile together, see targetDimFor
+// below), but real-device testing on the always-single-target Magic
+// Business Card scan (scoped mode always gets the full MAX_TARGET_DIM
+// uncapped, see targetDimFor's own comment) showed mind-ar needed more
+// image detail than 512px gave it to track reliably/precisely. Raising
+// this back does cost some compile time again for LOW target counts --
+// targetDimFor's own 1/sqrt(count) falloff means it matters least
+// exactly where it used to hurt most (many simultaneous targets already
+// get floored down toward MIN_TARGET_DIM regardless of this cap).
+const MAX_TARGET_DIM = 800;
 const MIN_TARGET_DIM = 260;
 // A Magic Business Card's optional 3D model's longest dimension is scaled
 // to this fraction of the tracked card's own width (1 local unit -- see
@@ -478,11 +488,11 @@ export default function MagicCamera() {
   // allSettled note below) can shrink the target list actually compiled.
   const compilePrewarmRef = useRef(null); // { key, promise }
   function getCompiledBuffer(targets, onProgress) {
-    // Cache key: stable fingerprint of every target's image URL. If the
-    // admin changes/re-uploads an image the URL changes, the key
-    // changes, and the old entry is never matched -- no explicit
-    // invalidation needed.
-    const cacheKey = buildCacheKey(targets.map((p) => p.imageUrl));
+    // Cache key: stable fingerprint of every target's image URL, PLUS the
+    // resolution they'll compile at (see buildCacheKey's own comment for
+    // why the resolution has to be part of this, not just the URLs).
+    const maxDim = targetDimFor(targets.length);
+    const cacheKey = buildCacheKey(targets.map((p) => p.imageUrl), maxDim);
     if (compilePrewarmRef.current?.key === cacheKey) {
       return compilePrewarmRef.current.promise;
     }
@@ -499,7 +509,6 @@ export default function MagicCamera() {
       // used to reject the whole batch and take Magic Camera down for
       // every OTHER target too, gallery-wide, from a single bad record.
       // Skips just the broken one(s) instead.
-      const maxDim = targetDimFor(targets.length);
       const settled = await Promise.allSettled(targets.map((p) => prepareTargetImage(p.imageUrl, maxDim)));
       const targetImgs = [];
       const loadedTargets = [];
@@ -635,32 +644,41 @@ export default function MagicCamera() {
       // tracked target's own width (see buildPostMatrix above) -- same
       // convention ArViewMindAR.jsx uses for its own version of this.
       const POSE_SMOOTHING_MIN = 0.05;
-      // 0.25, not a more aggressive 0.5 first tried here -- real-device
-      // testing showed 0.5 let enough of the raw tracker's own per-frame
-      // noise through on genuine movement that the overlay visibly
-      // "ghosted"/double-imaged against the real card instead of just
-      // tracking it. 0.25 is still 5x more responsive than the original
-      // fixed 0.05 that caused the opposite (laggy) complaint, while
-      // damping more of that raw noise back out.
-      const POSE_SMOOTHING_MAX = 0.25;
-      // 0.015, not 0.01 -- real handheld tremor was consistently landing
-      // just above the tighter threshold, pushing ordinary hand-shake
-      // into the "real motion" branch instead of the noise-damping one.
-      const JITTER_TRANSLATION_THRESHOLD = 0.015;
-      // 0.35, not 0.15 -- at normal handheld viewing distance a card
-      // fills enough of the frame that even an ordinary (not fast/
-      // aggressive) repositioning easily moves it more than 0.15
-      // card-widths between renders, which was getting flagged as
-      // implausible for completely everyday movement, not just real bad
-      // reads. Since _cPos here only moves when a jump is accepted, a
-      // rejected frame leaves it frozen while the card keeps moving --
-      // the NEXT frame's jumpDist is then even bigger and fails the same
-      // check again, cascading into a display that stops following the
-      // card at all rather than a brief one-frame hiccup. See
-      // MAX_CONSECUTIVE_REJECTS below for the other half of this fix --
-      // raising this threshold alone only delays when the cascade can
+      // 0.75, not the more conservative 0.25 tried before entry.markerScale
+      // (above) was found and fixed. The ramp from MIN to MAX finishes
+      // almost immediately (by JITTER_TRANSLATION_THRESHOLD, a tiny
+      // fraction of card width), so for any real movement alpha is
+      // already sitting at MAX for the rest of the motion -- at 0.25,
+      // closing 95% of a gap takes ~10 render frames (~170ms at 60fps),
+      // which is exactly the "comes slowly instead of fast" lag reported.
+      // The "ghosting" that earlier led to dialing this back down was
+      // very likely the freeze-then-jump units bug, not genuine overshoot
+      // from a high alpha -- now that positions are compared at the
+      // correct real scale, this can track much more closely without
+      // reintroducing raw jitter (mind-ar's own filterMinCF/filterBeta,
+      // see `tuning` above, already handles that at the layer underneath).
+      const POSE_SMOOTHING_MAX = 0.75;
+      // 0.0375 (~30 units at the MAX_TARGET_DIM=800 this was calibrated
+      // against, before entry.markerScale converts it back to a fraction
+      // here) -- device-verified via temporary on-phone debug logging of
+      // real tracked positions: ordinary handheld tremor lands well under
+      // this, genuine repositioning clears it immediately.
+      const JITTER_TRANSLATION_THRESHOLD = 0.0375;
+      // 0.5 (~400 units at MAX_TARGET_DIM=800, same device-verified
+      // calibration as JITTER_TRANSLATION_THRESHOLD above) -- at normal
+      // handheld viewing distance a card fills enough of the frame that
+      // even an ordinary (not fast/aggressive) repositioning easily
+      // exceeds a too-tight threshold between renders, which was getting
+      // flagged as implausible for completely everyday movement, not just
+      // real bad reads. Since _cPos here only moves when a jump is
+      // accepted, a rejected frame leaves it frozen while the card keeps
+      // moving -- the NEXT frame's jumpDist is then even bigger and fails
+      // the same check again, cascading into a display that stops
+      // following the card at all rather than a brief one-frame hiccup.
+      // See MAX_CONSECUTIVE_REJECTS below for the other half of this fix
+      // -- raising this threshold alone only delays when the cascade can
       // start, it doesn't make the system unable to get stuck.
-      const MAX_PLAUSIBLE_JUMP = 0.35;
+      const MAX_PLAUSIBLE_JUMP = 0.5;
       // How many render frames in a row an implausible jump can be held
       // for before forcibly blending toward the latest reading anyway
       // (still through the normal alpha blend below, not an instant

@@ -10,10 +10,16 @@
  * targets don't change) skips compilation entirely and loads in < 500 ms.
  *
  * Cache invalidation: keyed by a fingerprint that combines each target's
- * imageUrl. If the admin changes any image URL (re-uploading replaces the
- * file, which changes the URL), the fingerprint changes and the old entry is
- * never matched -- no explicit eviction needed. A MAX_ENTRIES cap prevents
- * the store from growing forever if many different target sets are visited.
+ * imageUrl AND the resolution it was compiled at. If the admin changes any
+ * image URL (re-uploading replaces the file, which changes the URL), or if
+ * the compile resolution itself changes (e.g. a MAX_TARGET_DIM tuning pass
+ * in MagicCamera.jsx), the fingerprint changes and the old entry is never
+ * matched -- no explicit eviction needed. Resolution has to be part of the
+ * key, not just the URLs: a phone that already cached a compile at an OLDER
+ * resolution would otherwise keep silently serving that stale, lower-detail
+ * buffer forever after a resolution bump, since the image URLs themselves
+ * never changed. A MAX_ENTRIES cap prevents the store from growing forever
+ * if many different target sets are visited.
  */
 
 const DB_NAME = 'huntsTAG-mind-cache';
@@ -37,11 +43,12 @@ function openDB() {
 }
 
 /**
- * Builds a stable string key from an ordered list of image URLs.
- * Simple concat with a separator that cannot appear in a URL.
+ * Builds a stable string key from an ordered list of image URLs plus the
+ * resolution they were compiled at. Simple concat with a separator that
+ * cannot appear in a URL or a number.
  */
-export function buildCacheKey(imageUrls) {
-  return imageUrls.join('\x00');
+export function buildCacheKey(imageUrls, resolution) {
+  return `${resolution}\x00${imageUrls.join('\x00')}`;
 }
 
 /**
