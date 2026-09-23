@@ -590,7 +590,10 @@ export default function MagicCamera() {
         // renderLoop can glide the display toward it independently of the
         // ~30fps tracker cadence. stuckFrames: consecutive render frames
         // an implausible jump has been rejected for -- see
-        // MAX_CONSECUTIVE_REJECTS below.
+        // MAX_CONSECUTIVE_REJECTS below. markerScale: this target's own
+        // real compiled pixel width (see its own comment below) -- each
+        // target can compile to a DIFFERENT size (see targetDimFor), so
+        // this has to live per-entry, not as one shared constant.
         return {
           anchorGroup,
           postMatrix: new THREE.Matrix4(),
@@ -599,6 +602,7 @@ export default function MagicCamera() {
           targetMatrix: new THREE.Matrix4(),
           modelMixer: null,
           stuckFrames: 0,
+          markerScale: 1,
         };
       });
 
@@ -752,6 +756,22 @@ export default function MagicCamera() {
         const entry = targetEntries[i];
         const [markerWidth, markerHeight] = dimensions[i];
         entry.postMatrix = buildPostMatrix(markerWidth, markerHeight);
+        // buildPostMatrix scales local space by this target's own real
+        // compiled pixel width (mind-ar's Controller.
+        // addImageTargetsFromBuffer reports `dimensions` in PIXELS --
+        // hundreds of units, e.g. 260-512, not a normalized 0-1 range).
+        // So a decomposed world-space position for THIS target is in
+        // units of hundreds too, not fractions of 1 -- despite
+        // MAX_PLAUSIBLE_JUMP/JITTER_TRANSLATION_THRESHOLD below being
+        // written as if 1.0 == the card's own width. Confirmed by
+        // logging raw tracked positions on a real device: mind-ar was
+        // tracking correctly the whole time, the threshold was just
+        // ~0 relative to real deltas of this magnitude, so every update
+        // after the first lock got rejected as "implausible" forever.
+        // Fix: keep those constants as the FRACTIONS they were always
+        // meant to be, scaled by this at the point they're actually
+        // compared against a real position delta, in renderLoop below.
+        entry.markerScale = markerWidth;
         const fullHeightUnits = markerHeight / markerWidth;
 
         // Optional anchored 3D model (Magic Business Card only, see this
@@ -881,7 +901,12 @@ export default function MagicCamera() {
             entry.targetMatrix.decompose(_tPos, _tQuat, _tScale);
             entry.anchorGroup.matrix.decompose(_cPos, _cQuat, _cScale);
             const jumpDist = _cPos.distanceTo(_tPos);
-            const implausible = jumpDist > MAX_PLAUSIBLE_JUMP;
+            // Threshold constants are fractions of THIS target's own card
+            // width -- scale by its own markerScale (see entry.markerScale's
+            // comment above) to compare against a real position delta.
+            const maxPlausibleJump = MAX_PLAUSIBLE_JUMP * entry.markerScale;
+            const jitterThreshold = JITTER_TRANSLATION_THRESHOLD * entry.markerScale;
+            const implausible = jumpDist > maxPlausibleJump;
             if (implausible && entry.stuckFrames < MAX_CONSECUTIVE_REJECTS) {
               // Implausible one-frame jump -- hold the last good pose,
               // let the next frame confirm before following it. Only up
@@ -892,11 +917,11 @@ export default function MagicCamera() {
             } else {
               entry.stuckFrames = 0;
               const alpha =
-                jumpDist <= JITTER_TRANSLATION_THRESHOLD
+                jumpDist <= jitterThreshold
                   ? POSE_SMOOTHING_MIN
                   : THREE.MathUtils.clamp(
                       POSE_SMOOTHING_MIN +
-                        ((jumpDist - JITTER_TRANSLATION_THRESHOLD) / (MAX_PLAUSIBLE_JUMP - JITTER_TRANSLATION_THRESHOLD)) *
+                        ((jumpDist - jitterThreshold) / (maxPlausibleJump - jitterThreshold)) *
                           (POSE_SMOOTHING_MAX - POSE_SMOOTHING_MIN),
                       POSE_SMOOTHING_MIN,
                       POSE_SMOOTHING_MAX

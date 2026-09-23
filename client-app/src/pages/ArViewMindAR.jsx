@@ -202,6 +202,24 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
     anchorGroup.add(modelGroup, videoGroup);
 
     let postMatrix = new THREE.Matrix4();
+    // buildPostMatrix scales local space by the tracked target's own real
+    // pixel width (see its own comment + mind-ar's Controller.
+    // addImageTargetsFromBuffer, which reports `dimensions` as the
+    // compiled target image's real width/height in PIXELS -- hundreds of
+    // units, e.g. 260-512, NOT a normalized 0-1 range). So a decomposed
+    // world-space position here is ALSO in units of hundreds, not
+    // fractions of 1 -- despite every threshold below being written and
+    // documented as if 1.0 == the card's own width. Confirmed by logging
+    // raw tracked positions on a real device: mind-ar was tracking
+    // correctly the whole time, but a MAX_PLAUSIBLE_JUMP of ~0.15-0.35
+    // is effectively ~0 next to real deltas of that magnitude, so every
+    // update after the first lock got rejected as "implausible" forever
+    // -- the actual bug behind both the "frozen in place" and "jumps
+    // between a few fixed spots" reports. Fix: keep the threshold
+    // constants as the FRACTIONS they were always meant to be, and scale
+    // them by this (set once markerWidth is known, below) at the point
+    // they're actually compared against a real position delta.
+    let markerScale = 1;
     const clock = new THREE.Clock();
 
     // ---- Pose smoothing --------------------------------------------------
@@ -290,7 +308,10 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
         if (smoothedPos) {
           const jumpDist = smoothedPos.distanceTo(rawPos);
           const rotationSimilarity = Math.abs(smoothedQuat.dot(rawQuat));
-          const implausible = jumpDist > MAX_PLAUSIBLE_JUMP || rotationSimilarity < MIN_PLAUSIBLE_ROTATION_SIMILARITY;
+          // Threshold constants are fractions of card width -- scale by
+          // markerScale to compare against a real (hundreds-of-units)
+          // position delta. See markerScale's own comment above.
+          const implausible = jumpDist > MAX_PLAUSIBLE_JUMP * markerScale || rotationSimilarity < MIN_PLAUSIBLE_ROTATION_SIMILARITY;
           if (implausible && consecutiveRejects < MAX_CONSECUTIVE_REJECTS) {
             // Implausible one-update jump -- freeze on the last good
             // pose rather than snap to a probably-bad reading; the next
@@ -303,7 +324,7 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
             return;
           }
           consecutiveRejects = 0;
-          const t = Math.min(1, jumpDist / JITTER_TRANSLATION_THRESHOLD);
+          const t = Math.min(1, jumpDist / (JITTER_TRANSLATION_THRESHOLD * markerScale));
           const alpha = POSE_SMOOTHING_MIN + (POSE_SMOOTHING_MAX - POSE_SMOOTHING_MIN) * t;
           smoothedPos.lerp(rawPos, alpha);
           smoothedQuat.slerp(rawQuat, alpha);
@@ -325,6 +346,7 @@ export default function ArViewMindAR({ clientId, cardNumber }) {
     const { dimensions } = controller.addImageTargetsFromBuffer(buffer);
     const [markerWidth, markerHeight] = dimensions[0];
     postMatrix = buildPostMatrix(markerWidth, markerHeight);
+    markerScale = markerWidth;
 
     camera.projectionMatrix.fromArray(controller.getProjectionMatrix());
     camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
