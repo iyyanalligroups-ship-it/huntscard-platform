@@ -1,6 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
+import {
+  ArrowUpRight,
+  AtSign,
+  BriefcaseBusiness,
+  Camera,
+  Check,
+  Copy,
+  ExternalLink,
+  Globe2,
+  IdCard,
+  ImagePlus,
+  Link2,
+  Mail,
+  MessageCircle,
+  Pencil,
+  Phone,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+} from 'lucide-react';
 import { api, API_URL } from '../api.js';
 
 // One row for an admin-defined extra field (see AttributeDefinition) --
@@ -131,19 +152,19 @@ export default function Dashboard() {
     .join('');
 
   const contactRows = [
-    profile?.phone && { icon: '☎', label: profile.phone, href: `tel:${profile.phone}` },
+    profile?.phone && { icon: <Phone size={15} />, label: profile.phone, href: `tel:${profile.phone}` },
     (profile?.publicEmail || profile?.loginEmail) && {
-      icon: '✉',
+      icon: <Mail size={15} />,
       label: profile.publicEmail || profile.loginEmail,
       href: `mailto:${profile.publicEmail || profile.loginEmail}`,
     },
   ].filter(Boolean);
 
   const socialRows = [
-    profile?.instagramUrl && { icon: 'IG', label: 'Instagram', href: profile.instagramUrl },
-    profile?.twitterUrl && { icon: 'X', label: 'Twitter / X', href: profile.twitterUrl },
+    profile?.instagramUrl && { icon: <Camera size={15} />, label: 'Instagram', href: profile.instagramUrl },
+    profile?.twitterUrl && { icon: <AtSign size={15} />, label: 'Twitter / X', href: profile.twitterUrl },
     profile?.whatsapp && {
-      icon: 'WA',
+      icon: <MessageCircle size={15} />,
       label: 'WhatsApp',
       href: `https://wa.me/${profile.whatsapp.replace(/\D/g, '')}`,
     },
@@ -200,6 +221,20 @@ export default function Dashboard() {
 
   const clampedTab = Math.min(activeTab, tabs.length - 1);
   const currentKey = tabs[clampedTab]?.key;
+  const profileChecks = [
+    profile?.fullName,
+    profile?.jobTitle,
+    profile?.photoUrl,
+    profile?.bannerUrl,
+    profile?.bio,
+    profile?.phone,
+    profile?.publicEmail || profile?.loginEmail,
+    profile?.portfolioUrl,
+    profile?.whatsapp,
+    profile?.instagramUrl || profile?.twitterUrl,
+  ];
+  const completedFields = profileChecks.filter(Boolean).length;
+  const profileCompletion = Math.round((completedFields / profileChecks.length) * 100);
 
   function handleTouchStart(e) {
     touchStartX.current = e.touches[0].clientX;
@@ -214,23 +249,28 @@ export default function Dashboard() {
   }
 
   return (
-    <div>
-      <Link
-        to="/dashboard/settings"
-        className="dash-edit-profile-btn"
-        style={{
-          display: 'block',
-          textAlign: 'center',
-          textDecoration: 'none',
-          fontWeight: 700,
-          fontSize: 14,
-          padding: 13,
-          borderRadius: 9,
-          marginBottom: 20,
-        }}
-      >
-        Edit Profile
-      </Link>
+    <div className="client-profile-page">
+      <header className="client-profile-hero">
+        <div className="client-profile-hero__icon"><UserRound size={24} /></div>
+        <div className="client-profile-hero__copy">
+          <span><Sparkles size={13} /> Digital identity</span>
+          <h1>Your HuntsTAG profile</h1>
+          <p>Preview exactly what people see when they tap or scan your card.</p>
+        </div>
+        <div className="client-profile-live"><ShieldCheck size={16} /> Live and connected</div>
+      </header>
+
+      <div className="client-profile-grid">
+        <section className="client-profile-preview-column">
+          <div className="client-profile-section-head">
+            <div>
+              <h2>Live card preview</h2>
+              <p>Your public profile updates when you save changes.</p>
+            </div>
+            <Link to={`/c/${profile?.clientId}`} target="_blank" rel="noopener noreferrer">
+              Open public page <ArrowUpRight size={15} />
+            </Link>
+          </div>
 
       {/* This block visually matches backend/public-tap/index.html exactly --
           it's a live, accurate preview of what a receiver sees, not just a
@@ -249,7 +289,7 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="pv-banner pv-banner-placeholder">
-              <span className="pv-banner-placeholder-icon">🖼</span>
+              <span className="pv-banner-placeholder-icon"><ImagePlus size={24} /></span>
               <Link to="/dashboard/settings">Upload a banner</Link>
             </div>
           )}
@@ -271,10 +311,10 @@ export default function Dashboard() {
 
           <div className="pv-actions">
             <Link className="pv-btn pv-btn-primary" to={`/c/${profile?.clientId}`} target="_blank" rel="noopener noreferrer">
-              View Live Page
+              <ExternalLink size={16} /> View live page
             </Link>
             <Link className="pv-btn pv-btn-secondary" to="/dashboard/settings">
-              Edit
+              <Pencil size={16} /> Edit profile
             </Link>
             <button
               ref={shareBtnRef}
@@ -296,10 +336,7 @@ export default function Dashboard() {
                 color: 'var(--pv-text)',
               }}
             >
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 2 11 13" />
-                <path d="M22 2 15 22l-4-9-9-4 20-7Z" />
-              </svg>
+              <Send size={18} />
             </button>
           </div>
         </div>
@@ -417,7 +454,7 @@ export default function Dashboard() {
             <>
               {profile.portfolioUrl && (
                 <a className="pv-contact-row" href={profile.portfolioUrl} target="_blank" rel="noopener noreferrer">
-                  <span className="pv-icon">◆</span>
+                  <span className="pv-icon"><Link2 size={15} /></span>
                   <span className="pv-contact-label">{profile.portfolioUrl.replace(/^https?:\/\//, '')}</span>
                 </a>
               )}
@@ -476,14 +513,53 @@ export default function Dashboard() {
 
           {currentKey === 'empty' && <div className="pv-empty">No additional details added yet.</div>}
         </div>
-      </div>
+          </div>
+        </section>
 
-      {profile?.clientId && (
-        <p className="hint" style={{ marginTop: 16 }}>
-          Your public card page:{' '}
-          <span style={{ fontFamily: 'var(--font-mono)' }}>/c/{profile.clientId}</span>
-        </p>
-      )}
+        <aside className="client-profile-sidebar">
+          <section className="client-profile-side-card readiness-card">
+            <div className="client-profile-side-title">
+              <span><ShieldCheck size={18} /></span>
+              <div><h2>Profile readiness</h2><p>{completedFields} of {profileChecks.length} essentials added</p></div>
+            </div>
+            <div className="profile-readiness-score">
+              <div className="profile-readiness-ring" style={{ '--profile-progress': `${profileCompletion * 3.6}deg` }}>
+                <strong>{profileCompletion}%</strong>
+              </div>
+              <div>
+                <b>{profileCompletion === 100 ? 'Profile complete' : 'Keep building your profile'}</b>
+                <span>{profileCompletion === 100 ? 'Everything important is ready to share.' : 'Add more details to make every tap more useful.'}</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="client-profile-side-card">
+            <div className="client-profile-side-title">
+              <span><IdCard size={18} /></span>
+              <div><h2>Card identity</h2><p>Your connected account</p></div>
+            </div>
+            <dl className="client-profile-meta">
+              <div><dt><UserRound size={14} /> Name</dt><dd>{profile?.fullName || 'Not added'}</dd></div>
+              <div><dt><BriefcaseBusiness size={14} /> Role</dt><dd>{profile?.jobTitle || 'Not added'}</dd></div>
+              <div><dt><Globe2 size={14} /> Client ID</dt><dd>{profile?.clientId}</dd></div>
+            </dl>
+          </section>
+
+          <section className="client-profile-side-card">
+            <div className="client-profile-side-title">
+              <span><Link2 size={18} /></span>
+              <div><h2>Public profile link</h2><p>Share this URL anywhere</p></div>
+            </div>
+            <div className="client-profile-link-box">
+              <span>/c/{profile?.clientId}</span>
+              <button type="button" onClick={handleCopyLink} aria-label="Copy public profile link">
+                {linkCopied ? <Check size={16} /> : <Copy size={16} />}
+              </button>
+            </div>
+            <Link className="client-profile-edit-link" to="/dashboard/settings"><Pencil size={15} /> Edit profile details</Link>
+          </section>
+        </aside>
+      </div>
     </div>
   );
 }

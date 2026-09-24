@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { X } from 'lucide-react';
 import { api, setSession } from '../api.js';
 import ThemedSelect from './ThemedSelect.jsx';
+import ThemeDatePicker from './ThemeDatePicker.jsx';
 
 // Matches the backend's own LOGIN_OTP_RESEND_COOLDOWN_MS (routes/auth.js)
 // -- purely a UX countdown here, the server enforces the real cooldown
 // itself regardless of what this button shows.
 const OTP_RESEND_COOLDOWN_SECONDS = 45;
+
+function todayDateValue() {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+}
 
 export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
@@ -171,9 +178,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
   return (
     <div className="auth-modal-backdrop" onClick={handleBackdropClick}>
       <div className="auth-modal-card">
-        <button className="auth-modal-close" onClick={onClose} aria-label="Close">
-          ×
-        </button>
+        <button className="auth-modal-close" onClick={onClose} aria-label="Close"><X size={18} /></button>
 
         <div className="brand" style={{ marginBottom: 20 }}>
           <div className="brand-mark" />
@@ -352,11 +357,12 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
               </div>
               <div className="field">
                 <label htmlFor="modalDob">Date of birth (optional)</label>
-                <input
+                <ThemeDatePicker
                   id="modalDob"
-                  type="date"
                   value={regDateOfBirth}
-                  onChange={(e) => setRegDateOfBirth(e.target.value)}
+                  onChange={setRegDateOfBirth}
+                  max={todayDateValue()}
+                  ariaLabel="Date of birth"
                 />
               </div>
               <div className="field">
