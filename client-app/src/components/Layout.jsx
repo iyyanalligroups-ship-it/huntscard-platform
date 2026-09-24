@@ -87,6 +87,7 @@ const NAV_GROUPS = [
     items: [
       { to: '/dashboard/ar-layout', label: 'AR Layout', icon: 'arLayout' },
       { to: '/magic-camera', label: 'Magic Camera', icon: 'magicArt' },
+      { to: '/magic-camera-3d', label: 'Magic Camera 3D', icon: 'magicArt' },
       { to: '/dashboard/magic-business-card', label: 'Magic Business Card', icon: 'magicArt' },
     ],
   },

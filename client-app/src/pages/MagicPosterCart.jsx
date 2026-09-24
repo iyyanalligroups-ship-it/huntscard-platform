@@ -232,8 +232,10 @@ export default function MagicPosterCart() {
   const subtotal = cart.totalAmount;
   const deliveryFee = pricing?.deliveryFee ?? 0;
   const gstPercent = pricing?.gstPercent ?? 0;
-  const gstAmount = Math.round((subtotal + deliveryFee) * (gstPercent / 100));
-  const total = subtotal + deliveryFee + gstAmount;
+  // GST on the item subtotal only -- delivery is added after, not part of
+  // the taxable value (see backend/utils/pricing.js's own comment).
+  const gstAmount = Math.round(subtotal * (gstPercent / 100));
+  const total = subtotal + gstAmount + deliveryFee;
 
   if (!loggedIn) {
     return (

@@ -980,7 +980,55 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
    .top-nav-row -- it only becomes a real box (the dropdown panel) once
    the mobile breakpoint below turns it into the toggled menu. */
 .nav-menu { display: contents; }
-.nav-actions { display: flex; align-items: center; gap: 16px; }
+.nav-actions { display: flex; align-items: center; gap: 10px; }
+.public-nav-icon-button {
+  position: relative;
+  width: 40px !important;
+  height: 40px;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.public-cart-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--brand-accent), var(--brand-accent-2));
+  border: 2px solid var(--panel);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  box-sizing: border-box;
+}
+.public-online-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 700 10px/1 var(--font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.public-account-actions { display: flex; align-items: center; gap: 8px; }
+.public-account-action {
+  min-height: 40px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease, color .16s ease;
+}
+.public-account-action:hover { transform: translateY(-1px); }
+.public-account-action:active { transform: translateY(0) scale(.98); }
 
 .nav-menu-btn {
   display: none;
@@ -1028,7 +1076,8 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
     border-radius: 14px;
   }
   .nav-link { text-align: center; }
-  .nav-actions { justify-content: center; }
+  .nav-actions { justify-content: center; flex-wrap: wrap; }
+  .public-account-actions { justify-content: center; flex-wrap: wrap; }
   /* .top-nav's overflow:hidden (contains the decorative glow/circuit
      effects) was clipping the dropdown, which intentionally renders below
      the header's own box. Those decorative layers are already display:none
@@ -1038,6 +1087,9 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 @media (max-width: 480px) {
   .top-nav-row { padding: 7px 14px; }
   .nav-menu { border-radius: 18px; padding: 16px 18px 20px; }
+  .public-online-status > span:last-child { display: none; }
+  .public-account-actions { width: 100%; }
+  .public-account-action { flex: 1 1 130px; }
 }
 
 .pill-outline {
@@ -4500,6 +4552,23 @@ body.public-site-active .pill-outline {
   padding: 9px 14px;
 }
 body.public-site-active .pill-outline:hover { color: #0d9394; background: #ffffff; border-color: rgba(13, 147, 148, 0.4); }
+body.public-site-active .public-dashboard-action {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--brand-accent), var(--brand-accent-2));
+  border-color: transparent;
+  box-shadow: 0 7px 16px var(--brand-accent-shadow);
+}
+body.public-site-active .public-dashboard-action:hover {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--brand-accent-2), var(--brand-accent));
+  border-color: transparent;
+  box-shadow: 0 10px 22px var(--brand-accent-shadow);
+}
+body.public-site-active .public-logout-action:hover {
+  color: var(--danger);
+  background: rgba(234, 84, 85, .07);
+  border-color: rgba(234, 84, 85, .3);
+}
 body.public-site-active .nav-actions button[style] {
   color: #ffffff !important;
   background: linear-gradient(135deg, #0d9394, #13aaa5) !important;

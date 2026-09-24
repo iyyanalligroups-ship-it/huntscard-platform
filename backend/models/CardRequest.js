@@ -40,6 +40,9 @@ const CardRequestSchema = new mongoose.Schema(
     // on manual/legacy requests, otherwise multiple explicit nulls would
     // collide in MongoDB's unique index.
     orderNumber: { type: String, unique: true, sparse: true, index: true },
+    // Retained when the one-off HTyyNNN migration replaces a legacy HC/MO
+    // identifier, so support can still reconcile an old receipt if needed.
+    legacyOrderNumber: { type: String, default: null },
     invoiceItems: {
       type: [
         {
@@ -65,6 +68,11 @@ const CardRequestSchema = new mongoose.Schema(
       city: { type: String, trim: true },
       pincode: { type: String, trim: true },
     },
+    // Shipment state belongs to this purchase, not to the client account as
+    // a whole. This stops a repeat purchase showing an older card's tracking.
+    trackingId: { type: String, trim: true, maxlength: 100, default: null },
+    dispatchedAt: { type: Date, default: null },
+    deliveredAt: { type: Date, default: null },
     // How many physical cards this covers -- all encoded with the SAME
     // clientId/profile URL (spare copies), not separate accounts. Shown to
     // admin so they know to encode more than one card for this request.

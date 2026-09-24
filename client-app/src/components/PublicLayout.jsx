@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { LayoutDashboard, LogIn, LogOut, Menu, ShoppingCart, UserPlus, X } from 'lucide-react';
 import { api, clearSession, isLoggedIn } from '../api.js';
 import { useCart } from '../cart.jsx';
 import AuthModal from './AuthModal.jsx';
@@ -68,7 +69,9 @@ export default function PublicLayout() {
     { to: '/shop', label: 'Shop' },
     { to: '/catalog', label: 'Catalog' },
     { to: '/contact', label: 'Contact Us' },
-    ...(loggedIn ? [{ to: '/dashboard', label: 'Dashboard' }] : []),
+    // Dashboard moved out of this list -- shown in nav-actions instead,
+    // right next to Log out (see below), not grouped with the marketing
+    // pages.
   ];
 
   function handleLogout() {
@@ -124,43 +127,44 @@ export default function PublicLayout() {
               ))}
             </nav>
             <div className="nav-actions">
-              <NavLink to="/magic-poster-cart" onClick={() => setMenuOpen(false)} className="pill-outline" style={{ position: 'relative' }}>
-                🛒
+              <NavLink
+                to="/magic-poster-cart"
+                onClick={() => setMenuOpen(false)}
+                className="pill-outline public-nav-icon-button"
+                aria-label={`Shopping cart${cart.totalCount ? `, ${cart.totalCount} item${cart.totalCount === 1 ? '' : 's'}` : ''}`}
+              >
+                <ShoppingCart size={18} strokeWidth={1.9} aria-hidden="true" />
                 {cart.totalCount > 0 && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: -6,
-                      right: -6,
-                      background: 'var(--holo-gradient)',
-                      color: '#fff',
-                      fontSize: 10,
-                      fontWeight: 700,
-                      borderRadius: 999,
-                      padding: '1px 5px',
-                    }}
-                  >
+                  <span className="public-cart-count">
                     {cart.totalCount}
                   </span>
                 )}
               </NavLink>
               {loggedIn && <NotificationBell />}
-              <span className="status-indicator">
+              <span className="status-indicator public-online-status" title="Online">
                 <span className="status-dot" />
-                ONLINE
+                <span>Online</span>
               </span>
-              <div style={{ display: 'flex', gap: 12 }}>
+              <div className="public-account-actions">
                 {loggedIn ? (
-                  <button className="pill-outline" onClick={handleLogout}>
-                    Log out
-                  </button>
+                  <>
+                    <NavLink to="/dashboard" onClick={() => setMenuOpen(false)} className="pill-outline public-account-action public-dashboard-action">
+                      <LayoutDashboard size={17} strokeWidth={1.9} aria-hidden="true" />
+                      <span>Dashboard</span>
+                    </NavLink>
+                    <button className="pill-outline public-account-action public-logout-action" onClick={handleLogout}>
+                      <LogOut size={17} strokeWidth={1.9} aria-hidden="true" />
+                      <span>Log out</span>
+                    </button>
+                  </>
                 ) : (
                   <>
-                    <button className="pill-outline" onClick={() => openAuth('login')}>
-                      Log in
+                    <button className="pill-outline public-account-action" onClick={() => openAuth('login')}>
+                      <LogIn size={17} strokeWidth={1.9} aria-hidden="true" />
+                      <span>Log in</span>
                     </button>
                     <button
-                      className="pill-outline"
+                      className="pill-outline public-account-action"
                       style={{
                         background: homeTheme === 'orange' ? 'linear-gradient(120deg, #ffcf5c, #ff8a3d, #ff5e1a)' : 'var(--holo-gradient)',
                         color: homeTheme === 'orange' ? '#1a0e04' : '#06120f',
@@ -168,7 +172,8 @@ export default function PublicLayout() {
                       }}
                       onClick={() => openAuth('register')}
                     >
-                      Register
+                      <UserPlus size={17} strokeWidth={1.9} aria-hidden="true" />
+                      <span>Register</span>
                     </button>
                   </>
                 )}
@@ -183,11 +188,9 @@ export default function PublicLayout() {
             aria-label="Toggle menu"
             aria-expanded={menuOpen}
           >
-            {menuOpen ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
-            )}
+            {menuOpen
+              ? <X size={20} strokeWidth={2} aria-hidden="true" />
+              : <Menu size={20} strokeWidth={2} aria-hidden="true" />}
           </button>
         </div>
       </header>

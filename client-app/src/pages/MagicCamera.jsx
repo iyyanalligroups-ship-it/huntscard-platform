@@ -4,8 +4,6 @@ import { api, getClientId, isLoggedIn } from '../api.js';
 import { Compiler } from 'mind-ar/src/image-target/compiler.js';
 import { Controller } from 'mind-ar/src/image-target/controller.js';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { buildCacheKey, getCachedBuffer, setCachedBuffer } from '../lib/mindCache.js';
 import { PILL_ICONS } from '../lib/pillIcons.jsx';
 
@@ -19,14 +17,14 @@ import { PILL_ICONS } from '../lib/pillIcons.jsx';
 // are ever scannable, since a client's draft card shouldn't be publicly
 // findable just because it happens to have an image+video uploaded.
 //
-// Magic Business Card also optionally supports an anchored 3D model
-// (doc.modelUrl/modelType, see backend/models/MagicBusinessCard.js) on
-// top of its required video -- a reversal of this file's own earlier
-// "video only, by explicit choice" note. Loaded straight into the
-// target's existing anchorGroup (see the targets.forEach loop below),
-// same box-autofit pattern as ArViewMindAR.jsx's own onModelLoaded, so it
-// inherits that anchor's pose-smoothing lerp/slerp for free -- no extra
-// stabilization work needed to keep a floated model from shaking.
+// Video ONLY -- deliberately, even for a target with a 3D model set (see
+// backend/models/MagicBusinessCard.js's modelUrl/modelType). This page
+// used to render that model too (additively, alongside the video), but
+// now that MagicCamera3D.jsx exists as its own dedicated model-only
+// camera, showing a model here as well was redundant/confusing (both at
+// once on the same tracked target). The two pages are a clean split now:
+// this one only ever shows video, MagicCamera3D.jsx only ever shows the
+// model.
 //
 // Known scaling caveat, not solved here: this compiles EVERY active
 // target (art + cards) as simultaneous mind-ar targets, same approach
@@ -132,16 +130,6 @@ async function startArVideo(video) {
 // regardless of this base value.
 const MAX_TARGET_DIM = 800;
 const MIN_TARGET_DIM = 260;
-// A Magic Business Card's optional 3D model's longest dimension is scaled
-// to this fraction of the tracked card's own width (1 local unit -- see
-// buildPostMatrix), then floated slightly toward the viewer (positive
-// local Z) so it stands off the flat video plane instead of clipping
-// through it. Bigger than ArLayout's own MODEL_IMAGE_BASE_FRACTION (0.25,
-// arProjection.js) -- that system floats a model as one small component
-// alongside several others; here it's meant to read as the main AR
-// sticker, closer to the card's own size.
-const MODEL_SIZE_FRACTION = 0.6;
-const MODEL_Z_OFFSET_FRACTION = 0.15;
 function targetDimFor(targetCount) {
   if (targetCount <= 1) return MAX_TARGET_DIM;
   return Math.max(MIN_TARGET_DIM, Math.round(MAX_TARGET_DIM / Math.sqrt(targetCount)));
@@ -625,7 +613,6 @@ export default function MagicCamera() {
           videoEls: [],
           initialized: false,
           targetMatrix: new THREE.Matrix4(),
-          modelMixer: null,
           stuckFrames: 0,
         };
       });
@@ -846,35 +833,6 @@ export default function MagicCamera() {
         entry.postMatrix = buildPostMatrix(markerWidth, markerHeight);
         const fullHeightUnits = markerHeight / markerWidth;
 
-        // Optional anchored 3D model (Magic Business Card only, see this
-        // file's own top comment) -- additive to the video overlay(s)
-        // below, not a replacement, so nothing else in this loop needs to
-        // change whether or not a given target has one.
-        if (piece.modelUrl) {
-          const onModelLoaded = (model, animations) => {
-            const box = new THREE.Box3().setFromObject(model);
-            const size = new THREE.Vector3();
-            const center = new THREE.Vector3();
-            box.getSize(size);
-            box.getCenter(center);
-            const maxDim = Math.max(size.x, size.y, size.z) || 1;
-            const autoFit = MODEL_SIZE_FRACTION / maxDim;
-            model.scale.setScalar(autoFit);
-            model.position.set(-center.x * autoFit, -center.y * autoFit, -center.z * autoFit + MODEL_Z_OFFSET_FRACTION);
-            entry.anchorGroup.add(model);
-            if (animations?.length) {
-              entry.modelMixer = new THREE.AnimationMixer(model);
-              entry.modelMixer.clipAction(animations[0]).play();
-            }
-          };
-          const onModelError = (err) => console.warn('[MagicCamera] Could not load a 3D model:', piece.modelUrl, err);
-          if (piece.modelType === 'fbx') {
-            new FBXLoader().load(piece.modelUrl, (fbx) => onModelLoaded(fbx, fbx.animations), undefined, onModelError);
-          } else {
-            new GLTFLoader().load(piece.modelUrl, (gltf) => onModelLoaded(gltf.scene, gltf.animations), undefined, onModelError);
-          }
-        }
-
         getTargetOverlays(piece).forEach((overlay) => {
           if (!overlay.videoUrl) return;
           const isFullBleed = overlay.x === 0 && overlay.y === 0 && overlay.width === 100 && overlay.height === 100;
@@ -960,14 +918,12 @@ export default function MagicCamera() {
       const ndcHelper = new THREE.Vector3();
       const worldHelper = new THREE.Vector3();
       const centerHelper = new THREE.Vector3();
-      const modelClock = new THREE.Clock();
       function renderLoop() {
         // 60fps lerp: glide every visible anchor's display matrix toward
         // the latest raw tracker pose stored by onUpdate. Running here
         // (every rAF) rather than in onUpdate (~30fps) doubles the
         // effective smoothing rate and eliminates the residual jitter
         // that was still visible at 30fps-only interpolation.
-        const modelDelta = modelClock.getDelta();
         targetEntries.forEach((entry) => {
           if (entry.initialized && entry.anchorGroup.visible) {
             entry.targetMatrix.decompose(_tPos, _tQuat, _tScale);
@@ -999,7 +955,6 @@ export default function MagicCamera() {
               entry.anchorGroup.matrix.compose(_cPos, _cQuat, _cScale);
             }
           }
-          entry.modelMixer?.update(modelDelta);
         });
         renderer.render(scene, camera);
         const entry = targetEntries[0];

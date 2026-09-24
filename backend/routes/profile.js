@@ -24,6 +24,7 @@ const { buildInvoicePdf, normalizeCardInvoiceOrder } = require('../utils/invoice
 const { sendEmail } = require('../utils/email');
 const { getGlobalMagicLayoutDefault, mergeMagicLayout } = require('../utils/magicLayout');
 const { buildVariantMap, resolveCardVariant } = require('../utils/cardVariant');
+const { nextOrderNumber } = require('../utils/orderNumber');
 
 const router = express.Router();
 
@@ -570,6 +571,21 @@ const magicCardImageUpload = multer({
     cb(null, true);
   },
 });
+// Optional 3D model shown ANCHORED to the tracked card in Magic Camera,
+// additive to (not a replacement for) the video above -- same field/
+// convention as models/MagicBusinessCard.js's modelUrl/modelType, and the
+// same admin-side upload (routes/admin.js's magicCardModelUpload) this
+// mirrors so the client can now set their own instead of only admin.
+const magicCardModelUpload = multer({
+  storage: makeStorage(MAGIC_CARDS_DIR),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!MODEL_EXTENSIONS.includes(path.extname(file.originalname).toLowerCase())) {
+      return cb(new Error('Only .glb or .fbx 3D model files are allowed'));
+    }
+    cb(null, true);
+  },
+});
 // Async because it needs admin's global Magic Layout default to fall back
 // to for a card that hasn't been customized yet (see utils/magicLayout.js's
 // mergeMagicLayout), AND the derived image source -- neither Custom
@@ -621,6 +637,9 @@ async function serializeMyMagicCard(doc, card) {
   const effectiveVideoCrop = doc.videoUrl
     ? { x: doc.videoCropX ?? 0, y: doc.videoCropY ?? 0, width: doc.videoCropWidth ?? 1, height: doc.videoCropHeight ?? 1 }
     : resolved?.videoCrop || { x: 0, y: 0, width: 1, height: 1 };
+  // Same override-escape-hatch priority as imageUrl/videoUrl above -- see
+  // routes/admin.js's serializeMagicCard, which this mirrors.
+  const modelInherited = !doc.modelUrl && Boolean(resolved?.modelUrl);
 
   return {
     cardNumber: doc.cardNumber,
@@ -642,6 +661,9 @@ async function serializeMyMagicCard(doc, card) {
     imageHeight: doc.imageHeight,
     videoUrl: effectiveVideoUrl,
     videoInherited: !doc.videoUrl && Boolean(resolved?.videoUrl),
+    modelUrl: doc.modelUrl || resolved?.modelUrl || null,
+    modelType: doc.modelUrl ? doc.modelType : resolved?.modelType || null,
+    modelInherited,
     audioUrl: plan?.isSpecialEdition ? (doc.audioUrl || null) : null,
     videoCrop: effectiveVideoCrop,
     active: Boolean(doc.active),
@@ -886,6 +908,47 @@ router.delete('/magic-card/video', requireAuth, async (req, res) => {
     doc.videoCropY = undefined;
     doc.videoCropWidth = undefined;
     doc.videoCropHeight = undefined;
+    await doc.save();
+    res.json(await serializeMyMagicCard(doc, loaded.card));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/profile/magic-card/model?card=N -- optional 3D model, additive
+// to (not a replacement for) the video above -- see serializeMyMagicCard's
+// own comment. Mirrors routes/admin.js's admin-only equivalent, now
+// exposed here too so the client can set/replace their own without
+// needing admin to do it for them.
+router.post('/magic-card/model', requireAuth, magicCardModelUpload.single('model'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const loaded = await loadMyCard(req, res);
+    if (!loaded) return;
+    const doc = await findOrCreateMyMagicCard(req.user.clientId, loaded.cardNumber);
+    const previousUrl = doc.modelUrl;
+    doc.modelUrl = `${process.env.BACKEND_URL}/uploads/magic-cards/${req.file.filename}`;
+    doc.modelType = path.extname(req.file.originalname).toLowerCase() === '.fbx' ? 'fbx' : 'glb';
+    await doc.save();
+    if (previousUrl) fs.unlink(path.join(MAGIC_CARDS_DIR, path.basename(previousUrl)), () => {});
+    res.json(await serializeMyMagicCard(doc, loaded.card));
+  } catch (err) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 50MB.' : err.message;
+    res.status(400).json({ error: message });
+  }
+});
+
+// DELETE /api/profile/magic-card/model?card=N -- clears the client's own
+// override, falling back to the plan variant's shared model again (see
+// serializeMyMagicCard above), not to "no model" outright.
+router.delete('/magic-card/model', requireAuth, async (req, res) => {
+  try {
+    const loaded = await loadMyCard(req, res);
+    if (!loaded) return;
+    const doc = await findOrCreateMyMagicCard(req.user.clientId, loaded.cardNumber);
+    if (doc.modelUrl) fs.unlink(path.join(MAGIC_CARDS_DIR, path.basename(doc.modelUrl)), () => {});
+    doc.modelUrl = undefined;
+    doc.modelType = undefined;
     await doc.save();
     res.json(await serializeMyMagicCard(doc, loaded.card));
   } catch (err) {
@@ -1213,7 +1276,7 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
       status: 'pending',
       paymentStatus: 'unpaid',
       razorpayOrderId: order.id,
-      orderNumber: `HC${nanoid(10).toUpperCase()}`,
+      orderNumber: await nextOrderNumber(),
       quantity,
       variantBreakdown: variantBreakdown || [],
       invoiceItems,
@@ -1609,7 +1672,7 @@ router.post('/magic-poster/order', requireAuth, async (req, res) => {
     // orderNumber is assigned here (not just once paid) so an order can be
     // looked up from the moment it's placed -- trackingId doesn't exist
     // until it ships, so it's useless for a brand-new order.
-    const orderNumber = `MO${nanoid(10).toUpperCase()}`;
+    const orderNumber = await nextOrderNumber();
 
     const doc = await MagicPosterOrder.create({
       clientId: req.user.clientId,
@@ -1728,7 +1791,8 @@ router.get('/magic-poster/orders/:id/invoice', requireAuth, async (req, res) => 
     'Content-Type': 'application/pdf',
     'Content-Disposition': `attachment; filename="invoice-${order.orderNumber}.pdf"`,
   });
-  buildInvoicePdf(order, client, res);
+  const invoiceSettings = await SiteSetting.findOne({ key: 'global' }).select('homeTheme');
+  buildInvoicePdf(order, client, res, { theme: invoiceSettings?.homeTheme });
 });
 
 // -----------------------------------------------------------------------
@@ -2010,7 +2074,8 @@ router.get('/requests/:id/invoice', requireAuth, async (req, res) => {
     'Content-Type': 'application/pdf',
     'Content-Disposition': `attachment; filename="invoice-${invoiceOrder.orderNumber}.pdf"`,
   });
-  buildInvoicePdf(invoiceOrder, client, res);
+  const invoiceSettings = await SiteSetting.findOne({ key: 'global' }).select('homeTheme');
+  buildInvoicePdf(invoiceOrder, client, res, { theme: invoiceSettings?.homeTheme });
 });
 
 // ---------------------------------------------------------------------

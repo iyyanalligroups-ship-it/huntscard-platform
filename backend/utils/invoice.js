@@ -28,6 +28,15 @@ const COLOR = {
   zebra: '#f5f3ff', // faint violet tint for alternating row backgrounds
 };
 
+// Mirrors the persisted global theme switch used by the admin and client
+// applications. Invoice data never changes with the theme; only the accent
+// colors used to render a newly downloaded PDF do.
+const THEME_COLORS = {
+  default: { cyan: '#0d9394', violet: '#13aaa5', magenta: '#7367f0', zebra: '#eefafa', soft: '#f2fbfa' },
+  orange: { cyan: '#ff9f43', violet: '#ff7a1a', magenta: '#ffcf5c', zebra: '#fff7ed', soft: '#fff9f0' },
+  cyber: { cyan: '#7367f0', violet: '#5f54d9', magenta: '#ea5455', zebra: '#f4f2ff', soft: '#f7f5ff' },
+};
+
 const PAGE_LEFT = 50;
 const PAGE_RIGHT = 545; // A4 width 595.28pt, 50pt margins
 const PAGE_WIDTH = PAGE_RIGHT - PAGE_LEFT;
@@ -44,8 +53,8 @@ function money(n) {
   return `Rs. ${Number(n || 0).toLocaleString('en-IN')}`;
 }
 
-function brandGradient(doc, x1, y1, x2, y2) {
-  return doc.linearGradient(x1, y1, x2, y2).stop(0, COLOR.cyan).stop(0.5, COLOR.violet).stop(1, COLOR.magenta);
+function brandGradient(doc, x1, y1, x2, y2, colors = COLOR) {
+  return doc.linearGradient(x1, y1, x2, y2).stop(0, colors.cyan).stop(0.5, colors.violet).stop(1, colors.magenta);
 }
 
 // Converts both new card-checkout snapshots and older paid CardRequest
@@ -132,148 +141,159 @@ function normalizeCardInvoiceOrder(request, client, plan, savedAddress, fallback
 // Streams a GST invoice PDF for one paid Magic Poster order directly to
 // `res` -- caller sets Content-Type/Content-Disposition first (see
 // routes/profile.js and routes/admin.js's invoice GET endpoints).
-function buildInvoicePdf(order, client, res) {
+function buildInvoicePdf(order, client, res, options = {}) {
   const doc = new PDFDocument({ margin: 50, size: 'A4' });
+  const C = { ...COLOR, ...(THEME_COLORS[options.theme] || THEME_COLORS.default) };
   doc.pipe(res);
 
-  // ---- Header: actual app logo + wordmark (left), INVOICE title flanked
-  // by brand-gradient bars (right) -- same composition as the reference
-  // template, recolored to HuntsTAG's palette instead of yellow. Logo,
-  // wordmark and tagline share one left-aligned column so nothing drifts
-  // out of line with anything else in the block.
-  const LOGO_SIZE = 32;
-  doc.image(LOGO_PATH, PAGE_LEFT, 48, { width: LOGO_SIZE, height: LOGO_SIZE });
-  const wordmarkX = PAGE_LEFT + LOGO_SIZE + 10;
-  doc.font('Helvetica-Bold').fontSize(22).fillColor(COLOR.violet).text('HuntsTAG', wordmarkX, 50);
-  doc.font('Helvetica').fontSize(8).fillColor(COLOR.textDim).text(BUSINESS.tagline, wordmarkX, 76);
+  // Compact branded masthead. The source logo is a wide transparent PNG,
+  // so `fit` preserves its aspect ratio instead of squeezing it into a
+  // square (the cause of the tiny/distorted logo in the previous invoice).
+  const headerY = 42;
+  const headerH = 104;
+  doc.roundedRect(PAGE_LEFT, headerY, PAGE_WIDTH, headerH, 14).fill(C.soft);
+  doc.save();
+  doc.roundedRect(PAGE_LEFT, headerY, PAGE_WIDTH, headerH, 14).clip();
+  doc.rect(PAGE_LEFT, headerY, 7, headerH).fill(brandGradient(doc, PAGE_LEFT, headerY, PAGE_LEFT, headerY + headerH, C));
+  doc.circle(PAGE_RIGHT - 8, headerY + 6, 72).fillOpacity(0.055).fill(C.violet);
+  doc.fillOpacity(1).restore();
 
-  doc.font('Helvetica-Bold').fontSize(9).fillColor(COLOR.ink).text(BUSINESS.tradeName, PAGE_LEFT, 96);
-  doc.font('Helvetica').fontSize(8).fillColor(COLOR.textDim);
-  doc.text(BUSINESS.legalName, PAGE_LEFT, 108);
-  doc.text(BUSINESS.address, PAGE_LEFT, 119, { width: 280 });
-  doc.text(`GSTIN: ${BUSINESS.gstin}`, PAGE_LEFT, doc.y + 2);
+  const logoTileX = PAGE_LEFT + 20;
+  const logoTileY = headerY + 20;
+  doc.roundedRect(logoTileX, logoTileY, 66, 64, 13).fill('#ffffff');
+  doc.image(LOGO_PATH, logoTileX + 5, logoTileY + 13, { fit: [56, 38], align: 'center', valign: 'center' });
 
-  // INVOICE row -- bar / text / bar all share one y + height, and each
-  // element's x is computed from the previous one's measured width so
-  // none of them can drift out of vertical or horizontal alignment with
-  // each other (the earlier version hardcoded x/y per piece and they fell
-  // out of line -- this version can't).
-  const invoiceRowY = 58;
-  const barH = 30;
-  const bar1X = 290;
-  const bar1W = 100;
-  doc.rect(bar1X, invoiceRowY, bar1W, barH).fill(brandGradient(doc, bar1X, invoiceRowY, bar1X + bar1W, invoiceRowY));
+  const wordmarkX = logoTileX + 82;
+  const wordmarkY = headerY + 25;
+  doc.font('Helvetica-Bold').fontSize(25).fillColor(C.ink).text('Hunts', wordmarkX, wordmarkY, { lineBreak: false });
+  const huntsWidth = doc.widthOfString('Hunts');
+  doc.fillColor(C.violet).text('TAG', wordmarkX + huntsWidth, wordmarkY, { lineBreak: false });
+  doc.font('Helvetica').fontSize(8.5).fillColor(C.textDim).text(BUSINESS.tagline, wordmarkX, wordmarkY + 34, { width: 235 });
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor(C.cyan).text('SMART CONNECTIONS. ONE TAP.', wordmarkX, wordmarkY + 53, { characterSpacing: 0.8 });
 
-  doc.font('Helvetica-Bold').fontSize(22).fillColor(COLOR.ink);
-  const invoiceLabel = 'INVOICE';
-  const invoiceTextX = bar1X + bar1W + 14;
-  const invoiceTextY = invoiceRowY + (barH - doc.currentLineHeight()) / 2;
-  doc.text(invoiceLabel, invoiceTextX, invoiceTextY);
+  const invoiceBadgeX = PAGE_RIGHT - 120;
+  doc.roundedRect(invoiceBadgeX, headerY + 23, 100, 27, 13.5).fill(brandGradient(doc, invoiceBadgeX, headerY + 23, invoiceBadgeX + 100, headerY + 23, C));
+  doc.font('Helvetica-Bold').fontSize(10).fillColor('#ffffff').text('TAX INVOICE', invoiceBadgeX, headerY + 32, { width: 100, align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(C.ink).text(order.orderNumber, invoiceBadgeX, headerY + 61, { width: 100, align: 'right' });
+  doc.font('Helvetica').fontSize(7.5).fillColor(C.textDim).text(new Date(order.createdAt).toLocaleDateString('en-IN'), invoiceBadgeX, headerY + 76, { width: 100, align: 'right' });
 
-  const bar2X = invoiceTextX + doc.widthOfString(invoiceLabel) + 14;
-  const bar2W = PAGE_RIGHT - bar2X;
-  doc.rect(bar2X, invoiceRowY, bar2W, barH).fill(brandGradient(doc, bar2X, invoiceRowY, PAGE_RIGHT, invoiceRowY));
-
-  // ---- Invoice to: / Invoice#+Date -- two columns beneath the header.
-  const metaY = 165;
-  doc.font('Helvetica-Bold').fontSize(11).fillColor(COLOR.ink).text('Invoice to:', PAGE_LEFT, metaY);
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR.ink).text(order.delivery.name, PAGE_LEFT, metaY + 16);
-  doc.font('Helvetica').fontSize(9).fillColor(COLOR.textDim);
-  doc.text(`${order.delivery.line1}${order.delivery.line2 ? `, ${order.delivery.line2}` : ''}`, PAGE_LEFT, metaY + 31, { width: 260 });
-  doc.text(`${order.delivery.city}, ${order.delivery.state}, ${order.delivery.country} - ${order.delivery.pincode}`, PAGE_LEFT, doc.y, { width: 260 });
-  doc.text(`Phone: ${order.delivery.phone}`, PAGE_LEFT, doc.y);
-  if (client?.fullName && client.fullName !== order.delivery.name) {
-    doc.text(`Account: ${client.fullName}`, PAGE_LEFT, doc.y);
+  // Seller and delivery details use equal cards, making the legal identity
+  // and customer destination easy to scan without a large empty header.
+  const detailY = 162;
+  const detailGap = 14;
+  const detailW = (PAGE_WIDTH - detailGap) / 2;
+  const detailH = 114;
+  const buyerX = PAGE_LEFT + detailW + detailGap;
+  function detailCard(x, label) {
+    doc.roundedRect(x, detailY, detailW, detailH, 10).fillAndStroke('#ffffff', C.rule);
+    doc.font('Helvetica-Bold').fontSize(7.5).fillColor(C.cyan).text(label, x + 14, detailY + 13, { characterSpacing: 0.8 });
   }
+  detailCard(PAGE_LEFT, 'SOLD BY');
+  detailCard(buyerX, 'BILL TO / SHIP TO');
 
-  const metaRightX = 380;
-  function metaRow(label, value, y) {
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR.ink).text(label, metaRightX, y, { width: 70 });
-    doc.font('Helvetica').fontSize(10).fillColor(COLOR.textDim).text(value, metaRightX + 70, y, { width: 95, align: 'right' });
-  }
-  metaRow('Invoice#', order.orderNumber, metaY);
-  metaRow('Date', new Date(order.createdAt).toLocaleDateString('en-IN'), metaY + 16);
-  if (order.trackingId) metaRow('Tracking', order.trackingId, metaY + 32);
-  metaRow('Status', String(order.paymentStatus || '').toUpperCase(), metaY + (order.trackingId ? 48 : 32));
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(C.ink).text(BUSINESS.tradeName, PAGE_LEFT + 14, detailY + 31, { width: detailW - 28 });
+  doc.font('Helvetica').fontSize(7.7).fillColor(C.textDim);
+  doc.text(BUSINESS.legalName, PAGE_LEFT + 14, detailY + 47, { width: detailW - 28 });
+  doc.text(BUSINESS.address, PAGE_LEFT + 14, detailY + 60, { width: detailW - 28, lineGap: 1 });
+  doc.font('Helvetica-Bold').fontSize(7.7).fillColor(C.ink).text(`GSTIN: ${BUSINESS.gstin}`, PAGE_LEFT + 14, detailY + 94, { width: detailW - 28 });
 
-  // ---- Line items table -- dark header row (brand ink), zebra-striped
-  // body rows, no external table library (same hand-rolled column
-  // approach the previous version used, now with real cell backgrounds).
-  const tableTop = 260;
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(C.ink).text(order.delivery.name, buyerX + 14, detailY + 31, { width: detailW - 28 });
+  doc.font('Helvetica').fontSize(7.7).fillColor(C.textDim);
+  const addressLine = `${order.delivery.line1}${order.delivery.line2 ? `, ${order.delivery.line2}` : ''}`;
+  doc.text(addressLine, buyerX + 14, detailY + 47, { width: detailW - 28, lineGap: 1 });
+  doc.text(`${order.delivery.city}, ${order.delivery.state}`, buyerX + 14, detailY + 70, { width: detailW - 28 });
+  doc.text(`${order.delivery.country} - ${order.delivery.pincode}`, buyerX + 14, detailY + 82, { width: detailW - 28 });
+  doc.font('Helvetica-Bold').fontSize(7.7).fillColor(C.ink).text(`Phone: ${order.delivery.phone}`, buyerX + 14, detailY + 96, { width: detailW - 28 });
+
+  const summaryY = detailY + detailH + 12;
+  doc.roundedRect(PAGE_LEFT, summaryY, PAGE_WIDTH, 31, 8).fill('#f7f7fa');
+  const summaryItems = [
+    ['PAYMENT', String(order.paymentStatus || 'paid').toUpperCase()],
+    ['ORDER ID', order.orderNumber],
+    ['TRACKING ID', order.trackingId || 'Pending dispatch'],
+  ];
+  summaryItems.forEach(([label, value], index) => {
+    const width = PAGE_WIDTH / summaryItems.length;
+    const x = PAGE_LEFT + index * width;
+    if (index) doc.moveTo(x, summaryY + 7).lineTo(x, summaryY + 24).strokeColor(C.rule).lineWidth(1).stroke();
+    doc.font('Helvetica-Bold').fontSize(6.5).fillColor(C.textDim).text(label, x + 11, summaryY + 7, { width: width - 22 });
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(index === 0 ? C.cyan : C.ink).text(value, x + 11, summaryY + 17, { width: width - 22, ellipsis: true });
+  });
+
+  // Line item table.
+  const tableTop = summaryY + 46;
   const cols = [
     { key: 'sl', label: 'SL.', x: PAGE_LEFT, width: 30 },
-    { key: 'item', label: 'Item Description', x: PAGE_LEFT + 30, width: 220 },
+    { key: 'item', label: 'ITEM DESCRIPTION', x: PAGE_LEFT + 30, width: 220 },
     { key: 'price', label: 'Price', x: PAGE_LEFT + 250, width: 80, align: 'right' },
     { key: 'qty', label: 'Qty.', x: PAGE_LEFT + 330, width: 50, align: 'right' },
     { key: 'total', label: 'Total', x: PAGE_LEFT + 380, width: 115, align: 'right' },
   ];
-  const rowH = 26;
-  const headerH = 28;
+  const rowH = 29;
+  const tableHeaderH = 30;
 
-  doc.rect(PAGE_LEFT, tableTop, PAGE_WIDTH, headerH).fill(COLOR.ink);
-  doc.font('Helvetica-Bold').fontSize(9).fillColor('#ffffff');
-  cols.forEach((c) => doc.text(c.label, c.x + 8, tableTop + 9, { width: c.width - 12, align: c.align || 'left' }));
+  doc.roundedRect(PAGE_LEFT, tableTop, PAGE_WIDTH, tableHeaderH, 8).fill(C.ink);
+  doc.font('Helvetica-Bold').fontSize(7.8).fillColor('#ffffff');
+  cols.forEach((c) => doc.text(c.label.toUpperCase(), c.x + 8, tableTop + 11, { width: c.width - 12, align: c.align || 'left', characterSpacing: 0.35 }));
 
-  let rowY = tableTop + headerH;
+  let rowY = tableTop + tableHeaderH;
   const items = order.items && order.items.length ? order.items : [{ name: '(no items)', quantity: 0, unitPrice: 0 }];
   items.forEach((item, i) => {
-    if (i % 2 === 1) doc.rect(PAGE_LEFT, rowY, PAGE_WIDTH, rowH).fill(COLOR.zebra);
-    doc.font('Helvetica').fontSize(9).fillColor(COLOR.ink);
-    const cellY = rowY + 8;
+    doc.rect(PAGE_LEFT, rowY, PAGE_WIDTH, rowH).fill(i % 2 ? C.zebra : '#ffffff');
+    doc.font('Helvetica').fontSize(8.5).fillColor(C.ink);
+    const cellY = rowY + 10;
     doc.text(String(i + 1), cols[0].x + 8, cellY, { width: cols[0].width - 12 });
-    doc.text(item.name || '(deleted poster)', cols[1].x + 8, cellY, { width: cols[1].width - 12 });
+    doc.font('Helvetica-Bold').text(item.name || '(deleted poster)', cols[1].x + 8, cellY, { width: cols[1].width - 12, ellipsis: true, lineBreak: false });
+    doc.font('Helvetica');
     doc.text(money(item.unitPrice), cols[2].x + 8, cellY, { width: cols[2].width - 16, align: 'right' });
     doc.text(String(item.quantity), cols[3].x + 8, cellY, { width: cols[3].width - 16, align: 'right' });
     doc.text(money(item.unitPrice * item.quantity), cols[4].x + 8, cellY, { width: cols[4].width - 16, align: 'right' });
     rowY += rowH;
   });
-  doc.rect(PAGE_LEFT, tableTop, PAGE_WIDTH, rowY - tableTop).strokeColor(COLOR.rule).lineWidth(1).stroke();
+  doc.roundedRect(PAGE_LEFT, tableTop, PAGE_WIDTH, rowY - tableTop, 8).strokeColor(C.rule).lineWidth(1).stroke();
 
-  // ---- Totals -- Sub Total / GST rows, then a brand-gradient highlight
-  // bar for the Grand Total (same highlighted-bar treatment the reference
-  // template gives its Total row, recolored to the brand gradient).
-  let totalsY = rowY + 20;
-  const totalsLabelX = 350;
-  const totalsValueX = 430;
-  const totalsWidth = 95;
+  // Notes and totals form a balanced two-column close beneath the table.
+  const closingY = rowY + 18;
+  doc.roundedRect(PAGE_LEFT, closingY, 260, 105, 10).fill('#f7f7fa');
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(C.ink).text('Payment & support', PAGE_LEFT + 14, closingY + 14);
+  doc.font('Helvetica').fontSize(7.8).fillColor(C.textDim);
+  doc.text('Payment received securely. This invoice is generated electronically and does not require a physical signature.', PAGE_LEFT + 14, closingY + 32, { width: 232, lineGap: 2 });
+  doc.text(`Questions? ${BUSINESS.email}`, PAGE_LEFT + 14, closingY + 77, { width: 232 });
+
+  const totalsBoxX = 325;
+  doc.roundedRect(totalsBoxX, closingY, PAGE_RIGHT - totalsBoxX, 105, 10).fillAndStroke('#ffffff', C.rule);
+  let totalsY = closingY + 13;
+  const totalsLabelX = totalsBoxX + 14;
+  const totalsValueX = totalsBoxX + 96;
+  const totalsWidth = PAGE_RIGHT - totalsValueX - 14;
   function totalsRow(label, value, opts = {}) {
-    doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(opts.bold ? 11 : 10).fillColor(opts.bold ? COLOR.ink : COLOR.textDim);
-    doc.text(label, totalsLabelX, totalsY, { width: 75 });
+    doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(opts.bold ? 10 : 8.5).fillColor(opts.bold ? C.ink : C.textDim);
+    doc.text(label, totalsLabelX, totalsY, { width: 78 });
     doc.text(value, totalsValueX, totalsY, { width: totalsWidth, align: 'right' });
-    totalsY += opts.bold ? 26 : 18;
+    totalsY += opts.bold ? 23 : 16;
   }
   totalsRow('Sub Total', money(order.subtotal));
   totalsRow('Delivery', money(order.deliveryFee));
   totalsRow(`GST (${order.gstPercent}%)`, money(order.gstAmount));
 
-  const totalBarH = 30;
-  doc.rect(totalsLabelX, totalsY, PAGE_RIGHT - totalsLabelX, totalBarH).fill(brandGradient(doc, totalsLabelX, totalsY, PAGE_RIGHT, totalsY));
-  doc.font('Helvetica-Bold').fontSize(12).fillColor('#ffffff');
-  doc.text('Total:', totalsLabelX + 12, totalsY + 9, { width: 75 });
-  doc.text(money(order.amount), totalsValueX - 15, totalsY + 9, { width: totalsWidth + 15, align: 'right' });
+  const totalBarY = closingY + 69;
+  doc.roundedRect(totalsBoxX + 8, totalBarY, PAGE_RIGHT - totalsBoxX - 16, 28, 7).fill(brandGradient(doc, totalsBoxX, totalBarY, PAGE_RIGHT, totalBarY, C));
+  doc.font('Helvetica-Bold').fontSize(10).fillColor('#ffffff');
+  doc.text('TOTAL PAID', totalsBoxX + 20, totalBarY + 9, { width: 78 });
+  doc.text(money(order.amount), totalsValueX - 4, totalBarY + 9, { width: totalsWidth + 4, align: 'right' });
 
-  // ---- Footer -- thank-you note, GSTIN reminder, contact + signature
-  // line, then a thin brand-gradient rule above the very bottom.
-  const footerY = totalsY + totalBarH + 30;
-  doc.font('Helvetica-Bold').fontSize(11).fillColor(COLOR.ink).text('Thank you for your business!', PAGE_LEFT, footerY);
-  doc.font('Helvetica').fontSize(8).fillColor(COLOR.textDim);
-  doc.text('This is a computer-generated GST tax invoice and does not require a physical signature.', PAGE_LEFT, footerY + 16, {
-    width: 300,
-  });
   if (order.legacyInvoice) {
-    doc.text('Legacy purchase: address, delivery and tax values not captured at checkout are shown as not recorded or zero.', PAGE_LEFT, doc.y + 4, {
-      width: 330,
-    });
+    doc.font('Helvetica').fontSize(7).fillColor(C.textDim).text('Legacy purchase: unavailable historical delivery or tax values are shown as zero/not recorded.', PAGE_LEFT, closingY + 112, { width: PAGE_WIDTH });
   }
-  doc.text(`Questions about this order? ${BUSINESS.email}`, PAGE_LEFT, doc.y + 4);
 
-  // Pinned near the bottom for a typical short order, but pushed further
-  // down (onto a new page if pdfkit decides it must) for an order with
-  // enough line items that the table pushes the footer past this point --
-  // never overlapping the totals/footer text above it.
-  const ruleY = Math.max(758, footerY + 60);
-  doc.rect(PAGE_LEFT, ruleY, PAGE_WIDTH, 3).fill(brandGradient(doc, PAGE_LEFT, ruleY, PAGE_RIGHT, ruleY));
-  doc.font('Helvetica').fontSize(8).fillColor(COLOR.textDim).text(`${BUSINESS.tradeName}  |  ${BUSINESS.email}  |  GSTIN ${BUSINESS.gstin}`, PAGE_LEFT, ruleY + 10, {
+  // Stable footer for normal one-page orders.
+  const footerY = 742;
+  doc.rect(PAGE_LEFT, footerY, PAGE_WIDTH, 3).fill(brandGradient(doc, PAGE_LEFT, footerY, PAGE_RIGHT, footerY, C));
+  doc.font('Helvetica-Bold').fontSize(8).fillColor(C.ink).text('Thank you for choosing HuntsTAG.', PAGE_LEFT, footerY + 12, {
+    width: PAGE_WIDTH,
+    align: 'center',
+  });
+  doc.font('Helvetica').fontSize(7).fillColor(C.textDim).text(`${BUSINESS.tradeName}  |  ${BUSINESS.email}  |  GSTIN ${BUSINESS.gstin}`, PAGE_LEFT, footerY + 27, {
     width: PAGE_WIDTH,
     align: 'center',
   });

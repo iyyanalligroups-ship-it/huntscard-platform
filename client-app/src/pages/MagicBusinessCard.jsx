@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { api, API_URL } from '../api.js';
 import CropBox from '../components/CropBox.jsx';
 import MagicHoverPreview from '../components/MagicHoverPreview.jsx';
+import ArModelPreview from '../components/ArModelPreview.jsx';
 import { composeCardWithQr } from '../lib/cardComposite.js';
 import { PILL_ICONS } from '../lib/pillIcons.jsx';
 
 const MAX_VIDEO_BYTES = 80 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
+const MAX_MODEL_BYTES = 50 * 1024 * 1024;
 
 // Real physical business card, 85 x 55mm either way -- 'vertical' is the
 // exact same card turned 90°, not an independent shape. Pixel target at
@@ -194,6 +196,7 @@ export default function MagicBusinessCard() {
 
   const videoInputRef = useRef(null);
   const imageInputRef = useRef(null);
+  const modelInputRef = useRef(null);
   const previewBoxRef = useRef(null); // the card-preview container the QR is positioned relative to
   // QR print colors -- same idea as admin's ClientDetail.jsx color
   // pickers, needed here for a real reason, not just parity: a
@@ -530,6 +533,40 @@ export default function MagicBusinessCard() {
     }
   }
 
+  // Optional 3D model, additive to the video above (see this section's own
+  // hint text below) -- no crop step, unlike image/video, since a 3D file
+  // has no 2D crop concept.
+  async function handlePickModel(file) {
+    if (!file) return;
+    setError('');
+    if (file.size > MAX_MODEL_BYTES) {
+      setError('That 3D model is over 50MB -- pick a smaller one.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const updated = await api.uploadMyMagicCardModel(file, selectedCardNumber);
+      setCard((prev) => ({ ...prev, ...updated }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemoveModel() {
+    setBusy(true);
+    setError('');
+    try {
+      const updated = await api.removeMyMagicCardModel(selectedCardNumber);
+      setCard((prev) => ({ ...prev, ...updated }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Small pill row -- "Card 1 · Front desk (Apex · Horizontal)" -- same
   // idea as ArLayout.jsx's own picker, just choosing which card's Magic
   // Business Card is being edited.
@@ -802,6 +839,33 @@ export default function MagicBusinessCard() {
             )}
           </div>
 
+          {/* Separate, additive box right next to the normal video preview
+              above -- doesn't touch/replace it, only shown when this card
+              actually has a 3D model set. */}
+          {card?.modelUrl && (
+            <div style={{ width: box.width }}>
+              <p className="hint" style={{ margin: '0 0 8px' }}>3D model preview -- drag to rotate</p>
+              <ArModelPreview modelUrl={card.modelUrl} modelType={card.modelType} width={box.width} height={box.height} />
+              {/* Opens the real scoped camera (mind-ar tracking a physical/
+                  on-screen card, not this drag-to-rotate preview) in a new
+                  tab -- lets testing this locally without a printed card
+                  yet: point the phone/webcam at the card image ABOVE on
+                  this same screen (or a second device showing it). */}
+              {clientId && (
+                <a
+                  href={`/magic-camera-3d/${clientId}${selectedCardNumber ? `?card=${selectedCardNumber}` : ''}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: 'block', marginTop: 10 }}
+                >
+                  <button type="button" className="secondary" style={{ width: '100%' }}>
+                    Test: open 3D Camera
+                  </button>
+                </a>
+              )}
+            </div>
+          )}
+
           {cropSession && (
             <div style={{ border: '2px solid var(--holo-cyan)', borderRadius: 'var(--radius)', padding: 16 }}>
               <p style={{ margin: '0 0 10px', fontWeight: 700 }}>{cropSession.field === 'image' ? 'Crop the image' : 'Crop the video'}</p>
@@ -1046,6 +1110,43 @@ export default function MagicBusinessCard() {
           )}
         </div>
       </div>
+      )}
+
+      {!card?.isSpecialEdition && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontWeight: 700 }}>3D Model <small style={{ fontWeight: 400, color: 'var(--text-dim)' }}>Optional</small></p>
+              <p className="hint" style={{ margin: '2px 0 0' }}>
+                .glb or .fbx, up to 50MB. When set, this shows INSTEAD of the video above while scanning (video is
+                the fallback if no model is set) -- viewed on its own dedicated camera page, not the video Magic
+                Camera.
+              </p>
+            </div>
+            <input
+              ref={modelInputRef}
+              type="file"
+              accept=".glb,.fbx"
+              style={{ display: 'none' }}
+              onChange={(e) => handlePickModel(e.target.files?.[0])}
+            />
+            <button type="button" className="secondary" disabled={busy} style={{ width: 'auto' }} onClick={() => modelInputRef.current?.click()}>
+              {card?.modelUrl ? 'Replace' : 'Upload'}
+            </button>
+            {card?.modelUrl && (
+              <button type="button" className="secondary" disabled={busy} style={{ width: 'auto' }} onClick={handleRemoveModel}>
+                Remove
+              </button>
+            )}
+          </div>
+          {card?.modelUrl && clientId && (
+            <p className="hint" style={{ margin: '10px 0 0' }}>
+              <a href={`/magic-camera-3d/${clientId}${selectedCardNumber ? `?card=${selectedCardNumber}` : ''}`} target="_blank" rel="noopener noreferrer">
+                View your 3D model in AR →
+              </a>
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

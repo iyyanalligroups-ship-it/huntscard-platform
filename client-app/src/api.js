@@ -217,6 +217,23 @@ export const api = {
   },
   removeMyMagicCardVideo: (cardNumber) =>
     request(`/api/profile/magic-card/video${cardNumber ? `?card=${cardNumber}` : ''}`, { method: 'DELETE' }),
+  // Optional 3D model shown anchored to the tracked card in Magic Camera,
+  // additive to the video above, not a replacement for it -- see
+  // backend/routes/profile.js's own comment on this route.
+  uploadMyMagicCardModel: async (file, cardNumber) => {
+    const formData = new FormData();
+    formData.append('model', file);
+    if (cardNumber) formData.append('cardNumber', cardNumber);
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/profile/magic-card/model`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    return parseUploadResponse(res);
+  },
+  removeMyMagicCardModel: (cardNumber) =>
+    request(`/api/profile/magic-card/model${cardNumber ? `?card=${cardNumber}` : ''}`, { method: 'DELETE' }),
   // Custom Card only -- backend 403s for every other plan, see
   // routes/profile.js's own gate on this route. Overrides the checkout
   // design for the Magic Camera effect specifically, without touching

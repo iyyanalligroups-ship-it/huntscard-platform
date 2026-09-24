@@ -1,7 +1,7 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import gsap from 'gsap';
-import { ArrowRight, BadgeCheck, Box, ScanLine, Sparkles } from 'lucide-react';
+import { ArrowRight, BadgeCheck, Box, Rotate3d, ScanLine, Sparkles } from 'lucide-react';
 import { api, API_URL } from '../api.js';
 import ArView from './ArView.jsx';
 import './PublicProfile.css';
@@ -497,6 +497,17 @@ export default function PublicProfile() {
               </span>
               <ArrowRight className="ht-experience-arrow" size={19} />
             </button>
+            {/* Separate camera page (MagicCamera3D.jsx) -- shows ONLY a 3D
+                model when this card has one set, kept apart from the plain
+                Magic Camera above so that flow's video is never affected. */}
+            <button type="button" className="ht-experience-option" onClick={(event) => chooseArExperience('3d', event)}>
+              <span className="ht-experience-option-icon"><Rotate3d size={23} /></span>
+              <span className="ht-experience-option-copy">
+                <strong>3D Camera</strong>
+                <small>Scan the card to see its 3D model</small>
+              </span>
+              <ArrowRight className="ht-experience-arrow" size={19} />
+            </button>
           </div>
 
           <div className="ht-experience-footnote">
@@ -509,6 +520,10 @@ export default function PublicProfile() {
 
   if (arChoice === 'magic') {
     return <Navigate to={`/magic-camera/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`} replace />;
+  }
+
+  if (arChoice === '3d') {
+    return <Navigate to={`/magic-camera-3d/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`} replace />;
   }
 
   if (useMindAR) {

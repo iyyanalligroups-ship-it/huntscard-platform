@@ -43,13 +43,15 @@ const MagicPosterOrderSchema = new mongoose.Schema(
     paymentStatus: { type: String, enum: ['unpaid', 'paid'], default: 'unpaid' },
     // Delivery tracking -- Ordered -> Shipping -> Delivery -> Completed,
     // forward-only (see admin.js's PATCH /magic-poster-orders/:id).
-    // trackingId auto-generates the moment an order moves to 'shipping'.
+    // trackingId is entered by an admin when the order moves to shipping.
     status: { type: String, enum: ['ordered', 'shipping', 'delivery', 'completed'], default: 'ordered' },
     // Human-readable order number, assigned at creation (unlike trackingId,
     // which only exists once an order ships) -- lets a client/admin look an
     // order up from the moment it's placed. See routes/profile.js POST
     // /magic-poster/order.
     orderNumber: { type: String, required: true, unique: true, index: true },
+    // Previous MO/legacy identifier retained by migrate-order-numbers.js.
+    legacyOrderNumber: { type: String, default: null },
     razorpayOrderId: { type: String, default: null },
     razorpayPaymentId: { type: String, default: null },
     // Snapshot of the ClientAddress the buyer picked (or newly added) at

@@ -44,6 +44,11 @@ const HuntsEngineTest = lazy(() => import('./pages/HuntsEngineTest.jsx'));
 // same heavy mind-ar/three.js stack, kept lazy-loaded so it can't affect
 // any other route's bundle.
 const MagicCamera = lazy(() => import('./pages/MagicCamera.jsx'));
+// A SEPARATE page from MagicCamera.jsx above, on purpose -- scans only
+// targets with a 3D model set and renders just the model (no video plane
+// at all), so this can be built/tuned without touching MagicCamera.jsx's
+// own already-working video flow. See MagicCamera3D.jsx's own top comment.
+const MagicCamera3D = lazy(() => import('./pages/MagicCamera3D.jsx'));
 
 
 // Debugging aid for the Mark 1 experiment only -- a crash inside
@@ -166,6 +171,31 @@ export default function App() {
           <MagicCameraErrorBoundary>
             <Suspense fallback={<p className="subtitle">Loading…</p>}>
               <MagicCamera />
+            </Suspense>
+          </MagicCameraErrorBoundary>
+        }
+      />
+      {/* Separate 3D-model-only camera -- same "reachable with no login"
+          and "same url reached from the dashboard" reasoning as
+          /magic-camera above, kept on its own route/page entirely so it
+          can't affect that one's already-working video flow. See
+          MagicCamera3D.jsx's own top comment. */}
+      <Route
+        path="/magic-camera-3d"
+        element={
+          <MagicCameraErrorBoundary>
+            <Suspense fallback={<p className="subtitle">Loading…</p>}>
+              <MagicCamera3D />
+            </Suspense>
+          </MagicCameraErrorBoundary>
+        }
+      />
+      <Route
+        path="/magic-camera-3d/:clientId"
+        element={
+          <MagicCameraErrorBoundary>
+            <Suspense fallback={<p className="subtitle">Loading…</p>}>
+              <MagicCamera3D />
             </Suspense>
           </MagicCameraErrorBoundary>
         }

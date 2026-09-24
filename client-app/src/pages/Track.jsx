@@ -4,13 +4,16 @@ import { api } from '../api.js';
 
 export default function Track() {
   const [profile, setProfile] = useState(null);
+  const [orders, setOrders] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api
-      .getProfile()
-      .then(setProfile)
+    Promise.all([api.getProfile(), api.listMyRequests()])
+      .then(([profileData, requestData]) => {
+        setProfile(profileData);
+        setOrders(requestData);
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
@@ -30,6 +33,21 @@ export default function Track() {
     );
   }
 
+  // New purchases keep shipping state on their own order. Older purchases
+  // still fall back to the original client-level fulfilment fields.
+  const latestPaidOrder = orders.find(
+    (order) => order.type === 'upgrade' && order.paymentStatus === 'paid' && order.status !== 'rejected',
+  );
+  const hasOrderShipment = Boolean(
+    latestPaidOrder?.trackingId || latestPaidOrder?.dispatchedAt || latestPaidOrder?.deliveredAt,
+  );
+  const trackingId = hasOrderShipment ? latestPaidOrder.trackingId : profile.trackingId;
+  const dispatchedAt = hasOrderShipment ? latestPaidOrder.dispatchedAt : profile.dispatchedAt;
+  const deliveredAt = hasOrderShipment ? latestPaidOrder.deliveredAt : profile.deliveredAt;
+  const dispatched = hasOrderShipment ? Boolean(latestPaidOrder.dispatchedAt) : profile.dispatched;
+  const delivered = hasOrderShipment ? Boolean(latestPaidOrder.deliveredAt) : profile.delivered;
+  const cardType = latestPaidOrder?.requestedPlan || profile.cardType;
+
   const steps = [
     {
       title: 'Order placed',
@@ -45,17 +63,17 @@ export default function Track() {
     },
     {
       title: 'Shipping',
-      detail: profile.dispatched
-        ? `On its way — tracking ID ${profile.trackingId}${profile.dispatchedAt ? ', dispatched ' + new Date(profile.dispatchedAt).toLocaleDateString() : ''}.`
+      detail: dispatched
+        ? `On its way — tracking ID ${trackingId}${dispatchedAt ? ', dispatched ' + new Date(dispatchedAt).toLocaleDateString() : ''}.`
         : 'Not shipped yet.',
-      done: profile.dispatched,
+      done: dispatched,
     },
     {
       title: 'Delivered',
-      detail: profile.delivered
-        ? `Delivered${profile.deliveredAt ? ' on ' + new Date(profile.deliveredAt).toLocaleDateString() : ''}.`
+      detail: delivered
+        ? `Delivered${deliveredAt ? ' on ' + new Date(deliveredAt).toLocaleDateString() : ''}.`
         : 'On its way to you.',
-      done: profile.delivered,
+      done: delivered,
     },
   ];
 
@@ -67,7 +85,7 @@ export default function Track() {
     <div>
       <h1>Track your order</h1>
       <p className="subtitle">
-        Your <b>{profile.cardType}</b> card, from payment to delivery.
+        Your <b>{cardType}</b> card, from payment to delivery.
       </p>
 
       <div className="track-stepper">
