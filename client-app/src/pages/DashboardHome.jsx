@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, API_URL } from '../api.js';
 import DeviceProtectionCard from '../components/DeviceProtectionCard.jsx';
 import NotificationBell from '../components/NotificationBell.jsx';
+import ThemedSelect from '../components/ThemedSelect.jsx';
 import { composeCardWithQr } from '../lib/cardComposite.js';
 import { cardAspectFor } from '../lib/arProjection.js';
 
@@ -385,18 +386,16 @@ export default function DashboardHome() {
                   worth showing once there's actually more than one to pick
                   between (e.g. Nova, Dojo, Night Fury all on one account). */}
               {cards.length > 1 && (
-                <select
+                <ThemedSelect
                   className="dash-hero-card-picker"
                   value={selectedCardNumber ?? ''}
-                  onChange={(e) => setSelectedCardNumber(Number(e.target.value))}
-                  aria-label="Which card to preview"
-                >
-                  {cards.map((c) => (
-                    <option key={c.cardNumber} value={c.cardNumber}>
-                      Card {c.cardNumber} · {c.label || c.variantName || c.planName || 'Untitled'}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(nextValue) => setSelectedCardNumber(Number(nextValue))}
+                  ariaLabel="Which card to preview"
+                  options={cards.map((card) => ({
+                    value: card.cardNumber,
+                    label: `Card ${card.cardNumber} · ${card.label || card.variantName || card.planName || 'Untitled'}`,
+                  }))}
+                />
               )}
             </div>
           </div>

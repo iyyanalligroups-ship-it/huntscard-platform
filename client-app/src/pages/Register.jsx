@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, setSession } from '../api.js';
 import WaveBackdrop from '../components/WaveBackdrop.jsx';
+import ThemedSelect from '../components/ThemedSelect.jsx';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -64,12 +65,18 @@ export default function Register() {
           </div>
           <div className="field">
             <label htmlFor="gender">Gender (optional)</label>
-            <select id="gender" value={gender} onChange={(e) => setGender(e.target.value)}>
-              <option value="">Prefer not to say</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="other">Other</option>
-            </select>
+            <ThemedSelect
+              id="gender"
+              value={gender}
+              onChange={setGender}
+              ariaLabel="Gender"
+              options={[
+                { value: '', label: 'Prefer not to say' },
+                { value: 'male', label: 'Male' },
+                { value: 'female', label: 'Female' },
+                { value: 'other', label: 'Other' },
+              ]}
+            />
           </div>
           <div className="field">
             <label htmlFor="dateOfBirth">Date of birth (optional)</label>

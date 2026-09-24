@@ -18,6 +18,13 @@ export function isLoggedIn() {
   return Boolean(getToken());
 }
 
+// The logged-in client's own id, set at login (see setSession above) --
+// used by MagicCamera.jsx to tell "my own card" apart from someone else's
+// in the shared gallery target list.
+export function getClientId() {
+  return localStorage.getItem('huntsTAG_client_id');
+}
+
 // Reads the `impersonatedBy` claim (see backend's POST
 // /api/admin/clients/:clientId/impersonate) straight out of the current
 // JWT, client-side, purely to show the "an admin is viewing this as you"
@@ -268,9 +275,33 @@ export const api = {
   // quantity} for a mixed order (e.g. 1x "White Night" + 1x "Revenge
   // Red") -- omit/leave undefined for a plan with no variants, which
   // still just uses `quantity` directly.
-  createUpgradeOrder: (requestedPlan, quantity, variants) =>
-    request('/api/profile/upgrade-order', { method: 'POST', body: { requestedPlan, quantity, variants } }),
+  getCardCheckoutPricing: (state) =>
+    request('/api/profile/card-checkout/pricing', { method: 'POST', body: { state } }),
+  createUpgradeOrder: (requestedPlan, quantity, variants, deliveryAddressId) =>
+    request('/api/profile/upgrade-order', {
+      method: 'POST',
+      body: { requestedPlan, quantity, variants, deliveryAddressId },
+    }),
   confirmUpgradePayment: (payload) => request('/api/profile/upgrade-confirm', { method: 'POST', body: payload }),
+  downloadCardInvoice: async (requestId, orderNumber) => {
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/profile/requests/${requestId}/invoice`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Download failed (${res.status})`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `invoice-${orderNumber || requestId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
 
   createNewCardOrder: (payload) => request('/api/profile/new-card-order', { method: 'POST', body: payload }),
   confirmNewCardPayment: (payload) => request('/api/profile/new-card-confirm', { method: 'POST', body: payload }),
@@ -281,8 +312,15 @@ export const api = {
     request('/api/profile/magic-poster/order', { method: 'POST', body: { items, delivery } }),
   confirmMagicPosterPayment: (payload) => request('/api/profile/magic-poster/confirm', { method: 'POST', body: payload }),
   // Current delivery fee + GST%, for the checkout screen's price
-  // breakdown -- display-only, see routes/profile.js's own comment.
-  getMagicPosterPricing: () => request('/api/profile/magic-poster/pricing'),
+  // breakdown -- display-only, see routes/profile.js's own comment. `items`
+  // (same [{magicArtId, quantity}] shape as createMagicPosterOrder) is what
+  // the delivery fee is actually WEIGHT-tiered against (see
+  // backend/models/DeliveryLaneRate.js) -- a bigger cart can land in a
+  // higher tier even to the same state. `state` selects which DTDC lane
+  // that weight is priced against; omit it before an address is chosen
+  // yet, which falls back to a generic flat default server-side.
+  getMagicPosterPricing: (items, state) =>
+    request('/api/profile/magic-poster/pricing', { method: 'POST', body: { items, state } }),
   // `opts`: { skip, limit } for the paginated browse, or { q } for a
   // direct search matching either orderNumber or trackingId -- see
   // routes/profile.js's own comment. Returns { orders, hasMore }.

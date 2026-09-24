@@ -48,6 +48,87 @@ function brandGradient(doc, x1, y1, x2, y2) {
   return doc.linearGradient(x1, y1, x2, y2).stop(0, COLOR.cyan).stop(0.5, COLOR.violet).stop(1, COLOR.magenta);
 }
 
+// Converts both new card-checkout snapshots and older paid CardRequest
+// records into the same order shape buildInvoicePdf consumes. Historical
+// requests predate address/GST capture, so their stored paid amount is the
+// subtotal, delivery/GST stay zero, and a current saved address is used
+// only when one exists. Missing information is labelled honestly instead
+// of inventing tax or delivery values.
+function normalizeCardInvoiceOrder(request, client, plan, savedAddress, fallbackUnitPrice = 0) {
+  const raw = typeof request?.toObject === 'function' ? request.toObject() : request || {};
+  const legacyInvoice = !raw.orderNumber || !raw.delivery?.line1 || !raw.invoiceItems?.length;
+  const quantity = Math.max(1, Number(raw.quantity) || 1);
+  const paidTotal = Number(raw.amountPaid ?? raw.amount ?? 0);
+  const storedSubtotal = Number(raw.subtotal ?? paidTotal ?? 0);
+  const subtotal = storedSubtotal > 0 ? storedSubtotal : Number(fallbackUnitPrice || 0) * quantity;
+  const unitPrice = Number(fallbackUnitPrice) > 0 && Number(fallbackUnitPrice) * quantity === subtotal
+    ? Number(fallbackUnitPrice)
+    : subtotal / quantity;
+
+  const variants = new Map(
+    (plan?.variants || []).map((variant) => [String(variant._id), variant.name || 'Card'])
+  );
+  let items = (raw.invoiceItems || []).map((item) => ({
+    name: item.name,
+    unitPrice: Number(item.unitPrice) || 0,
+    quantity: Math.max(1, Number(item.quantity) || 1),
+  }));
+  if (!items.length && raw.variantBreakdown?.length) {
+    items = raw.variantBreakdown.map((entry) => ({
+      name: `${plan?.name || raw.requestedPlan || 'HuntsTAG Card'} - ${variants.get(String(entry.variantId)) || 'Card'}`,
+      unitPrice,
+      quantity: Math.max(1, Number(entry.quantity) || 1),
+    }));
+  }
+  if (!items.length) {
+    items = [{ name: plan?.name || raw.requestedPlan || 'HuntsTAG Card', unitPrice, quantity }];
+  }
+
+  const sourceAddress = raw.delivery?.line1 ? raw.delivery : savedAddress;
+  const delivery = sourceAddress
+    ? {
+        name: sourceAddress.name || client?.fullName || 'Customer',
+        phone: sourceAddress.phone || client?.phone || 'Not recorded',
+        line1: sourceAddress.line1 || 'Address not recorded',
+        line2: sourceAddress.line2 || '',
+        country: sourceAddress.country || 'India',
+        state: sourceAddress.state || 'Not recorded',
+        city: sourceAddress.city || 'Not recorded',
+        pincode: sourceAddress.pincode || 'Not recorded',
+      }
+    : {
+        name: client?.fullName || 'Customer',
+        phone: client?.phone || 'Not recorded',
+        line1: 'Address not recorded for this legacy purchase',
+        line2: '',
+        country: 'India',
+        state: 'Not recorded',
+        city: 'Not recorded',
+        pincode: 'Not recorded',
+      };
+
+  const deliveryFee = Number(raw.deliveryFee ?? 0);
+  const gstPercent = Number(raw.gstPercent ?? 0);
+  const gstAmount = Number(raw.gstAmount ?? 0);
+  const storedAmount = Number(raw.amount ?? raw.amountPaid ?? 0);
+  const amount = storedAmount > 0 ? storedAmount : subtotal + deliveryFee + gstAmount;
+
+  return {
+    ...raw,
+    orderNumber: raw.orderNumber || `HC${String(raw._id || '').slice(-10).toUpperCase()}`,
+    items,
+    subtotal,
+    deliveryFee,
+    gstPercent,
+    gstAmount,
+    amount,
+    amountPaid: raw.amountPaid ?? amount,
+    paymentStatus: raw.paymentStatus || 'paid',
+    delivery,
+    legacyInvoice,
+  };
+}
+
 // Streams a GST invoice PDF for one paid Magic Poster order directly to
 // `res` -- caller sets Content-Type/Content-Disposition first (see
 // routes/profile.js and routes/admin.js's invoice GET endpoints).
@@ -179,6 +260,11 @@ function buildInvoicePdf(order, client, res) {
   doc.text('This is a computer-generated GST tax invoice and does not require a physical signature.', PAGE_LEFT, footerY + 16, {
     width: 300,
   });
+  if (order.legacyInvoice) {
+    doc.text('Legacy purchase: address, delivery and tax values not captured at checkout are shown as not recorded or zero.', PAGE_LEFT, doc.y + 4, {
+      width: 330,
+    });
+  }
   doc.text(`Questions about this order? ${BUSINESS.email}`, PAGE_LEFT, doc.y + 4);
 
   // Pinned near the bottom for a typical short order, but pushed further
@@ -195,4 +281,4 @@ function buildInvoicePdf(order, client, res) {
   doc.end();
 }
 
-module.exports = { buildInvoicePdf, BUSINESS };
+module.exports = { buildInvoicePdf, normalizeCardInvoiceOrder, BUSINESS };

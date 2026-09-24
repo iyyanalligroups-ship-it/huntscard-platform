@@ -1,5 +1,9 @@
 import Reveal from './Reveal.jsx';
 
+function StaticElement({ as: Tag = 'div', children, delay: _delay, ...props }) {
+  return <Tag {...props}>{children}</Tag>;
+}
+
 const POINTS = [
   {
     title: 'Innovation Over Payment',
@@ -31,25 +35,27 @@ const POINTS = [
 // on every public page, which put HuntsWorld marketing copy on unrelated
 // pages like About Us. Copy supplied directly by the business, not
 // placeholder text.
-export default function WhyChooseHuntsworld() {
+export default function WhyChooseHuntsworld({ animateWithGsap = false, sectionRef }) {
+  const MotionElement = animateWithGsap ? StaticElement : Reveal;
+
   return (
-    <section className="why-huntsworld">
+    <section className="why-huntsworld" ref={sectionRef}>
       <div className="why-huntsworld-inner">
-        <Reveal as="h2" className="section-heading" style={{ margin: '0 0 8px' }}>What is HuntsWorld and why</Reveal>
-        <Reveal as="p" className="why-huntsworld-intro" delay={80}>
+        <MotionElement as="h2" className="section-heading" style={{ margin: '0 0 8px' }}>What is HuntsWorld and why</MotionElement>
+        <MotionElement as="p" className="why-huntsworld-intro" delay={80}>
           Huntsworld is India's most affordable B2B marketplace, designed to democratize business
           connections for companies of all sizes. We believe that every business, regardless of
           budget, deserves access to powerful marketplace tools and genuine growth opportunities.
-        </Reveal>
+        </MotionElement>
 
-        <Reveal as="h3" className="why-huntsworld-sub" delay={140}>What Makes Us Different</Reveal>
+        <MotionElement as="h3" className="why-huntsworld-sub" delay={140}>What Makes Us Different</MotionElement>
         <div className="feature-grid">
           {POINTS.map((p, i) => (
-            <Reveal as="div" className="feature-card" key={p.title} delay={i * 90}>
+            <MotionElement as="div" className="feature-card" key={p.title} delay={i * 90}>
               <div className="feature-icon">{p.icon}</div>
               <h3>{p.title}</h3>
               <p>{p.desc}</p>
-            </Reveal>
+            </MotionElement>
           ))}
         </div>
       </div>

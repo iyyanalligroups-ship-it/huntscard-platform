@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, setSession } from '../api.js';
+import ThemedSelect from './ThemedSelect.jsx';
 
 // Matches the backend's own LOGIN_OTP_RESEND_COOLDOWN_MS (routes/auth.js)
 // -- purely a UX countdown here, the server enforces the real cooldown
@@ -336,12 +337,18 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
               </div>
               <div className="field">
                 <label htmlFor="modalGender">Gender (optional)</label>
-                <select id="modalGender" value={regGender} onChange={(e) => setRegGender(e.target.value)}>
-                  <option value="">Prefer not to say</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
-                </select>
+                <ThemedSelect
+                  id="modalGender"
+                  value={regGender}
+                  onChange={setRegGender}
+                  ariaLabel="Gender"
+                  options={[
+                    { value: '', label: 'Prefer not to say' },
+                    { value: 'male', label: 'Male' },
+                    { value: 'female', label: 'Female' },
+                    { value: 'other', label: 'Other' },
+                  ]}
+                />
               </div>
               <div className="field">
                 <label htmlFor="modalDob">Date of birth (optional)</label>

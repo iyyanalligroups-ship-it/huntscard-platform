@@ -2,8 +2,45 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, isLoggedIn } from '../api.js';
 import { loadRazorpayScript } from '../razorpay.js';
+import GeoSelect from '../components/GeoSelect.jsx';
 
 const PLAN_DISPLAY_ORDER = ['premium', 'elite', 'nova', 'custom', 'apex'];
+const COUNTRY_ISO = 'IN';
+const COUNTRY_NAME = 'India';
+const EMPTY_ADDRESS_FORM = {
+  label: '',
+  name: '',
+  phone: '',
+  line1: '',
+  line2: '',
+  countryIso: COUNTRY_ISO,
+  countryName: COUNTRY_NAME,
+  stateIso: '',
+  stateName: '',
+  cityName: '',
+  pincode: '',
+};
+
+function ShopIcon({ name, size = 16 }) {
+  const common = {
+    viewBox: '0 0 24 24',
+    width: size,
+    height: size,
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.9,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  };
+  if (name === 'pin') {
+    return <svg {...common}><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg>;
+  }
+  if (name === 'download') {
+    return <svg {...common}><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>;
+  }
+  return <svg {...common}><path d="M12 5v14M5 12h14" /></svg>;
+}
 
 function PlanImageGallery({ images }) {
   const [index, setIndex] = useState(0);
@@ -251,6 +288,14 @@ export default function Shop() {
   const [loading, setLoading] = useState(true);
   const [upgraded, setUpgraded] = useState(false);
   const [requests, setRequests] = useState([]);
+  const [addresses, setAddresses] = useState(null);
+  const [selectedAddressId, setSelectedAddressId] = useState('');
+  const [showAddAddress, setShowAddAddress] = useState(false);
+  const [addressForm, setAddressForm] = useState(EMPTY_ADDRESS_FORM);
+  const [states, setStates] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [checkoutPricing, setCheckoutPricing] = useState(null);
   // Same admin-toggled setting PublicLayout.jsx's header/footer follow --
   // fetched independently here (rather than threaded down as a prop)
   // because this page is mounted two different ways: standalone on the
@@ -278,11 +323,31 @@ export default function Shop() {
       .then(([pl, profile, reqs, cards]) => {
         setPlans(pl);
         setMyProfile(profile);
+        if (profile) {
+          setAddressForm((current) => ({
+            ...current,
+            name: current.name || profile.fullName || '',
+            phone: current.phone || profile.phone || '',
+          }));
+        }
         setRequests(reqs.filter((r) => r.type === 'upgrade'));
         setMyCards(cards);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+  }, [loggedIn]);
+
+  useEffect(() => {
+    if (!loggedIn) return;
+    Promise.all([api.listAddresses(), api.getStates(COUNTRY_ISO)])
+      .then(([savedAddresses, stateList]) => {
+        setAddresses(savedAddresses);
+        setStates(stateList);
+        const preferred = savedAddresses.find((address) => address.isDefault) || savedAddresses[0];
+        if (preferred) setSelectedAddressId(preferred._id);
+        else setShowAddAddress(true);
+      })
+      .catch((err) => setError(err.message));
   }, [loggedIn]);
 
   // Deep-link from Catalog.jsx's "Get free design preview" button
@@ -376,7 +441,21 @@ export default function Shop() {
   // per-variant sum for one with styles to choose from, the plain
   // stepper's value for one without.
   const effectiveQuantity = hasVariants ? variantTotalQuantity : quantity;
-  const totalAmount = selectedPlan?.chargeAmount ? selectedPlan.chargeAmount * effectiveQuantity : null;
+  const cardSubtotal = selectedPlan?.chargeAmount ? selectedPlan.chargeAmount * effectiveQuantity : 0;
+  const selectedAddress = (addresses || []).find((address) => address._id === selectedAddressId);
+
+  useEffect(() => {
+    if (!loggedIn || !selectedPlan?.chargeAmount) return;
+    api
+      .getCardCheckoutPricing(selectedAddress?.state)
+      .then(setCheckoutPricing)
+      .catch(() => setCheckoutPricing(null));
+  }, [loggedIn, selectedPlan?.key, selectedAddress?.state]);
+
+  const deliveryFee = checkoutPricing?.deliveryFee ?? 0;
+  const gstPercent = checkoutPricing?.gstPercent ?? 0;
+  const gstAmount = Math.round((cardSubtotal + deliveryFee) * (gstPercent / 100));
+  const checkoutTotal = cardSubtotal + deliveryFee + gstAmount;
 
   function adjustVariantQuantity(variantId, delta) {
     setVariantQuantities((prev) => {
@@ -385,6 +464,60 @@ export default function Shop() {
       const next = Math.max(0, Math.min(MAX_QUANTITY - others, current + delta));
       return { ...prev, [variantId]: next };
     });
+  }
+
+  function updateAddressField(field, value) {
+    setAddressForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleAddressStateChange(option) {
+    setAddressForm((current) => ({ ...current, stateIso: option.value, stateName: option.label, cityName: '' }));
+    setCities([]);
+    api.getCities(COUNTRY_ISO, option.value).then(setCities).catch(() => {});
+  }
+
+  async function handleSaveAddress() {
+    setError('');
+    if (!addressForm.name.trim() || !addressForm.line1.trim()) {
+      setError('Enter the delivery name and street address.');
+      return;
+    }
+    if (addressForm.phone.length !== 10) {
+      setError('Enter a valid 10-digit phone number.');
+      return;
+    }
+    if (addressForm.pincode.length !== 6) {
+      setError('Enter a valid 6-digit pincode.');
+      return;
+    }
+    if (!addressForm.stateName || !addressForm.cityName) {
+      setError('Choose a state and city.');
+      return;
+    }
+
+    setSavingAddress(true);
+    try {
+      const created = await api.createAddress({
+        label: addressForm.label,
+        name: addressForm.name,
+        phone: addressForm.phone,
+        line1: addressForm.line1,
+        line2: addressForm.line2,
+        country: COUNTRY_NAME,
+        state: addressForm.stateName,
+        city: addressForm.cityName,
+        pincode: addressForm.pincode,
+        isDefault: (addresses?.length || 0) === 0,
+      });
+      setAddresses((current) => [created, ...(current || [])]);
+      setSelectedAddressId(created._id);
+      setShowAddAddress(false);
+      setAddressForm((current) => ({ ...EMPTY_ADDRESS_FORM, name: current.name, phone: current.phone }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingAddress(false);
+    }
   }
 
   async function runCheckout({ createOrder, confirmPayment, description }) {
@@ -400,7 +533,11 @@ export default function Shop() {
         order_id: order.orderId,
         name: 'HuntsTAG',
         description,
-        prefill: { name: myProfile?.fullName, email: myProfile?.loginEmail },
+        prefill: {
+          name: selectedAddress?.name || myProfile?.fullName,
+          email: myProfile?.loginEmail,
+          contact: selectedAddress?.phone || myProfile?.phone,
+        },
         handler: async (response) => {
           try {
             const result = await confirmPayment(response);
@@ -439,6 +576,10 @@ export default function Shop() {
       setError('Upload both a front and back design before checking out.');
       return;
     }
+    if (!selectedAddress) {
+      setError('Choose or add a delivery address before checking out.');
+      return;
+    }
 
     setError('');
     setSubmitting(true);
@@ -447,7 +588,8 @@ export default function Shop() {
       // Buy/upgrade your own account. Quantity = spare physical copies of
       // your own profile, still just the one account.
       const result = await runCheckout({
-        createOrder: () => api.createUpgradeOrder(selectedKey, quantity, hasVariants ? variantEntries : undefined),
+        createOrder: () =>
+          api.createUpgradeOrder(selectedKey, quantity, hasVariants ? variantEntries : undefined, selectedAddress._id),
         confirmPayment: (response) =>
           api.confirmUpgradePayment({
             requestedPlan: selectedKey,
@@ -638,7 +780,7 @@ export default function Shop() {
                     selectedPlan.chargeAmount && (
                       <p className="hint" style={{ marginBottom: 0 }}>
                         ₹{selectedPlan.chargeAmount} × {variantTotalQuantity} ={' '}
-                        <strong style={{ color: 'var(--text)' }}>₹{totalAmount}</strong>
+                        <strong style={{ color: 'var(--text)' }}>₹{cardSubtotal}</strong>
                       </p>
                     )
                   )}
@@ -715,13 +857,142 @@ export default function Shop() {
                     </button>
                     {quantity > 1 && (
                       <span className="hint" style={{ marginBottom: 0 }}>
-                        ₹{selectedPlan.chargeAmount} × {quantity} = <strong style={{ color: 'var(--text)' }}>₹{totalAmount}</strong>
+                        ₹{selectedPlan.chargeAmount} × {quantity} = <strong style={{ color: 'var(--text)' }}>₹{cardSubtotal}</strong>
                       </span>
                     )}
                   </div>
                 </div>
               )}
-              <button type="submit" disabled={submitting || !selectedPlan.chargeAmount || !variantOk || !designOk}>
+              {loggedIn && selectedPlan.chargeAmount && (
+                <section className="card-checkout-delivery" aria-labelledby="card-delivery-heading">
+                  <div className="card-checkout-section-title">
+                    <span><ShopIcon name="pin" size={17} /></span>
+                    <div>
+                      <h3 id="card-delivery-heading">Delivery address</h3>
+                      <p>Your invoice and physical card will use this address.</p>
+                    </div>
+                  </div>
+
+                  {addresses === null ? (
+                    <p className="hint">Loading your addresses…</p>
+                  ) : (
+                    <div className="card-checkout-address-list">
+                      {addresses.map((address) => (
+                        <label
+                          key={address._id}
+                          className={`card-checkout-address${selectedAddressId === address._id ? ' selected' : ''}`}
+                        >
+                          <input
+                            type="radio"
+                            name="cardDeliveryAddress"
+                            checked={selectedAddressId === address._id}
+                            onChange={() => {
+                              setSelectedAddressId(address._id);
+                              setShowAddAddress(false);
+                            }}
+                          />
+                          <span>
+                            <strong>{address.label ? `${address.label} — ` : ''}{address.name} · {address.phone}</strong>
+                            <small>
+                              {address.line1}{address.line2 ? `, ${address.line2}` : ''}, {address.city}, {address.state}, {address.country} - {address.pincode}
+                            </small>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    className="secondary card-checkout-add-address"
+                    onClick={() => setShowAddAddress((current) => !current)}
+                  >
+                    <ShopIcon name="plus" size={14} />{showAddAddress ? 'Cancel' : 'Add new address'}
+                  </button>
+
+                  {showAddAddress && (
+                    <div className="card-checkout-address-form">
+                      <label>
+                        Label <span>(optional)</span>
+                        <input value={addressForm.label} onChange={(e) => updateAddressField('label', e.target.value)} placeholder="Home" />
+                      </label>
+                      <label>
+                        Full name
+                        <input value={addressForm.name} onChange={(e) => updateAddressField('name', e.target.value)} />
+                      </label>
+                      <label>
+                        Phone
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          maxLength={10}
+                          value={addressForm.phone}
+                          onChange={(e) => updateAddressField('phone', e.target.value.replace(/\D/g, '').slice(0, 10))}
+                        />
+                      </label>
+                      <label className="wide">
+                        Address line 1
+                        <input value={addressForm.line1} onChange={(e) => updateAddressField('line1', e.target.value)} />
+                      </label>
+                      <label className="wide">
+                        Address line 2 <span>(optional)</span>
+                        <input value={addressForm.line2} onChange={(e) => updateAddressField('line2', e.target.value)} />
+                      </label>
+                      <label>
+                        Country
+                        <GeoSelect value={COUNTRY_ISO} options={[{ value: COUNTRY_ISO, label: COUNTRY_NAME }]} onChange={() => {}} disabled />
+                      </label>
+                      <label>
+                        State
+                        <GeoSelect
+                          value={addressForm.stateIso}
+                          options={states.map((state) => ({ value: state.isoCode, label: state.name }))}
+                          onChange={handleAddressStateChange}
+                          placeholder="Select state"
+                          searchPlaceholder="Search states…"
+                        />
+                      </label>
+                      <label>
+                        City
+                        <GeoSelect
+                          value={addressForm.cityName}
+                          options={cities.map((city) => ({ value: city, label: city }))}
+                          onChange={(option) => updateAddressField('cityName', option.value)}
+                          placeholder="Select city"
+                          searchPlaceholder="Search cities…"
+                          disabled={!addressForm.stateIso}
+                        />
+                      </label>
+                      <label>
+                        Pincode
+                        <input
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={addressForm.pincode}
+                          onChange={(e) => updateAddressField('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        />
+                      </label>
+                      <button type="button" disabled={savingAddress} onClick={handleSaveAddress}>
+                        {savingAddress ? 'Saving…' : 'Save address'}
+                      </button>
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {selectedPlan.chargeAmount && loggedIn && (
+                <div className="card-checkout-summary">
+                  <div><span>Card subtotal</span><strong>₹{cardSubtotal}</strong></div>
+                  <div><span>Delivery</span><strong>₹{deliveryFee}</strong></div>
+                  <div><span>GST ({gstPercent}%)</span><strong>₹{gstAmount}</strong></div>
+                  <div className="total"><span>Total</span><strong>₹{checkoutTotal}</strong></div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting || !selectedPlan.chargeAmount || !variantOk || !designOk || (loggedIn && !selectedAddress)}
+              >
                 {submitting
                   ? 'Waiting for payment…'
                   : !loggedIn
@@ -732,7 +1003,9 @@ export default function Shop() {
                   ? 'Choose a card style'
                   : !designOk
                   ? 'Upload front & back design'
-                  : `Pay ₹${totalAmount}`}
+                  : loggedIn && !selectedAddress
+                  ? 'Choose delivery address'
+                  : `Pay ₹${loggedIn ? checkoutTotal : cardSubtotal}`}
               </button>
             </form>
             {!selectedPlan.chargeAmount && (
@@ -756,8 +1029,20 @@ export default function Shop() {
               <span>
                 {r.requestedPlan}
                 {r.paymentStatus === 'paid' && <span style={{ color: 'var(--holo-cyan)' }}> · Paid</span>}
+                {r.orderNumber && <small className="card-order-number">{r.orderNumber}</small>}
               </span>
-              <span className="request-status">{r.status}</span>
+              <span className="card-request-actions">
+                <span className="request-status">{r.status}</span>
+                {r.paymentStatus === 'paid' && (
+                  <button
+                    type="button"
+                    className="secondary card-invoice-button"
+                    onClick={() => api.downloadCardInvoice(r._id, r.orderNumber).catch((err) => setError(err.message))}
+                  >
+                    <ShopIcon name="download" size={14} />Invoice
+                  </button>
+                )}
+              </span>
             </div>
           ))}
         </div>

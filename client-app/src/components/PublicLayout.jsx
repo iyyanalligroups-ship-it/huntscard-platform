@@ -44,8 +44,9 @@ export default function PublicLayout() {
   }, []);
 
   useEffect(() => {
+    document.body.classList.add('public-site-active');
     document.body.classList.toggle('theme-cyber', homeTheme === 'cyber');
-    return () => document.body.classList.remove('theme-cyber');
+    return () => document.body.classList.remove('public-site-active', 'theme-cyber');
   }, [homeTheme]);
 
   // Close the mobile dropdown on navigation (link clicks already do this

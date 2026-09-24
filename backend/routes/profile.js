@@ -17,8 +17,10 @@ const MagicArt = require('../models/MagicArt');
 const MagicPosterOrder = require('../models/MagicPosterOrder');
 const ClientAddress = require('../models/ClientAddress');
 const SiteSetting = require('../models/SiteSetting');
+const DeliveryLaneRate = require('../models/DeliveryLaneRate');
+const { laneForState, DEFAULT_LANE_RATES, computeDeliveryAmount, DEFAULT_POSTER_WEIGHT_GRAMS } = require('../utils/deliveryRates');
 const { getChargeAmount, getMagicArtChargeAmount, computeMagicPosterTotals } = require('../utils/pricing');
-const { buildInvoicePdf } = require('../utils/invoice');
+const { buildInvoicePdf, normalizeCardInvoiceOrder } = require('../utils/invoice');
 const { sendEmail } = require('../utils/email');
 const { getGlobalMagicLayoutDefault, mergeMagicLayout } = require('../utils/magicLayout');
 const { buildVariantMap, resolveCardVariant } = require('../utils/cardVariant');
@@ -1121,6 +1123,17 @@ router.post('/cards/:cardNumber/unpause', requireAuth, async (req, res) => {
 // "we'll contact you" flow via POST /requests directly.
 // -----------------------------------------------------------------------
 
+// POST /api/profile/card-checkout/pricing
+// Preview the same destination-aware delivery charge and GST percentage
+// that upgrade-order snapshots below. A card shipment is a lightweight
+// parcel, so it uses the courier table's <=250g tier. The final amount is
+// always recomputed by upgrade-order; this response is display-only.
+router.post('/card-checkout/pricing', requireAuth, async (req, res) => {
+  const settings = await SiteSetting.findOne({ key: 'global' });
+  const stateFee = await resolveDeliveryFee(String(req.body.state || '').trim(), DEFAULT_POSTER_WEIGHT_GRAMS);
+  res.json({ deliveryFee: stateFee ?? (settings?.deliveryFee ?? 0), gstPercent: settings?.gstPercent ?? 0 });
+});
+
 // POST /api/profile/upgrade-order
 // Creates a Razorpay order for the requested plan. Does NOT create a
 // CardRequest yet -- that only happens after payment is verified, so a
@@ -1132,8 +1145,9 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
       return res.status(503).json({ error: 'Payments are not configured yet.' });
     }
 
-    const { requestedPlan } = req.body;
+    const { requestedPlan, deliveryAddressId } = req.body;
     if (!requestedPlan) return res.status(400).json({ error: 'requestedPlan is required' });
+    if (!deliveryAddressId) return res.status(400).json({ error: 'Choose a delivery address before payment.' });
 
     const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase(), active: true });
     if (!plan) return res.status(400).json({ error: 'requestedPlan must match an active card plan' });
@@ -1156,8 +1170,26 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
       quantity = parseQuantity(req.body.quantity);
     }
 
+    const deliveryAddress = await ClientAddress.findOne({ _id: deliveryAddressId, clientId: req.user.clientId });
+    if (!deliveryAddress) return res.status(400).json({ error: 'The selected delivery address was not found.' });
+
+    const subtotal = chargeAmount * quantity;
+    const settings = await SiteSetting.findOne({ key: 'global' });
+    const deliveryFee =
+      (await resolveDeliveryFee(deliveryAddress.state, DEFAULT_POSTER_WEIGHT_GRAMS)) ?? (settings?.deliveryFee ?? 0);
+    const totals = computeMagicPosterTotals(subtotal, deliveryFee, settings?.gstPercent ?? 0);
+
+    const variantById = Object.fromEntries(plan.variants.map((variant) => [variant._id.toString(), variant]));
+    const invoiceItems = variantBreakdown
+      ? variantBreakdown.map((entry) => ({
+          name: `${plan.name} - ${variantById[String(entry.variantId)]?.name || 'Card'}`,
+          unitPrice: chargeAmount,
+          quantity: entry.quantity,
+        }))
+      : [{ name: plan.name, unitPrice: chargeAmount, quantity }];
+
     const order = await razorpay.orders.create({
-      amount: Math.round(chargeAmount * quantity * 100), // Razorpay wants paise, the smallest unit
+      amount: Math.round(totals.amount * 100), // Razorpay wants paise, the smallest unit
       currency: 'INR',
       receipt: `upg_${req.user.clientId}_${Date.now()}`,
       // Razorpay notes are flat string values -- the breakdown array is
@@ -1170,6 +1202,38 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
       },
     });
 
+    // Store an unpaid checkout record up front, just like Magic Poster
+    // orders do. It carries the immutable address/pricing snapshot across
+    // the Razorpay round trip. Abandoned rows are hidden from both request
+    // history endpoints; confirmation promotes this same row to paid.
+    const checkoutRequest = await CardRequest.create({
+      clientId: req.user.clientId,
+      type: 'upgrade',
+      requestedPlan: plan.key,
+      status: 'pending',
+      paymentStatus: 'unpaid',
+      razorpayOrderId: order.id,
+      orderNumber: `HC${nanoid(10).toUpperCase()}`,
+      quantity,
+      variantBreakdown: variantBreakdown || [],
+      invoiceItems,
+      subtotal: totals.subtotal,
+      deliveryFee: totals.deliveryFee,
+      gstPercent: totals.gstPercent,
+      gstAmount: totals.gstAmount,
+      amount: totals.amount,
+      delivery: {
+        name: deliveryAddress.name,
+        phone: deliveryAddress.phone,
+        line1: deliveryAddress.line1,
+        line2: deliveryAddress.line2 || '',
+        country: deliveryAddress.country,
+        state: deliveryAddress.state,
+        city: deliveryAddress.city,
+        pincode: deliveryAddress.pincode,
+      },
+    });
+
     res.json({
       orderId: order.id,
       amount: order.amount,
@@ -1177,6 +1241,9 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
       keyId: process.env.RAZORPAY_KEY_ID,
       planName: plan.name,
       quantity,
+      mongoRequestId: checkoutRequest._id,
+      orderNumber: checkoutRequest.orderNumber,
+      breakdown: totals,
     });
   } catch (err) {
     console.error('[profile/upgrade-order POST]', err);
@@ -1219,6 +1286,15 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
     // duplicates nobody actually paid for.
     const existingRequest = await CardRequest.findOne({ razorpayPaymentId: razorpay_payment_id });
     if (existingRequest) return res.status(200).json(existingRequest);
+
+    const checkoutRequest = await CardRequest.findOne({
+      clientId: req.user.clientId,
+      razorpayOrderId: razorpay_order_id,
+      paymentStatus: 'unpaid',
+    });
+    if (checkoutRequest && checkoutRequest.requestedPlan !== requestedPlan.toLowerCase()) {
+      return res.status(400).json({ error: 'Payment order does not match the selected card plan.' });
+    }
 
     // Design fields don't affect the charge amount, so there's no
     // tampering risk in trusting them straight from this request body --
@@ -1297,18 +1373,31 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
     }
     await Client.findOneAndUpdate({ clientId: req.user.clientId }, { $set: clientUpdates });
 
-    const request = await CardRequest.create({
-      clientId: req.user.clientId,
-      type: 'upgrade',
-      requestedPlan: requestedPlan.toLowerCase(),
-      status: 'approved', // auto-approved -- verified payment already happened
-      paymentStatus: 'paid',
-      razorpayOrderId: razorpay_order_id,
-      razorpayPaymentId: razorpay_payment_id,
-      amountPaid: order.amount / 100, // the actual charged total, straight from Razorpay's own order record
-      quantity,
-      variantBreakdown,
-    });
+    let request;
+    if (checkoutRequest) {
+      checkoutRequest.status = 'approved';
+      checkoutRequest.paymentStatus = 'paid';
+      checkoutRequest.razorpayPaymentId = razorpay_payment_id;
+      checkoutRequest.amountPaid = order.amount / 100;
+      request = await checkoutRequest.save();
+    } else {
+      // Compatibility for a payment order created just before this checkout
+      // snapshot feature was deployed. It remains a valid paid request, but
+      // cannot expose an invoice because no historical address/tax snapshot
+      // exists for it.
+      request = await CardRequest.create({
+        clientId: req.user.clientId,
+        type: 'upgrade',
+        requestedPlan: requestedPlan.toLowerCase(),
+        status: 'approved',
+        paymentStatus: 'paid',
+        razorpayOrderId: razorpay_order_id,
+        razorpayPaymentId: razorpay_payment_id,
+        amountPaid: order.amount / 100,
+        quantity,
+        variantBreakdown,
+      });
+    }
 
     // One trackable physical card per unit paid for -- a repeat purchase
     // against a client who already has a (possibly already-delivered) card
@@ -1411,14 +1500,56 @@ router.delete('/addresses/:id', requireAuth, async (req, res) => {
 
 const MAX_MAGIC_POSTER_ITEM_QUANTITY = 20;
 
-// GET /api/profile/magic-poster/pricing -- current delivery fee + GST%,
-// for the checkout screen's price breakdown display. Display-only: the
-// actual charged amount is always recomputed + snapshotted server-side in
-// POST /magic-poster/order below, never trusted from what this endpoint
-// returns or from anything the client sends.
-router.get('/magic-poster/pricing', requireAuth, async (req, res) => {
+// Resolves ONE Magic Art piece's per-unit weight, defaulting a piece that
+// hasn't had its own weightGrams set yet -- see models/MagicArt.js.
+function pieceWeightGrams(piece) {
+  return piece.weightGrams || DEFAULT_POSTER_WEIGHT_GRAMS;
+}
+
+// Looks up the delivery charge for one destination state + total cart
+// weight (see models/DeliveryLaneRate.js's weight-tiered, per-DTDC-lane
+// rates) -- falls back to the DTDC-derived default for that lane
+// (utils/deliveryRates.js) if it somehow has no saved row yet, so a
+// brand-new/unseeded lane never blocks checkout. Shared by both the
+// pricing-preview endpoint below and the actual order-creation route, so
+// what the checkout screen shows always matches what gets charged.
+async function resolveDeliveryFee(stateName, totalWeightGrams) {
+  if (!stateName) return null;
+  const lane = laneForState(stateName);
+  const row = await DeliveryLaneRate.findOne({ lane });
+  const rates = row || DEFAULT_LANE_RATES[lane];
+  return computeDeliveryAmount(rates, totalWeightGrams);
+}
+
+// POST /api/profile/magic-poster/pricing -- body { items: [{magicArtId,
+// quantity}], state }. Delivery fee depends on BOTH the destination lane
+// and the whole cart's combined weight (see utils/deliveryRates.js), so
+// this needs the same item list checkout has, not just a state name --
+// hence POST instead of a plain GET. `state` is optional (no address
+// chosen yet shows the site's generic flat SiteSetting.deliveryFee as a
+// placeholder instead). Display-only: the actual charged amount is always
+// recomputed + snapshotted server-side in POST /magic-poster/order below,
+// never trusted from what this endpoint returns or from anything the
+// client sends.
+router.post('/magic-poster/pricing', requireAuth, async (req, res) => {
+  const { items, state } = req.body;
   const settings = await SiteSetting.findOne({ key: 'global' });
-  res.json({ deliveryFee: settings?.deliveryFee ?? 0, gstPercent: settings?.gstPercent ?? 0 });
+
+  let totalWeightGrams = 0;
+  if (Array.isArray(items) && items.length) {
+    const artIds = [...new Set(items.map((i) => i.magicArtId))];
+    const pieces = await MagicArt.find({ _id: { $in: artIds } });
+    const pieceById = Object.fromEntries(pieces.map((p) => [p._id.toString(), p]));
+    for (const raw of items) {
+      const piece = pieceById[raw.magicArtId];
+      if (!piece) continue;
+      const quantity = Math.min(MAX_MAGIC_POSTER_ITEM_QUANTITY, Math.max(1, parseInt(raw.quantity, 10) || 1));
+      totalWeightGrams += pieceWeightGrams(piece) * quantity;
+    }
+  }
+
+  const stateFee = await resolveDeliveryFee((state || '').trim(), totalWeightGrams);
+  res.json({ deliveryFee: stateFee ?? (settings?.deliveryFee ?? 0), gstPercent: settings?.gstPercent ?? 0 });
 });
 
 // POST /api/profile/magic-poster/order
@@ -1446,6 +1577,7 @@ router.post('/magic-poster/order', requireAuth, async (req, res) => {
     const pieceById = Object.fromEntries(pieces.map((p) => [p._id.toString(), p]));
 
     const resolvedItems = [];
+    let totalWeightGrams = 0;
     for (const raw of items) {
       const piece = pieceById[raw.magicArtId];
       if (!piece) return res.status(400).json({ error: 'One of the posters in your cart no longer exists.' });
@@ -1453,16 +1585,19 @@ router.post('/magic-poster/order', requireAuth, async (req, res) => {
       if (!unitPrice) return res.status(400).json({ error: `"${piece.name || 'This poster'}" isn't available for purchase yet.` });
       const quantity = Math.min(MAX_MAGIC_POSTER_ITEM_QUANTITY, Math.max(1, parseInt(raw.quantity, 10) || 1));
       resolvedItems.push({ magicArtId: piece._id, name: piece.name || '', unitPrice, quantity });
+      totalWeightGrams += pieceWeightGrams(piece) * quantity;
     }
 
     const subtotal = resolvedItems.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
 
-    // Delivery fee + GST are a global admin setting, snapshotted onto this
-    // order now -- a later change to SiteSetting must never rewrite what
-    // this order actually charges (same principle as resolvedItems'
-    // unitPrice above, never trusting anything client-sent for the total).
+    // Delivery fee is resolved from the order's OWN delivery state + the
+    // cart's combined weight (never trusted from the client), GST from the
+    // global admin setting -- both snapshotted onto this order now so a
+    // later rate/GST change never rewrites what this order actually
+    // charged (same principle as resolvedItems' unitPrice above).
     const settings = await SiteSetting.findOne({ key: 'global' });
-    const totals = computeMagicPosterTotals(subtotal, settings?.deliveryFee ?? 0, settings?.gstPercent ?? 0);
+    const deliveryFee = (await resolveDeliveryFee(d.state, totalWeightGrams)) ?? (settings?.deliveryFee ?? 0);
+    const totals = computeMagicPosterTotals(subtotal, deliveryFee, settings?.gstPercent ?? 0);
 
     const order = await razorpay.orders.create({
       amount: Math.round(totals.amount * 100), // paise
@@ -1839,8 +1974,43 @@ router.post('/requests', requireAuth, async (req, res) => {
 // GET /api/profile/requests -- the client's own request history, so a
 // submitted request doesn't just disappear from their view.
 router.get('/requests', requireAuth, async (req, res) => {
-  const requests = await CardRequest.find({ clientId: req.user.clientId }).sort({ createdAt: -1 });
+  const requests = await CardRequest.find({
+    clientId: req.user.clientId,
+    $or: [{ paymentStatus: 'paid' }, { razorpayOrderId: null }],
+  }).sort({ createdAt: -1 });
   res.json(requests);
+});
+
+// GET /api/profile/requests/:id/invoice -- GST invoice for this client's
+// own paid card checkout. Manual and legacy requests have no immutable
+// delivery/tax snapshot, so they deliberately do not qualify.
+router.get('/requests/:id/invoice', requireAuth, async (req, res) => {
+  const request = await CardRequest.findOne({
+    _id: req.params.id,
+    clientId: req.user.clientId,
+    paymentStatus: 'paid',
+  });
+  if (!request) {
+    return res.status(404).json({ error: 'Invoice is not available for this card purchase.' });
+  }
+  const [client, savedAddress] = await Promise.all([
+    Client.findOne({ clientId: request.clientId }).select('fullName phone cardType'),
+    ClientAddress.findOne({ clientId: request.clientId }).sort({ isDefault: -1, createdAt: -1 }),
+  ]);
+  const planKey = request.requestedPlan || client?.cardType;
+  const plan = planKey ? await CardPlan.findOne({ key: planKey }) : null;
+  const invoiceOrder = normalizeCardInvoiceOrder(
+    request,
+    client,
+    plan,
+    savedAddress,
+    plan ? getChargeAmount(plan) : 0
+  );
+  res.set({
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `attachment; filename="invoice-${invoiceOrder.orderNumber}.pdf"`,
+  });
+  buildInvoicePdf(invoiceOrder, client, res);
 });
 
 // ---------------------------------------------------------------------

@@ -1,7 +1,5 @@
-// Decorative flowing-ribbon backdrop, built from the same holographic
-// gradient used everywhere else (cyan/violet/magenta) rather than an
-// unrelated color set -- ties the "landing page" feel back to the
-// existing brand identity instead of just borrowing someone else's look.
+// Decorative flowing-ribbon backdrop. The stops use the global dashboard
+// accent variables so the login artwork follows the selected client theme.
 export default function WaveBackdrop() {
   return (
     <svg
@@ -12,9 +10,9 @@ export default function WaveBackdrop() {
     >
       <defs>
         <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#5eead4" />
-          <stop offset="50%" stopColor="#a78bfa" />
-          <stop offset="100%" stopColor="#f472b6" />
+          <stop offset="0%" stopColor="var(--brand-accent)" />
+          <stop offset="55%" stopColor="var(--brand-accent-2)" />
+          <stop offset="100%" stopColor="var(--brand-accent)" />
         </linearGradient>
       </defs>
       <g fill="none" stroke="url(#waveGrad)" strokeLinecap="round">

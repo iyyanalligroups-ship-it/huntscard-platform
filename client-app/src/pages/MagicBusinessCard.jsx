@@ -3,6 +3,7 @@ import { api, API_URL } from '../api.js';
 import CropBox from '../components/CropBox.jsx';
 import MagicHoverPreview from '../components/MagicHoverPreview.jsx';
 import { composeCardWithQr } from '../lib/cardComposite.js';
+import { PILL_ICONS } from '../lib/pillIcons.jsx';
 
 const MAX_VIDEO_BYTES = 80 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
@@ -705,16 +706,18 @@ export default function MagicBusinessCard() {
               Draft -- not live yet
             </span>
           )}
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy || (!card?.active && !canActivate)}
-            title={!card?.active && !canActivate ? 'Add both an image and a video first' : undefined}
-            style={{ width: 'auto', fontSize: 12, padding: '6px 14px', marginLeft: 'auto' }}
-            onClick={handleToggleActive}
-          >
-            {card?.active ? 'Take offline' : 'Go live'}
-          </button>
+          {!card?.active && (
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy || !canActivate}
+              title={!canActivate ? 'Add both an image and a video first' : undefined}
+              style={{ width: 'auto', fontSize: 12, padding: '6px 14px', marginLeft: 'auto' }}
+              onClick={handleToggleActive}
+            >
+              Go live
+            </button>
+          )}
         </div>
 
         <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Card type</p>
@@ -887,6 +890,15 @@ export default function MagicBusinessCard() {
               // "lifting toward you" feedback the live AR view gives,
               // right when the height buttons below are clicked.
               const scale = 1 + z / 150;
+              // Position/drag (left/top/translate, the pointer handlers,
+              // z-height's own grow-closer scale) stays on THIS outer div,
+              // JS-driven from drag state -- the visual button look (icon,
+              // color, hover/click animation) lives on the INNER
+              // .magic-pill-btn instead. Same split MagicCamera.jsx's live
+              // scan uses and for the same reason: an inline
+              // `style.transform` here would permanently override any
+              // hover/:active transform a CSS class tried to apply on the
+              // same element.
               return (
                 <div
                   key={key}
@@ -898,24 +910,19 @@ export default function MagicBusinessCard() {
                     position: 'absolute',
                     left: `${((pos.x - COMPONENT_X_MIN) / COMPONENT_X_RANGE) * 100}%`,
                     top: `${(pos.y / COMPONENT_Y_MAX) * 100}%`,
-                    transform: `translate(-50%, -50%) scale(${scale}) rotate(${rotation}deg)`,
+                    transform: `translate(-50%, -50%) scale(${scale})`,
                     zIndex: draggingComponentKey === key ? 5 : Math.round(z),
-                    padding: '6px 12px',
-                    background: '#2563eb',
-                    color: '#fff',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: 0.5,
-                    textTransform: 'uppercase',
-                    borderRadius: 4,
-                    whiteSpace: 'nowrap',
-                    boxShadow: `0 ${2 + z / 6}px ${8 + z / 3}px rgba(0,0,0,${0.3 + z / 250})`,
                     cursor: draggingComponentKey === key ? 'grabbing' : 'grab',
                     touchAction: 'none',
                     userSelect: 'none',
                   }}
                 >
-                  {label}
+                  <div
+                    className="magic-pill-btn"
+                    style={{ '--rot': `${rotation}deg`, '--z-shadow': `0 ${2 + z / 6}px ${8 + z / 3}px rgba(0,0,0,${0.3 + z / 250})` }}
+                  >
+                    {PILL_ICONS[key] || PILL_ICONS.custom}{label}
+                  </div>
                 </div>
               );
             })}

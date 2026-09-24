@@ -71,8 +71,19 @@ export default function MagicPosterCart() {
       .then((profile) => setForm((f) => ({ ...f, name: f.name || profile.fullName || '', phone: f.phone || profile.phone || '' })))
       .catch(() => {});
     api.getStates(COUNTRY_ISO).then(setStates).catch(() => {});
-    api.getMagicPosterPricing().then(setPricing).catch(() => {});
   }, [loggedIn]);
+
+  // Delivery fee depends on BOTH which address is selected for delivery
+  // (which DTDC lane) AND the cart's own total weight (which tier within
+  // that lane -- see backend's DeliveryLaneRate) -- refetches whenever
+  // either changes, including the very first time an address list finishes
+  // loading and a default gets auto-selected above.
+  const selectedAddress = (addresses || []).find((a) => a._id === selectedAddressId);
+  useEffect(() => {
+    if (!loggedIn) return;
+    const items = cart.items.map((i) => ({ magicArtId: i.magicArtId, quantity: i.quantity }));
+    api.getMagicPosterPricing(items, selectedAddress?.state).then(setPricing).catch(() => {});
+  }, [loggedIn, selectedAddress?.state, cart.items]);
 
   function handleStateChange(option) {
     setForm((f) => ({ ...f, stateIso: option.value, stateName: option.label, cityName: '' }));
@@ -170,7 +181,7 @@ export default function MagicPosterCart() {
   async function handlePay(e) {
     e.preventDefault();
     if (cart.items.length === 0) return;
-    const selected = (addresses || []).find((a) => a._id === selectedAddressId);
+    const selected = selectedAddress;
     if (!selected) {
       setError('Choose or add a delivery address first.');
       return;

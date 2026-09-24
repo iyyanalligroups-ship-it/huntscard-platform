@@ -3,6 +3,7 @@ import Zoom from 'react-medium-image-zoom';
 import 'react-medium-image-zoom/dist/styles.css';
 import { api } from '../api.js';
 import Magic3DPreview from '../components/Magic3DPreview.jsx';
+import ThemedSelect from '../components/ThemedSelect.jsx';
 
 // Name/job title stay above the tabs, same as the photo/banner -- they're
 // identity, not something that belongs to one of the five card tabs.
@@ -720,12 +721,18 @@ export default function Profile() {
           </div>
           <div className="field">
             <label htmlFor="gender">Gender</label>
-            <select id="gender" value={form.gender || ''} onChange={(e) => updateField('gender', e.target.value)}>
-              <option value="">Prefer not to say</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="other">Other</option>
-            </select>
+            <ThemedSelect
+              id="gender"
+              value={form.gender || ''}
+              onChange={(nextValue) => updateField('gender', nextValue)}
+              ariaLabel="Gender"
+              options={[
+                { value: '', label: 'Prefer not to say' },
+                { value: 'male', label: 'Male' },
+                { value: 'female', label: 'Female' },
+                { value: 'other', label: 'Other' },
+              ]}
+            />
           </div>
           <div className="field">
             <label htmlFor="dateOfBirth">Date of birth</label>

@@ -1,5 +1,16 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import {
+  ArrowRight,
+  AtSign,
+  BadgeCheck,
+  KeyRound,
+  LockKeyhole,
+  ShieldCheck,
+  Smartphone,
+  Sparkles,
+  Wifi,
+} from 'lucide-react';
 import { api, setSession } from '../api.js';
 import WaveBackdrop from '../components/WaveBackdrop.jsx';
 
@@ -71,122 +82,175 @@ export default function Login() {
 
   return (
     <div className="login-page">
+      <div className="login-page__glow login-page__glow--one" />
+      <div className="login-page__glow login-page__glow--two" />
       <div className="wave-backdrop">
         <WaveBackdrop />
       </div>
-      <div className="shell" style={{ position: 'relative' }}>
-        <div className="brand">
-          <div className="brand-mark" />
-          <span className="brand-name">HuntsTAG</span>
-        </div>
 
-      <h1>Log in to your card</h1>
-      <p className="subtitle">Use the email and password you were sent when your card was ordered.</p>
+      <main className="login-shell">
+        <section className="login-frame">
+          <aside className="login-showcase">
+            <div className="login-brand">
+              <div className="brand-mark" aria-hidden="true" />
+              <div>
+                <span className="login-brand__name">HuntsTAG</span>
+                <span className="login-brand__label">Client portal</span>
+              </div>
+            </div>
 
-      <div className="hint" style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
-        <button
-          type="button"
-          onClick={() => switchMode('password')}
-          className={mode === 'password' ? undefined : 'secondary'}
-          style={{ width: 'auto', padding: '6px 14px' }}
-        >
-          Password
-        </button>
-        <button
-          type="button"
-          onClick={() => switchMode('otp')}
-          className={mode === 'otp' ? undefined : 'secondary'}
-          style={{ width: 'auto', padding: '6px 14px' }}
-        >
-          OTP (phone only)
-        </button>
-      </div>
+            <div className="login-showcase__content">
+              <span className="login-eyebrow"><Sparkles size={15} /> One connected identity</span>
+              <h2>Your digital identity, ready when you are.</h2>
+              <p>Manage your smart card, contacts and immersive experiences from one secure workspace.</p>
 
-      {error && <div className="error-banner">{error}</div>}
+              <div className="login-benefits">
+                <span><Wifi size={17} /> NFC-ready profile</span>
+                <span><BadgeCheck size={17} /> Verified connections</span>
+                <span><ShieldCheck size={17} /> Protected access</span>
+              </div>
+            </div>
 
-      {mode === 'password' && (
-        <form className="card" onSubmit={handlePasswordSubmit}>
-          <div className="field">
-            <label htmlFor="identifier">Email or phone number</label>
-            <input
-              id="identifier"
-              type="text"
-              autoComplete="username"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              required
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <button type="submit" disabled={loading}>
-            {loading ? 'Logging in…' : 'Log in'}
-          </button>
-        </form>
-      )}
+            <div className="login-showcase__footer">
+              <ShieldCheck size={16} /> Secure HuntsTAG workspace
+            </div>
+          </aside>
 
-      {mode === 'otp' && !otpSent && (
-        <form className="card" onSubmit={handleSendOtp}>
-          <div className="field">
-            <label htmlFor="otp-phone">Phone number</label>
-            <input
-              id="otp-phone"
-              type="tel"
-              autoComplete="tel"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              required
-            />
-          </div>
-          <button type="submit" disabled={loading}>
-            {loading ? 'Sending…' : 'Send code'}
-          </button>
-        </form>
-      )}
+          <section className="login-auth" aria-labelledby="login-title">
+            <div className="login-auth__badge"><ShieldCheck size={15} /> Secure sign in</div>
+            <div className="login-auth__heading">
+              <span className="login-auth__icon"><KeyRound size={21} /></span>
+              <div>
+                <p>Welcome back</p>
+                <h1 id="login-title">Log in to your card</h1>
+              </div>
+            </div>
+            <p className="login-auth__subtitle">Use the credentials you received when your HuntsTAG card was ordered.</p>
 
-      {mode === 'otp' && otpSent && (
-        <form className="card" onSubmit={handleVerifyOtp}>
-          <p className="hint">A code was sent to {identifier}, if an account exists for it.</p>
-          <div className="field">
-            <label htmlFor="otp-code">Code</label>
-            <input
-              id="otp-code"
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value)}
-              required
-            />
-          </div>
-          <button type="submit" disabled={loading}>
-            {loading ? 'Logging in…' : 'Log in'}
-          </button>
-          <button type="button" className="secondary" style={{ marginTop: 8 }} onClick={() => setOtpSent(false)}>
-            Use a different number
-          </button>
-        </form>
-      )}
+            <div className="login-mode-switch" role="tablist" aria-label="Choose sign in method">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'password'}
+                onClick={() => switchMode('password')}
+                className={mode === 'password' ? 'active' : ''}
+              >
+                <LockKeyhole size={16} /> Password
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'otp'}
+                onClick={() => switchMode('otp')}
+                className={mode === 'otp' ? 'active' : ''}
+              >
+                <Smartphone size={16} /> OTP
+              </button>
+            </div>
 
-      <p className="hint" style={{ textAlign: 'center', marginTop: 12 }}>
-        <Link to="/forgot-password" className="link-out">Forgot password?</Link>
-      </p>
+            {error && <div className="error-banner login-error">{error}</div>}
 
-      <p className="hint" style={{ textAlign: 'center', marginTop: 4 }}>
-        <Link to="/" className="link-out">Back to Home</Link>
-        {' · '}
-        <Link to="/shop" className="link-out">Don't have a card? Shop now</Link>
-      </p>
-      </div>
+            {mode === 'password' && (
+              <form className="login-form" onSubmit={handlePasswordSubmit}>
+                <div className="field">
+                  <label htmlFor="identifier">Email or phone number</label>
+                  <div className="login-input">
+                    <AtSign size={18} aria-hidden="true" />
+                    <input
+                      id="identifier"
+                      type="text"
+                      autoComplete="username"
+                      placeholder="name@example.com or phone"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="field">
+                  <label htmlFor="password">Password</label>
+                  <div className="login-input">
+                    <LockKeyhole size={18} aria-hidden="true" />
+                    <input
+                      id="password"
+                      type="password"
+                      autoComplete="current-password"
+                      placeholder="Enter your password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="login-form__meta">
+                  <span><ShieldCheck size={14} /> Protected sign in</span>
+                  <Link to="/forgot-password">Forgot password?</Link>
+                </div>
+                <button className="login-submit" type="submit" disabled={loading}>
+                  {loading ? 'Logging in…' : <>Log in securely <ArrowRight size={18} /></>}
+                </button>
+              </form>
+            )}
+
+            {mode === 'otp' && !otpSent && (
+              <form className="login-form" onSubmit={handleSendOtp}>
+                <div className="field">
+                  <label htmlFor="otp-phone">Phone number</label>
+                  <div className="login-input">
+                    <Smartphone size={18} aria-hidden="true" />
+                    <input
+                      id="otp-phone"
+                      type="tel"
+                      autoComplete="tel"
+                      placeholder="Enter your registered phone"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <button className="login-submit" type="submit" disabled={loading}>
+                  {loading ? 'Sending…' : <>Send secure code <ArrowRight size={18} /></>}
+                </button>
+              </form>
+            )}
+
+            {mode === 'otp' && otpSent && (
+              <form className="login-form" onSubmit={handleVerifyOtp}>
+                <p className="login-otp-note">A code was sent to <strong>{identifier}</strong>, if an account exists for it.</p>
+                <div className="field">
+                  <label htmlFor="otp-code">Verification code</label>
+                  <div className="login-input">
+                    <KeyRound size={18} aria-hidden="true" />
+                    <input
+                      id="otp-code"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="Enter verification code"
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <button className="login-submit" type="submit" disabled={loading}>
+                  {loading ? 'Logging in…' : <>Verify and log in <ArrowRight size={18} /></>}
+                </button>
+                <button type="button" className="login-secondary" onClick={() => setOtpSent(false)}>
+                  Use a different number
+                </button>
+              </form>
+            )}
+
+            <div className="login-auth__footer">
+              <Link to="/">Back to home</Link>
+              <span aria-hidden="true">•</span>
+              <Link to="/shop">Don't have a card? Shop now</Link>
+            </div>
+          </section>
+        </section>
+      </main>
     </div>
   );
 }

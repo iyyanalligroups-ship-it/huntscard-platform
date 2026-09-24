@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, clearSession, getImpersonatedBy } from '../api.js';
 
@@ -52,44 +52,91 @@ const ICONS = {
   posterOrders: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
   ),
+  search: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+  ),
+  palette: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="9" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16" cy="9" r="1"/><path d="M16.5 14.5c0 1.1-.9 2-2 2H13a1.5 1.5 0 0 0 0 3h.5"/></svg>
+  ),
+  chevron: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+  ),
+  close: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+  ),
 };
 
-const NAV_ITEMS = [
-  { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', end: true },
-  // HuntsEngine Test intentionally hidden from the nav (2026-08-09) --
-  // internal testing tool, not something a client should stumble into.
-  // The route itself is untouched (App.jsx) -- still reachable directly
-  // at /dashboard/huntsengine-test if needed for further testing.
-  { to: '/dashboard/appointments', label: 'Appointment Requests', icon: 'appointments' },
-  { to: '/dashboard/profile', label: 'Profile', icon: 'profile' },
-  { to: '/dashboard/settings', label: 'Profile Settings', icon: 'profileSettings' },
-  { to: '/dashboard/ar-layout', label: 'AR Layout', icon: 'arLayout' },
-  // Scans the admin-uploaded Magic Art image + video (see
-  // MagicCamera.jsx's own file comment) -- clients can scan here but
-  // cannot upload; only the admin app's Magic Art page can. Points OUTSIDE
-  // /dashboard on purpose -- this page is now public (no login required),
-  // same URL a logged-out visitor would reach directly.
-  { to: '/magic-camera', label: 'Magic Camera', icon: 'magicArt' },
-  // Read-only preview of THIS client's own personal AR image+video,
-  // admin-uploaded per client (see MagicBusinessCard.jsx's file comment) --
-  // distinct from the shared gallery Magic Camera above scans.
-  { to: '/dashboard/magic-business-card', label: 'Magic Business Card', icon: 'magicArt' },
-  { to: '/dashboard/upgrade', label: 'Shop', icon: 'shop' },
-  { to: '/dashboard/track', label: 'Track', icon: 'track' },
-  { to: '/dashboard/magic-poster-orders', label: 'Magic Poster Orders', icon: 'posterOrders' },
-  // Same "points outside /dashboard" precedent as Magic Camera above --
-  // ChatSupport.jsx lives on the public site (App.jsx's PublicLayout
-  // routes) since it needs that layout's header/footer, not the
-  // dashboard chrome.
-  { to: '/chat', label: 'Chat Support', icon: 'chat' },
-  { to: '/dashboard/account-settings', label: 'Settings', icon: 'settings' },
-  { to: '/dashboard/contacts', label: 'Contacts', icon: 'contacts' },
+const DASHBOARD_ITEM = { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', end: true };
+
+const NAV_GROUPS = [
+  {
+    id: 'account',
+    label: 'Account & connections',
+    icon: 'profile',
+    items: [
+      { to: '/dashboard/appointments', label: 'Appointment Requests', icon: 'appointments' },
+      { to: '/dashboard/profile', label: 'Profile', icon: 'profile' },
+      { to: '/dashboard/settings', label: 'Profile Settings', icon: 'profileSettings' },
+      { to: '/dashboard/contacts', label: 'Contacts', icon: 'contacts' },
+    ],
+  },
+  {
+    id: 'studio',
+    label: 'Studio & AR',
+    icon: 'arLayout',
+    items: [
+      { to: '/dashboard/ar-layout', label: 'AR Layout', icon: 'arLayout' },
+      { to: '/magic-camera', label: 'Magic Camera', icon: 'magicArt' },
+      { to: '/dashboard/magic-business-card', label: 'Magic Business Card', icon: 'magicArt' },
+    ],
+  },
+  {
+    id: 'orders',
+    label: 'Shop & orders',
+    icon: 'shop',
+    items: [
+      { to: '/dashboard/upgrade', label: 'Shop', icon: 'shop' },
+      { to: '/dashboard/track', label: 'Track Orders', icon: 'track' },
+      { to: '/dashboard/magic-poster-orders', label: 'Magic Poster Orders', icon: 'posterOrders' },
+    ],
+  },
+  {
+    id: 'support',
+    label: 'Help & settings',
+    icon: 'chat',
+    items: [
+      { to: '/chat', label: 'Chat Support', icon: 'chat' },
+      { to: '/dashboard/account-settings', label: 'Settings', icon: 'settings' },
+    ],
+  },
 ];
+
+const ALL_NAV_ITEMS = [DASHBOARD_ITEM, ...NAV_GROUPS.flatMap((group) => group.items)];
+
+const ACCENT_THEMES = [
+  { id: 'teal', label: 'HuntsTAG Teal', color: '#0d9394' },
+  { id: 'violet', label: 'Royal Violet', color: '#7367f0' },
+  { id: 'amber', label: 'Warm Amber', color: '#e58a16' },
+];
+
+function matchesPath(item, pathname) {
+  return item.end ? pathname === item.to : pathname === item.to || pathname.startsWith(`${item.to}/`);
+}
 
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [navSearch, setNavSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
+  const topbarToolsRef = useRef(null);
+  const searchInputRef = useRef(null);
+  const [openGroups, setOpenGroups] = useState(() => Object.fromEntries(NAV_GROUPS.map((group) => [group.id, true])));
+  const [accentTheme, setAccentTheme] = useState(() => {
+    if (typeof window === 'undefined') return 'teal';
+    return window.localStorage.getItem('huntstag-dashboard-accent') || 'teal';
+  });
   // Same admin-toggled setting PublicLayout.jsx reads -- adds .theme-orange
   // to the whole dashboard shell (sidebar + every page rendered through
   // Outlet below) when set, so the logged-in area matches the public
@@ -111,10 +158,50 @@ export default function Layout() {
   // Pinning body's own background removes that gap outright instead of
   // chasing the exact sticky/scroll interaction that caused it.
   useEffect(() => {
+    document.body.classList.add('client-dashboard-active');
     document.body.classList.toggle('theme-orange', homeTheme === 'orange');
     document.body.classList.toggle('theme-cyber', homeTheme === 'cyber');
-    return () => document.body.classList.remove('theme-orange', 'theme-cyber');
+    return () => document.body.classList.remove('client-dashboard-active', 'theme-orange', 'theme-cyber');
   }, [homeTheme]);
+
+  useEffect(() => {
+    window.localStorage.setItem('huntstag-dashboard-accent', accentTheme);
+    document.documentElement.dataset.huntstagAccent = accentTheme;
+  }, [accentTheme]);
+
+  useEffect(() => {
+    setMenuOpen(false);
+    setSearchOpen(false);
+    const activeGroup = NAV_GROUPS.find((group) => group.items.some((item) => matchesPath(item, location.pathname)));
+    if (activeGroup) setOpenGroups((current) => ({ ...current, [activeGroup.id]: true }));
+  }, [location.pathname]);
+
+  useEffect(() => {
+    function closeFloatingPanels(event) {
+      if (event.type === 'keydown' && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setSearchOpen(true);
+        searchInputRef.current?.focus();
+        return;
+      }
+      if (event.key === 'Escape') {
+        setSearchOpen(false);
+        setThemeOpen(false);
+        setMenuOpen(false);
+        return;
+      }
+      if (event.type === 'mousedown' && topbarToolsRef.current && !topbarToolsRef.current.contains(event.target)) {
+        setSearchOpen(false);
+        setThemeOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', closeFloatingPanels);
+    document.addEventListener('keydown', closeFloatingPanels);
+    return () => {
+      document.removeEventListener('mousedown', closeFloatingPanels);
+      document.removeEventListener('keydown', closeFloatingPanels);
+    };
+  }, []);
 
   function handleLogout() {
     clearSession();
@@ -146,38 +233,75 @@ export default function Layout() {
     location.pathname === '/dashboard/huntsengine-test' ||
     location.pathname === '/dashboard/appointments';
 
-  return (
-    <div className={`dash-shell${homeTheme === 'orange' ? ' theme-orange' : homeTheme === 'cyber' ? ' theme-cyber' : ''}`}>
-      <button
-        className="dash-menu-btn"
-        onClick={() => setMenuOpen((v) => !v)}
-        aria-label="Toggle menu"
-        aria-expanded={menuOpen}
-      >
-        {ICONS.menu}
-      </button>
+  const currentPage = [...ALL_NAV_ITEMS].reverse().find((item) => matchesPath(item, location.pathname)) || DASHBOARD_ITEM;
+  const routeClass = `dash-route-${location.pathname.replace(/^\/dashboard\/?/, '').replace(/[^a-z0-9]+/gi, '-') || 'overview'}`;
+  const searchResults = navSearch.trim()
+    ? ALL_NAV_ITEMS.filter((item) => item.label.toLowerCase().includes(navSearch.trim().toLowerCase())).slice(0, 7)
+    : [];
 
+  function toggleGroup(groupId) {
+    setOpenGroups((current) => ({ ...current, [groupId]: !current[groupId] }));
+  }
+
+  function submitSearch(event) {
+    event.preventDefault();
+    if (!searchResults.length) return;
+    navigate(searchResults[0].to);
+    setNavSearch('');
+    setSearchOpen(false);
+  }
+
+  return (
+    <div data-accent={accentTheme} className={`dash-shell${homeTheme === 'orange' ? ' theme-orange' : homeTheme === 'cyber' ? ' theme-cyber' : ''}`}>
       {menuOpen && <div className="side-overlay" onClick={() => setMenuOpen(false)} />}
 
       <aside className={`side-nav${menuOpen ? ' open' : ''}`}>
-        <Link to="/" className="side-brand" onClick={() => setMenuOpen(false)}>
-          <div className="brand-mark" />
-          <span className="brand-name">HuntsTAG</span>
-        </Link>
+        <div className="side-brand-row">
+          <Link to="/" className="side-brand" onClick={() => setMenuOpen(false)}>
+            <div className="brand-mark" />
+            <span><span className="brand-name">HuntsTAG</span><small>CLIENT PORTAL</small></span>
+          </Link>
+          <button type="button" className="side-close-btn" onClick={() => setMenuOpen(false)} aria-label="Close menu">{ICONS.close}</button>
+        </div>
 
         <nav className="side-links">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              onClick={() => setMenuOpen(false)}
-              className={({ isActive }) => `side-link${isActive ? ' active' : ''}`}
-            >
-              <span className="side-icon">{ICONS[item.icon]}</span>
-              {item.label}
-            </NavLink>
-          ))}
+          <div className="side-section-label">Workspace</div>
+          <NavLink to={DASHBOARD_ITEM.to} end onClick={() => setMenuOpen(false)} className={({ isActive }) => `side-link side-dashboard-link${isActive ? ' active' : ''}`}>
+            <span className="side-icon">{ICONS[DASHBOARD_ITEM.icon]}</span>
+            {DASHBOARD_ITEM.label}
+          </NavLink>
+
+          <div className="side-section-label side-section-label-spaced">Management</div>
+          {NAV_GROUPS.map((group) => {
+            const groupActive = group.items.some((item) => matchesPath(item, location.pathname));
+            const expanded = openGroups[group.id];
+            return (
+              <div className={`side-group${groupActive ? ' active' : ''}${expanded ? ' open' : ''}`} key={group.id}>
+                <button type="button" className="side-parent" onClick={() => toggleGroup(group.id)} aria-expanded={expanded}>
+                  <span className="side-icon">{ICONS[group.icon]}</span>
+                  <span className="side-parent-label">{group.label}</span>
+                  <span className="side-chevron">{ICONS.chevron}</span>
+                </button>
+                <div className="side-children" aria-hidden={!expanded}>
+                  <div className="side-children-inner">
+                    {group.items.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.end}
+                        onClick={() => setMenuOpen(false)}
+                        className={({ isActive }) => `side-link side-child-link${isActive ? ' active' : ''}`}
+                      >
+                        <span className="side-child-dot" />
+                        <span className="side-icon">{ICONS[item.icon]}</span>
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </nav>
 
         <div className="side-footer">
@@ -193,6 +317,67 @@ export default function Layout() {
       </aside>
 
       <main className={isWideColumn || isEdgeToEdge ? 'dash-main' : 'dash-main page-shell-wrap'}>
+        <header className="dash-topbar">
+          <div className="dash-topbar-leading">
+            <button className="dash-menu-btn" onClick={() => setMenuOpen((v) => !v)} aria-label="Toggle menu" aria-expanded={menuOpen}>
+              {ICONS.menu}
+            </button>
+            <div className="dash-page-context">
+              <span>Client portal</span>
+              <strong>{currentPage.label}</strong>
+            </div>
+          </div>
+
+          <div className="dash-topbar-tools" ref={topbarToolsRef}>
+            <form className={`dash-nav-search${searchOpen ? ' open' : ''}`} onSubmit={submitSearch}>
+              <span className="dash-search-icon">{ICONS.search}</span>
+              <input
+                ref={searchInputRef}
+                type="search"
+                value={navSearch}
+                onFocus={() => setSearchOpen(true)}
+                onChange={(event) => { setNavSearch(event.target.value); setSearchOpen(true); }}
+                placeholder="Search pages..."
+                aria-label="Search dashboard pages"
+              />
+              <kbd>⌘K</kbd>
+              {searchOpen && navSearch.trim() && (
+                <div className="dash-search-results">
+                  {searchResults.length ? searchResults.map((item) => (
+                    <button type="button" key={item.to} onClick={() => { navigate(item.to); setNavSearch(''); setSearchOpen(false); }}>
+                      <span className="side-icon">{ICONS[item.icon]}</span>
+                      <span>{item.label}</span>
+                      <small>Open</small>
+                    </button>
+                  )) : <div className="dash-search-empty">No matching page</div>}
+                </div>
+              )}
+            </form>
+
+            <div className="dash-theme-control">
+              <button type="button" className="dash-theme-btn" onClick={() => setThemeOpen((open) => !open)} aria-label="Choose dashboard color" aria-expanded={themeOpen}>
+                {ICONS.palette}
+                <span className="dash-current-swatch" />
+              </button>
+              {themeOpen && (
+                <div className="dash-theme-menu">
+                  <strong>Theme color</strong>
+                  <span>Choose your dashboard accent.</span>
+                  {ACCENT_THEMES.map((theme) => (
+                    <button type="button" key={theme.id} className={accentTheme === theme.id ? 'selected' : ''} onClick={() => { setAccentTheme(theme.id); setThemeOpen(false); }}>
+                      <i style={{ background: theme.color }} />
+                      {theme.label}
+                      {accentTheme === theme.id && <b>✓</b>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="dash-user-chip"><span>H</span><div><strong>HuntsTAG</strong><small>Client account</small></div></div>
+          </div>
+        </header>
+
         {impersonatedBy && (
           <div
             style={{
@@ -218,7 +403,7 @@ export default function Layout() {
             </button>
           </div>
         )}
-        <div className={isWideColumn ? 'dash-content' : isEdgeToEdge ? 'dash-content-full' : 'page-shell'}>
+        <div className={`${isWideColumn ? 'dash-content' : isEdgeToEdge ? 'dash-content-full' : 'page-shell'} dash-route-view ${routeClass}`}>
           <Outlet />
         </div>
       </main>

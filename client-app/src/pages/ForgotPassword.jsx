@@ -1,19 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  ArrowLeft,
+  ArrowRight,
+  BadgeCheck,
+  CheckCircle2,
+  KeyRound,
+  LockKeyhole,
+  Mail,
+  RotateCcw,
+  ShieldCheck,
+  Sparkles,
+  Wifi,
+} from 'lucide-react';
 import { api } from '../api.js';
 import WaveBackdrop from '../components/WaveBackdrop.jsx';
 
-// Matches the backend's own RESET_OTP_RESEND_COOLDOWN_MS (routes/auth.js)
-// -- purely a UX countdown here, the server enforces the real cooldown.
+// Matches the backend's RESET_OTP_RESEND_COOLDOWN_MS. The server still
+// enforces the real cooldown; this timer only communicates it in the UI.
 const OTP_RESEND_COOLDOWN_SECONDS = 45;
 
-// Three steps, all on this one page: email in -> emailed 6-digit code
-// verified in-page -> set a new password. Verifying the code (see
-// routes/auth.js POST /forgot-password/verify-otp) mints the same kind of
-// resetToken the old emailed-link flow used, so the final step still calls
-// the existing POST /reset-password unchanged -- see pages/ResetPassword.jsx
-// for that same call, reached instead via a URL token for anyone who still
-// has an old link.
 export default function ForgotPassword() {
   const [step, setStep] = useState('email'); // 'email' | 'otp' | 'password' | 'done'
   const [loginEmail, setLoginEmail] = useState('');
@@ -21,7 +27,6 @@ export default function ForgotPassword() {
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -34,18 +39,18 @@ export default function ForgotPassword() {
     setResendCooldown(OTP_RESEND_COOLDOWN_SECONDS);
     clearInterval(resendIntervalRef.current);
     resendIntervalRef.current = setInterval(() => {
-      setResendCooldown((s) => {
-        if (s <= 1) {
+      setResendCooldown((seconds) => {
+        if (seconds <= 1) {
           clearInterval(resendIntervalRef.current);
           return 0;
         }
-        return s - 1;
+        return seconds - 1;
       });
     }, 1000);
   }
 
-  async function handleSendCode(e) {
-    e.preventDefault();
+  async function handleSendCode(event) {
+    event.preventDefault();
     setError('');
     setLoading(true);
     try {
@@ -74,13 +79,13 @@ export default function ForgotPassword() {
     }
   }
 
-  async function handleVerifyCode(e) {
-    e.preventDefault();
+  async function handleVerifyCode(event) {
+    event.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const res = await api.verifyForgotPasswordOtp(loginEmail, otp);
-      setResetToken(res.token);
+      const response = await api.verifyForgotPasswordOtp(loginEmail, otp);
+      setResetToken(response.token);
       setStep('password');
       clearInterval(resendIntervalRef.current);
     } catch (err) {
@@ -90,8 +95,8 @@ export default function ForgotPassword() {
     }
   }
 
-  async function handleSetPassword(e) {
-    e.preventDefault();
+  async function handleSetPassword(event) {
+    event.preventDefault();
     setError('');
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
@@ -108,137 +113,207 @@ export default function ForgotPassword() {
     }
   }
 
+  function returnToEmail() {
+    setStep('email');
+    setOtp('');
+    setError('');
+    clearInterval(resendIntervalRef.current);
+    setResendCooldown(0);
+  }
+
+  const copy = {
+    email: {
+      eyebrow: 'Account recovery',
+      title: 'Forgot your password?',
+      description: "Enter your account email and we'll send a secure 6-digit verification code.",
+    },
+    otp: {
+      eyebrow: 'Verify your identity',
+      title: 'Enter your code',
+      description: `We sent a 6-digit code to ${loginEmail}. Enter it below to continue.`,
+    },
+    password: {
+      eyebrow: 'Secure your account',
+      title: 'Create a new password',
+      description: 'Choose a strong password with at least 8 characters.',
+    },
+    done: {
+      eyebrow: 'Recovery complete',
+      title: 'Password updated',
+      description: 'Your password has been changed successfully. You can now sign in with it.',
+    },
+  }[step];
+
+  const activeStep = step === 'email' ? 1 : step === 'otp' ? 2 : 3;
+
   return (
-    <div className="login-page">
-      <div className="wave-backdrop">
-        <WaveBackdrop />
-      </div>
-      <div className="shell" style={{ position: 'relative' }}>
-        <div className="brand">
-          <div className="brand-mark" />
-          <span className="brand-name">HuntsTAG</span>
-        </div>
+    <div className="login-page recovery-page">
+      <div className="login-page__glow login-page__glow--one" />
+      <div className="login-page__glow login-page__glow--two" />
+      <div className="wave-backdrop"><WaveBackdrop /></div>
 
-        {step === 'email' && (
-          <>
-            <h1>Forgot password</h1>
-            <p className="subtitle">Enter the email on your account and we'll send you a 6-digit code to reset your password.</p>
-
-            {error && <div className="error-banner">{error}</div>}
-
-            <form className="card" onSubmit={handleSendCode}>
-              <div className="field">
-                <label htmlFor="loginEmail">Email</label>
-                <input
-                  id="loginEmail"
-                  type="email"
-                  autoComplete="username"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  required
-                />
+      <main className="login-shell">
+        <section className="login-frame">
+          <aside className="login-showcase">
+            <div className="login-brand">
+              <div className="brand-mark" aria-hidden="true" />
+              <div>
+                <span className="login-brand__name">HuntsTAG</span>
+                <span className="login-brand__label">Client portal</span>
               </div>
-              <button type="submit" disabled={loading}>
-                {loading ? 'Sending…' : 'Send code'}
-              </button>
-            </form>
-          </>
-        )}
+            </div>
 
-        {step === 'otp' && (
-          <>
-            <h1>Enter your code</h1>
-            <p className="subtitle">If an account exists for {loginEmail}, a 6-digit code has been sent to it. Enter it below.</p>
-
-            {error && <div className="error-banner">{error}</div>}
-
-            <form className="card" onSubmit={handleVerifyCode}>
-              <div className="field">
-                <label htmlFor="resetOtp">Code</label>
-                <input
-                  id="resetOtp"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  required
-                />
+            <div className="login-showcase__content">
+              <span className="login-eyebrow"><Sparkles size={15} /> Secure account recovery</span>
+              <h2>Get back to your digital identity.</h2>
+              <p>Verify your account securely, choose a new password and continue managing your HuntsTAG experience.</p>
+              <div className="login-benefits">
+                <span><Mail size={17} /> Email verification</span>
+                <span><KeyRound size={17} /> One-time secure code</span>
+                <span><ShieldCheck size={17} /> Protected password reset</span>
               </div>
-              <button type="submit" disabled={loading}>
-                {loading ? 'Verifying…' : 'Verify code'}
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                style={{ marginTop: 8 }}
-                disabled={resendCooldown > 0 || resending}
-                onClick={handleResendCode}
-              >
-                {resending ? 'Resending…' : resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend code'}
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                style={{ marginTop: 8 }}
-                onClick={() => { setStep('email'); setOtp(''); setError(''); clearInterval(resendIntervalRef.current); setResendCooldown(0); }}
-              >
-                Use a different email
-              </button>
-            </form>
-          </>
-        )}
+            </div>
 
-        {step === 'password' && (
-          <>
-            <h1>Set a new password</h1>
-            <p className="subtitle">Enter and confirm your new password.</p>
+            <div className="login-showcase__footer">
+              <Wifi size={16} /> Connected securely by HuntsTAG
+            </div>
+          </aside>
 
-            {error && <div className="error-banner">{error}</div>}
+          <section className="login-auth recovery-auth" aria-labelledby="recovery-title">
+            <div className="login-auth__badge"><ShieldCheck size={15} /> Secure recovery</div>
 
-            <form className="card" onSubmit={handleSetPassword}>
-              <div className="field">
-                <label htmlFor="newPassword">New password</label>
-                <input
-                  id="newPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  minLength={8}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                />
+            <div className="recovery-progress" aria-label={`Recovery step ${activeStep} of 3`}>
+              {[1, 2, 3].map((number) => (
+                <span key={number} className={activeStep >= number ? 'active' : ''}>
+                  <i>{activeStep > number || step === 'done' ? <CheckCircle2 size={14} /> : number}</i>
+                </span>
+              ))}
+            </div>
+
+            <div className="login-auth__heading">
+              <span className="login-auth__icon">
+                {step === 'done' ? <CheckCircle2 size={22} /> : <RotateCcw size={21} />}
+              </span>
+              <div>
+                <p>{copy.eyebrow}</p>
+                <h1 id="recovery-title">{copy.title}</h1>
               </div>
-              <div className="field">
-                <label htmlFor="confirmPassword">Confirm new password</label>
-                <input
-                  id="confirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  minLength={8}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                />
+            </div>
+            <p className="login-auth__subtitle">{copy.description}</p>
+
+            {error && <div className="error-banner login-error">{error}</div>}
+
+            {step === 'email' && (
+              <form className="login-form" onSubmit={handleSendCode}>
+                <div className="field">
+                  <label htmlFor="loginEmail">Account email</label>
+                  <div className="login-input">
+                    <Mail size={18} aria-hidden="true" />
+                    <input
+                      id="loginEmail"
+                      type="email"
+                      autoComplete="username"
+                      placeholder="name@example.com"
+                      value={loginEmail}
+                      onChange={(event) => setLoginEmail(event.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <button className="login-submit" type="submit" disabled={loading}>
+                  {loading ? 'Sending…' : <>Send verification code <ArrowRight size={18} /></>}
+                </button>
+              </form>
+            )}
+
+            {step === 'otp' && (
+              <form className="login-form" onSubmit={handleVerifyCode}>
+                <div className="field">
+                  <label htmlFor="resetOtp">Verification code</label>
+                  <div className="login-input recovery-code-input">
+                    <KeyRound size={18} aria-hidden="true" />
+                    <input
+                      id="resetOtp"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="Enter 6-digit code"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(event) => setOtp(event.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <button className="login-submit" type="submit" disabled={loading}>
+                  {loading ? 'Verifying…' : <>Verify code <ArrowRight size={18} /></>}
+                </button>
+                <div className="recovery-secondary-actions">
+                  <button type="button" className="login-secondary" disabled={resendCooldown > 0 || resending} onClick={handleResendCode}>
+                    {resending ? 'Resending…' : resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
+                  </button>
+                  <button type="button" className="login-secondary" onClick={returnToEmail}>Change email</button>
+                </div>
+              </form>
+            )}
+
+            {step === 'password' && (
+              <form className="login-form" onSubmit={handleSetPassword}>
+                <div className="field">
+                  <label htmlFor="newPassword">New password</label>
+                  <div className="login-input">
+                    <LockKeyhole size={18} aria-hidden="true" />
+                    <input
+                      id="newPassword"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={8}
+                      placeholder="Minimum 8 characters"
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="field">
+                  <label htmlFor="confirmPassword">Confirm new password</label>
+                  <div className="login-input">
+                    <BadgeCheck size={18} aria-hidden="true" />
+                    <input
+                      id="confirmPassword"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={8}
+                      placeholder="Repeat your new password"
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <button className="login-submit" type="submit" disabled={loading}>
+                  {loading ? 'Resetting…' : <>Reset password <ArrowRight size={18} /></>}
+                </button>
+              </form>
+            )}
+
+            {step === 'done' && (
+              <div className="recovery-success">
+                <span><CheckCircle2 size={28} /></span>
+                <strong>Your account is ready</strong>
+                <p>Use your new password to securely access the HuntsTAG client portal.</p>
+                <Link className="login-submit" to="/login">Continue to login <ArrowRight size={18} /></Link>
               </div>
-              <button type="submit" disabled={loading}>
-                {loading ? 'Resetting…' : 'Reset password'}
-              </button>
-            </form>
-          </>
-        )}
+            )}
 
-        {step === 'done' && (
-          <>
-            <h1>Password reset</h1>
-            <p className="subtitle">Your password has been changed. You can log in with it now.</p>
-          </>
-        )}
-
-        <p className="hint" style={{ textAlign: 'center', marginTop: 16 }}>
-          <Link to="/login" className="link-out">Back to login</Link>
-        </p>
-      </div>
+            {step !== 'done' && (
+              <div className="login-auth__footer recovery-back-link">
+                <Link to="/login"><ArrowLeft size={15} /> Back to login</Link>
+              </div>
+            )}
+          </section>
+        </section>
+      </main>
     </div>
   );
 }

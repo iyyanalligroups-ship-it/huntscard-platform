@@ -33,6 +33,38 @@ const CardRequestSchema = new mongoose.Schema(
     razorpayOrderId: { type: String, default: null },
     razorpayPaymentId: { type: String, default: null },
     amountPaid: { type: Number, default: null }, // whole rupees, for the admin's own record
+    // Paid card checkouts use the same immutable pricing/address snapshot
+    // as MagicPosterOrder. Older/manual requests intentionally leave these
+    // fields empty and therefore do not advertise a GST invoice.
+    // No null default: a sparse unique index must omit this field entirely
+    // on manual/legacy requests, otherwise multiple explicit nulls would
+    // collide in MongoDB's unique index.
+    orderNumber: { type: String, unique: true, sparse: true, index: true },
+    invoiceItems: {
+      type: [
+        {
+          name: { type: String, trim: true, required: true },
+          unitPrice: { type: Number, required: true },
+          quantity: { type: Number, required: true, min: 1 },
+        },
+      ],
+      default: [],
+    },
+    subtotal: { type: Number, default: null },
+    deliveryFee: { type: Number, default: null },
+    gstPercent: { type: Number, default: null },
+    gstAmount: { type: Number, default: null },
+    amount: { type: Number, default: null },
+    delivery: {
+      name: { type: String, trim: true },
+      phone: { type: String, trim: true },
+      line1: { type: String, trim: true },
+      line2: { type: String, trim: true, default: '' },
+      country: { type: String, trim: true },
+      state: { type: String, trim: true },
+      city: { type: String, trim: true },
+      pincode: { type: String, trim: true },
+    },
     // How many physical cards this covers -- all encoded with the SAME
     // clientId/profile URL (spare copies), not separate accounts. Shown to
     // admin so they know to encode more than one card for this request.

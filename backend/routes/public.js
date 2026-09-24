@@ -695,9 +695,12 @@ router.get('/magic-art', async (req, res) => {
 
 // GET /api/public/magic-cards -- every ACTIVE Magic Business Card (see
 // backend/models/MagicBusinessCard.js) with both a resolvable image and a
-// video. Read-only, no auth, no clientId in the response -- not needed
-// for the AR effect itself. Scanned by client-app's MagicCamera.jsx
-// alongside Magic Art, both merged into one target list there.
+// video. Read-only, no auth. Scanned by client-app's MagicCamera.jsx
+// alongside Magic Art, both merged into one target list there. clientId
+// IS included (unlike most other fields here) -- already public via
+// /c/:clientId and /magic-camera/:clientId profile URLs, and
+// MagicCamera.jsx needs it client-side to tell a logged-in client's own
+// card apart from someone else's in this shared gallery list.
 //
 // Same image-sourcing rule as the singular /magic-card/:clientId route
 // (see its own comment) -- resolved per (clientId, cardNumber) pair in
@@ -754,6 +757,7 @@ router.get('/magic-cards', async (req, res) => {
       if (!videoUrl) continue; // nothing to scan for -- same as the old query-level filter, just resolved instead of raw
 
       results.push({
+        clientId: doc.clientId,
         imageUrl,
         imageWidth: doc.imageWidth,
         imageHeight: doc.imageHeight,

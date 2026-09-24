@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { api } from '../api.js';
+import { api, getClientId, isLoggedIn } from '../api.js';
 import { Compiler } from 'mind-ar/src/image-target/compiler.js';
 import { Controller } from 'mind-ar/src/image-target/controller.js';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { buildCacheKey, getCachedBuffer, setCachedBuffer } from '../lib/mindCache.js';
+import { PILL_ICONS } from '../lib/pillIcons.jsx';
 
 // Magic Camera -- scans every ACTIVE admin-uploaded Magic Art pack AND
 // every ACTIVE Magic Business Card at once (see backend/models/MagicArt.js
@@ -226,6 +227,15 @@ export default function MagicCamera() {
   // compile/track just that one client's card instead of the full
   // gallery-wide target list the bare /magic-camera route below still uses.
   const { clientId } = useParams();
+  // The logged-in viewer's OWN client id (null if not logged in / an
+  // anonymous visitor) -- only meaningful in the bare, unscoped
+  // /magic-camera route (no `clientId` param), reached from the
+  // dashboard's "Magic Camera" nav link. Used below to block tracking
+  // someone ELSE's Magic Business Card from that shared gallery list --
+  // scoped mode (this component's OTHER mode, `clientId` set) is
+  // untouched, since a QR-scanned card is already that owner's by
+  // construction there.
+  const myClientId = isLoggedIn() ? getClientId() : null;
   // Which of this client's PHYSICAL cards was actually tapped (see
   // PublicProfile.jsx's ?card=N -> here). Different cards can have
   // different Magic Business Card content/layout, so this has to reach
@@ -746,6 +756,22 @@ export default function MagicCamera() {
           const { targetIndex, worldMatrix } = data;
           const entry = targetEntries[targetIndex];
           if (!entry) return;
+          const target = targets[targetIndex];
+          // Gallery mode only (no `clientId` param): a logged-in client
+          // can track their OWN Magic Business Card here same as before,
+          // but another client's card should not display -- Magic Art /
+          // Street Art pieces have no `clientId` at all (shared, admin
+          // content) and are never affected by this check.
+          const isForeignCard = Boolean(!clientId && myClientId && target?.clientId && target.clientId !== myClientId);
+          if (worldMatrix !== null && isForeignCard) {
+            entry.anchorGroup.visible = false;
+            if (!foundFlags[targetIndex]) {
+              foundFlags[targetIndex] = true;
+              setStatus('scanning');
+              setStatusMessage('This Magic Business Card belongs to a different account -- you can only scan your own.');
+            }
+            return;
+          }
           if (worldMatrix !== null) {
             const m = new THREE.Matrix4();
             m.fromArray(worldMatrix);
@@ -767,7 +793,6 @@ export default function MagicCamera() {
             if (!foundFlags[targetIndex]) {
               foundFlags[targetIndex] = true;
               // Sound plays only for Special Edition cards (or Magic Art with overlays) while tracked
-              const target = targets[targetIndex];
               const isSpecial = Boolean(target?.isSpecialEdition || target?.overlays);
               entry.videoEls.forEach((v) => {
                 v.muted = !isSpecial;
@@ -1122,10 +1147,11 @@ export default function MagicCamera() {
         {/* AR component buttons -- 3D-anchored to the tracked card (move
             and rotate with it, projected fresh every frame through the
             live tracked matrix, see renderLoop above), not a fixed
-            on-screen bar. Rectangular, solid-color, text-labeled -- a
-            deliberately different shape/style from AR Layout's round
-            icon pills, per its own independent component-position
-            editor in MagicBusinessCard.jsx. */}
+            on-screen bar. Icon + label, with a hover lift / click "press"
+            animation (see .magic-pill-btn, styles.css) -- a deliberately
+            different shape/style from AR Layout's round icon pills, per
+            its own independent component-position editor in
+            MagicBusinessCard.jsx. */}
         {pillScreens.map((s) => {
           if (!s.visible) return null;
           const style = {
@@ -1136,32 +1162,18 @@ export default function MagicCamera() {
             willChange: 'transform',
             zIndex: 10,
           };
-          // Rotation lives on the button itself, not the positioned
-          // wrapper -- so it tilts the button in place without dragging
-          // the "Social" dropdown menu's own absolute positioning along
-          // with it (that's positioned relative to the wrapper above).
-          const buttonStyle = {
-            display: 'inline-block',
-            padding: '10px 20px',
-            background: '#2563eb',
-            color: '#fff',
-            fontSize: 12,
-            fontWeight: 700,
-            letterSpacing: 0.5,
-            textTransform: 'uppercase',
-            borderRadius: 4,
-            whiteSpace: 'nowrap',
-            boxShadow: '0 4px 14px rgba(0,0,0,0.45)',
-            border: 'none',
-            textDecoration: 'none',
-            cursor: 'pointer',
-            transform: s.rotation ? `rotate(${s.rotation}deg)` : undefined,
-          };
+          // Rotation is passed as a CSS custom property, not baked into
+          // `transform` directly -- .magic-pill-btn's :hover/:active rules
+          // need to animate `transform` themselves, and an inline
+          // `style.transform` would always win over those (inline styles
+          // beat stylesheet rules no matter the pseudo-class), permanently
+          // freezing the hover/click animation at whatever this set.
+          const rotStyle = { '--rot': s.rotation ? `${s.rotation}deg` : '0deg' };
           if (s.id === 'contact' && contactHref) {
             return (
               <div key={s.id} style={style}>
-                <a href={contactHref} style={buttonStyle}>
-                  Call
+                <a href={contactHref} className="magic-pill-btn" style={rotStyle}>
+                  {PILL_ICONS.contact}Call
                 </a>
               </div>
             );
@@ -1169,8 +1181,8 @@ export default function MagicCamera() {
           if (s.id === 'portfolio' && portfolioHref) {
             return (
               <div key={s.id} style={style}>
-                <a href={portfolioHref} target="_blank" rel="noopener noreferrer" style={buttonStyle}>
-                  Portfolio
+                <a href={portfolioHref} target="_blank" rel="noopener noreferrer" className="magic-pill-btn" style={rotStyle}>
+                  {PILL_ICONS.portfolio}Portfolio
                 </a>
               </div>
             );
@@ -1178,8 +1190,8 @@ export default function MagicCamera() {
           if (s.id === 'social' && socialLinks.length > 0) {
             return (
               <div key={s.id} style={{ ...style, textAlign: 'center' }}>
-                <button type="button" onClick={() => setSocialMenuOpen((v) => !v)} style={buttonStyle}>
-                  Social
+                <button type="button" onClick={() => setSocialMenuOpen((v) => !v)} className="magic-pill-btn" style={rotStyle}>
+                  {PILL_ICONS.social}Social
                 </button>
                 {socialMenuOpen && (
                   <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 6, background: '#171717', borderRadius: 10, overflow: 'hidden', boxShadow: '0 6px 20px rgba(0,0,0,0.5)', minWidth: 140, zIndex: 5 }}>
@@ -1203,8 +1215,8 @@ export default function MagicCamera() {
           if (s.id === 'huntsworld' && huntsworldHref) {
             return (
               <div key={s.id} style={style}>
-                <a href={huntsworldHref} target="_blank" rel="noopener noreferrer" style={buttonStyle}>
-                  Huntsworld
+                <a href={huntsworldHref} target="_blank" rel="noopener noreferrer" className="magic-pill-btn" style={rotStyle}>
+                  {PILL_ICONS.huntsworld}Huntsworld
                 </a>
               </div>
             );
@@ -1216,8 +1228,8 @@ export default function MagicCamera() {
             if (!def || !href) return null;
             return (
               <div key={s.id} style={style}>
-                <a href={href} target="_blank" rel="noopener noreferrer" style={buttonStyle}>
-                  {def.label}
+                <a href={href} target="_blank" rel="noopener noreferrer" className="magic-pill-btn" style={rotStyle}>
+                  {PILL_ICONS.custom}{def.label}
                 </a>
               </div>
             );

@@ -1,11 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { api, isLoggedIn } from '../api.js';
 import WhyChooseHuntsworld from '../components/WhyChooseHuntsworld.jsx';
 import TechGlobe from '../components/TechGlobe.jsx';
-import Reveal from '../components/Reveal.jsx';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -94,13 +93,16 @@ export default function Home() {
   const [cardName, setCardName] = useState(SAMPLE_CARD_NAME);
   const [cardRole, setCardRole] = useState(SAMPLE_CARD_ROLE);
   const location = useLocation();
+  const homeRef = useRef(null);
   const heroRef = useRef(null);
   const stageRef = useRef(null);
   const cardRef = useRef(null);
   const glitchRef = useRef(null);
   const spotlightRef = useRef(null);
   const orbitContainerRef = useRef(null);
+  const featuresRef = useRef(null);
   const howItWorksRef = useRef(null);
+  const whyRef = useRef(null);
 
   // Re-runs on every navigation to this page (location.key), not just
   // first mount -- logging in/out from the modal navigates back to '/'
@@ -265,42 +267,90 @@ export default function Home() {
     return () => clearTimeout(timeoutId);
   }, []);
 
-  // "How it works" -- GSAP ScrollTrigger timeline instead of the plain
-  // Reveal component the rest of the page uses (see Reveal.jsx): heading,
-  // subheading, the three numbered steps (staggered, with a slight
-  // overshoot on the scale so they "pop" into place) and the CTA button
-  // all play once as a single choreographed sequence the first time this
-  // section crosses into view, rather than each fading in independently.
-  useEffect(() => {
-    const section = howItWorksRef.current;
-    if (!section) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  // One GSAP context owns every homepage sequence, which makes cleanup
+  // reliable when React changes routes. Each section gets its own
+  // ScrollTrigger timeline while the hero plays immediately on entry.
+  useLayoutEffect(() => {
+    const root = homeRef.current;
+    if (!root) return undefined;
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) return undefined;
 
     const ctx = gsap.context(() => {
-      const heading = section.querySelector('.section-heading');
-      const subheading = section.querySelector('.section-subheading');
-      const steps = section.querySelectorAll('.step-item');
-      const cta = section.querySelector('.how-it-works-cta');
+      const heroText = gsap.utils.toArray('.hero-col-text > *');
+      const heroVisual = heroRef.current?.querySelector('.hero-visual');
+      const rings = heroRef.current?.querySelectorAll('.bg-ring');
 
-      gsap.set([heading, subheading, cta], { opacity: 0, y: 28 });
-      gsap.set(steps, { opacity: 0, y: 40, scale: 0.9 });
-
+      gsap.set(heroText, { opacity: 0, y: 30 });
+      gsap.set(heroVisual, { opacity: 0, x: 54, scale: 0.88, rotate: 3 });
       gsap
-        .timeline({
-          scrollTrigger: { trigger: section, start: 'top 78%', once: true },
-          defaults: { ease: 'power3.out' },
-        })
-        .to(heading, { opacity: 1, y: 0, duration: 0.6 })
-        .to(subheading, { opacity: 1, y: 0, duration: 0.5 }, '-=0.35')
-        .to(steps, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'back.out(1.6)', stagger: 0.15 }, '-=0.2')
-        .to(cta, { opacity: 1, y: 0, duration: 0.5 }, '-=0.25');
-    }, section);
+        .timeline({ defaults: { ease: 'power3.out' } })
+        .to(heroText, { opacity: 1, y: 0, duration: 0.72, stagger: 0.09 })
+        .to(heroVisual, { opacity: 1, x: 0, scale: 1, rotate: 0, duration: 0.95, ease: 'back.out(1.35)' }, '-=0.58');
+
+      // Slow ambient movement keeps the signature card area alive without
+      // interfering with the card's own pointer-driven 3D tilt.
+      gsap.to(heroVisual, { y: -9, duration: 3.1, repeat: -1, yoyo: true, ease: 'sine.inOut', delay: 1 });
+      if (rings?.length) {
+        gsap.to(rings[0], { rotate: 28, duration: 18, repeat: -1, ease: 'none' });
+        gsap.to(rings[1], { rotate: -24, duration: 22, repeat: -1, ease: 'none' });
+      }
+
+      const featureCards = featuresRef.current?.querySelectorAll('.feature-card');
+      const featureIcons = featuresRef.current?.querySelectorAll('.feature-icon');
+      gsap.set(featureCards, { opacity: 0, y: 54, rotateX: -8, transformOrigin: '50% 100%' });
+      gsap.timeline({
+        scrollTrigger: { trigger: featuresRef.current, start: 'top 82%', once: true },
+        defaults: { ease: 'power3.out' },
+      })
+        .to(featureCards, { opacity: 1, y: 0, rotateX: 0, duration: 0.72, stagger: 0.11 })
+        .fromTo(featureIcons, { scale: 0.55, rotate: -14 }, { scale: 1, rotate: 0, duration: 0.52, stagger: 0.1, ease: 'back.out(2)' }, '-=0.48');
+
+      const howSection = howItWorksRef.current;
+      const howHeading = howSection?.querySelector('.section-heading');
+      const howSubheading = howSection?.querySelector('.section-subheading');
+      const steps = howSection?.querySelectorAll('.step-item');
+      const stepNumbers = howSection?.querySelectorAll('.step-number');
+      const cta = howSection?.querySelector('.how-it-works-cta');
+      gsap.set([howHeading, howSubheading, cta], { opacity: 0, y: 30 });
+      gsap.set(steps, { opacity: 0, y: 44, scale: 0.9 });
+      gsap.timeline({
+        scrollTrigger: { trigger: howSection, start: 'top 78%', once: true },
+        defaults: { ease: 'power3.out' },
+      })
+        .to(howHeading, { opacity: 1, y: 0, duration: 0.62 })
+        .to(howSubheading, { opacity: 1, y: 0, duration: 0.48 }, '-=0.34')
+        .to(steps, { opacity: 1, y: 0, scale: 1, duration: 0.66, ease: 'back.out(1.55)', stagger: 0.14 }, '-=0.18')
+        .fromTo(stepNumbers, { rotate: -35, scale: 0.4 }, { rotate: 0, scale: 1, duration: 0.5, stagger: 0.13, ease: 'back.out(2)' }, '-=0.58')
+        .to(cta, { opacity: 1, y: 0, duration: 0.5 }, '-=0.2');
+
+      const whySection = whyRef.current;
+      const whyHeading = whySection?.querySelector('.section-heading');
+      const whyIntro = whySection?.querySelector('.why-huntsworld-intro');
+      const whySubheading = whySection?.querySelector('.why-huntsworld-sub');
+      const whyCards = whySection?.querySelectorAll('.feature-card');
+      const whyIcons = whySection?.querySelectorAll('.feature-icon');
+      gsap.set([whyHeading, whyIntro, whySubheading], { opacity: 0, y: 32 });
+      gsap.set(whyCards, { opacity: 0, y: 46, scale: 0.94 });
+      gsap.timeline({
+        scrollTrigger: { trigger: whySection, start: 'top 76%', once: true },
+        defaults: { ease: 'power3.out' },
+      })
+        .to(whyHeading, { opacity: 1, y: 0, duration: 0.62 })
+        .to(whyIntro, { opacity: 1, y: 0, duration: 0.52 }, '-=0.34')
+        .to(whySubheading, { opacity: 1, y: 0, duration: 0.5 }, '-=0.2')
+        .to(whyCards, { opacity: 1, y: 0, scale: 1, duration: 0.68, stagger: 0.13 }, '-=0.2')
+        .fromTo(whyIcons, { scale: 0.5, rotate: 12 }, { scale: 1, rotate: 0, duration: 0.52, stagger: 0.12, ease: 'back.out(2)' }, '-=0.55');
+
+      ScrollTrigger.refresh();
+    }, root);
 
     return () => ctx.revert();
   }, []);
 
   return (
-    <div>
+    <div className="home-motion" ref={homeRef}>
       <div className="hero-section hero-section-split" ref={heroRef}>
         <TechGlobe />
         <div className="hero-spotlight" ref={spotlightRef} aria-hidden="true" />
@@ -368,15 +418,17 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="feature-grid">
-        {FEATURES.map((f, i) => (
-          <Reveal as="div" className="feature-card" key={f.title} delay={i * 90}>
+      <section className="home-features-section" ref={featuresRef} aria-label="HuntsTAG features">
+        <div className="feature-grid">
+        {FEATURES.map((f) => (
+          <div className="feature-card" key={f.title}>
             <div className="feature-icon">{f.icon}</div>
             <h3>{f.title}</h3>
             <p>{f.desc}</p>
-          </Reveal>
+          </div>
         ))}
-      </div>
+        </div>
+      </section>
 
       <div ref={howItWorksRef}>
         <h2 className="section-heading">How it works</h2>
@@ -409,7 +461,7 @@ export default function Home() {
         </div>
       </div>
 
-      <WhyChooseHuntsworld />
+      <WhyChooseHuntsworld animateWithGsap sectionRef={whyRef} />
     </div>
   );
 }

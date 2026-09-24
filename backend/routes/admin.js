@@ -15,7 +15,8 @@ const ArLayout = require('../models/ArLayout');
 const ArIcon = require('../models/ArIcon');
 const MagicArt = require('../models/MagicArt');
 const MagicPosterOrder = require('../models/MagicPosterOrder');
-const { buildInvoicePdf } = require('../utils/invoice');
+const { buildInvoicePdf, normalizeCardInvoiceOrder } = require('../utils/invoice');
+const ClientAddress = require('../models/ClientAddress');
 const StreetArt = require('../models/StreetArt');
 const MagicBusinessCard = require('../models/MagicBusinessCard');
 const AttributeDefinition = require('../models/AttributeDefinition');
@@ -31,6 +32,8 @@ const MagicLayoutDefault = require('../models/MagicLayoutDefault');
 const { getGlobalMagicLayoutDefault } = require('../utils/magicLayout');
 const { buildVariantMap, resolveCardVariant } = require('../utils/cardVariant');
 const SiteSetting = require('../models/SiteSetting');
+const DeliveryLaneRate = require('../models/DeliveryLaneRate');
+const { LANES, LANE_LABELS, STATE_LANE, DEFAULT_LANE_RATES } = require('../utils/deliveryRates');
 
 // Default Magic Business Card QR position (percent, see
 // MagicBusinessCard.js's qrX/qrY) -- ONE universal spot for every client
@@ -231,6 +234,99 @@ router.patch('/site-settings', requireAdmin, async (req, res) => {
 });
 
 // -----------------------------------------------------------------------
+// Magic Poster delivery rates -- weight-tiered, per DTDC "lane" (see
+// models/DeliveryLaneRate.js and utils/deliveryRates.js), replacing the
+// old single flat SiteSetting.deliveryFee for Magic Poster checkout
+// (routes/profile.js's POST /magic-poster/order now resolves a lane's
+// rate + the order's own total cart weight instead of using that flat
+// number). GST stays a single global SiteSetting field above -- it isn't
+// destination/weight-dependent.
+// -----------------------------------------------------------------------
+
+// GET /api/admin/delivery-rates -- every lane's current rates, seeding any
+// lane that doesn't have its own row yet from the DTDC-derived defaults
+// (utils/deliveryRates.js). Each row also carries its label and which
+// states/UTs map to it (STATE_LANE), read-only reference info so the
+// settings page can show admin what "Zonal" or "Spl Dest" actually covers
+// while editing.
+router.get('/delivery-rates', requireAdmin, async (req, res) => {
+  try {
+    const existing = await DeliveryLaneRate.find({ lane: { $in: LANES } });
+    const known = new Set(existing.map((d) => d.lane));
+    const missing = LANES.filter((l) => !known.has(l));
+    if (missing.length) {
+      // ordered: false + swallowed error -- a concurrent request seeding
+      // the same missing rows at the same time would otherwise 11000-
+      // duplicate-key here; either request's insert winning is fine, the
+      // full list is re-read fresh right after regardless.
+      await DeliveryLaneRate.insertMany(
+        missing.map((lane) => ({ lane, ...DEFAULT_LANE_RATES[lane] })),
+        { ordered: false }
+      ).catch(() => {});
+    }
+    const rows = await DeliveryLaneRate.find({ lane: { $in: LANES } }).sort({ lane: 1 });
+    const statesByLane = {};
+    for (const [state, lane] of Object.entries(STATE_LANE)) {
+      (statesByLane[lane] ||= []).push(state);
+    }
+    res.json(
+      rows.map((r) => ({
+        lane: r.lane,
+        label: LANE_LABELS[r.lane] || r.lane,
+        states: (statesByLane[r.lane] || []).sort(),
+        under250: r.under250,
+        under500: r.under500,
+        under3000: r.under3000,
+        perKgAbove3kg: r.perKgAbove3kg,
+      }))
+    );
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/admin/delivery-rates -- bulk save, body { rates: [{lane,
+// under250, under500, under3000, perKgAbove3kg}] } -- the settings page
+// edits all 6 lanes locally and saves them in one request.
+router.patch('/delivery-rates', requireAdmin, async (req, res) => {
+  const { rates } = req.body;
+  if (!Array.isArray(rates) || rates.length === 0) {
+    return res.status(400).json({ error: 'rates must be a non-empty array' });
+  }
+  const ops = [];
+  for (const r of rates) {
+    if (!LANES.includes(r.lane)) {
+      return res.status(400).json({ error: `Unknown lane "${r.lane}"` });
+    }
+    const values = {};
+    for (const field of ['under250', 'under500', 'under3000', 'perKgAbove3kg']) {
+      const n = Number(r[field]);
+      if (!Number.isFinite(n) || n < 0) {
+        return res.status(400).json({ error: `Invalid ${field} for lane "${r.lane}"` });
+      }
+      values[field] = n;
+    }
+    ops.push({ updateOne: { filter: { lane: r.lane }, update: { $set: values }, upsert: true } });
+  }
+  try {
+    await DeliveryLaneRate.bulkWrite(ops);
+    const rows = await DeliveryLaneRate.find({}).sort({ lane: 1 });
+    res.json(
+      rows.map((r) => ({
+        lane: r.lane,
+        label: LANE_LABELS[r.lane] || r.lane,
+        under250: r.under250,
+        under500: r.under500,
+        under3000: r.under3000,
+        perKgAbove3kg: r.perKgAbove3kg,
+      }))
+    );
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// -----------------------------------------------------------------------
 // FAQ (see models/FaqEntry.js) -- feeds the public FAQ page
 // (client-app's Faq.jsx), previously a hardcoded array there.
 // -----------------------------------------------------------------------
@@ -331,6 +427,8 @@ router.delete('/faq/:id', requireAdmin, async (req, res) => {
 
 // GET /api/admin/stats
 router.get('/stats', requireAdmin, async (req, res) => {
+  const now = new Date();
+  const monthWindowStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
   const [totalClients, paid, encoded, adminCount, planCount, latestClient, monthlyAgg, pendingRequests, cardsByPlanAgg, recentClients, unclaimedOrders, unreadMessages, openCardTickets, unreadChats, pendingMagicPosterOrders] = await Promise.all([
     Client.countDocuments({}),
     Client.countDocuments({ paid: true }),
@@ -341,6 +439,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
     // Real client counts per month, last 6 months -- not fabricated
     // demo data, this is an actual aggregation over createdAt.
     Client.aggregate([
+      { $match: { createdAt: { $gte: monthWindowStart } } },
       {
         $group: {
           _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
@@ -348,13 +447,12 @@ router.get('/stats', requireAdmin, async (req, res) => {
         },
       },
       { $sort: { '_id.year': 1, '_id.month': 1 } },
-      { $limit: 6 },
     ]),
     CardRequest.countDocuments({ status: 'pending' }),
     // Real count of clients per plan -- a client with a cardType assigned
     // represents a card sale, so this is a genuine sales-by-tier breakdown.
     Client.aggregate([
-      { $match: { cardType: { $ne: null } } },
+      { $match: { cardType: { $type: 'string', $nin: [''] } } },
       { $group: { _id: '$cardType', count: { $sum: 1 } } },
     ]),
     Client.find({})
@@ -382,10 +480,23 @@ router.get('/stats', requireAdmin, async (req, res) => {
   ]);
 
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const clientsByMonth = monthlyAgg.map((m) => ({
-    label: MONTH_NAMES[m._id.month - 1],
-    count: m.count,
-  }));
+  const monthlyCountByKey = new Map(monthlyAgg.map((month) => [
+    `${month._id.year}-${month._id.month}`,
+    month.count,
+  ]));
+  // Always return the same six consecutive calendar months. Filling
+  // months with no clients keeps the chart timeline accurate and avoids
+  // stretching two distant months next to each other as if adjacent.
+  const clientsByMonth = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5 + index, 1));
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth() + 1;
+    return {
+      label: MONTH_NAMES[month - 1],
+      fullLabel: `${MONTH_NAMES[month - 1]} ${year}`,
+      count: monthlyCountByKey.get(`${year}-${month}`) || 0,
+    };
+  });
 
   // Attach plan display names to the raw key-based aggregation.
   const allPlans = await CardPlan.find({}).select('key name price priceAmount');
@@ -1672,7 +1783,9 @@ router.post('/team/:id/promote-to-prime', requireAdminPrime, async (req, res) =>
 
 // GET /api/admin/requests?status=pending
 router.get('/requests', requireAdmin, async (req, res) => {
-  const filter = {};
+  // Hide abandoned Razorpay checkouts while retaining old/manual unpaid
+  // requests (which have no gateway order id) and every verified purchase.
+  const filter = { $or: [{ paymentStatus: 'paid' }, { razorpayOrderId: null }] };
   if (req.query.status) filter.status = req.query.status;
   const requests = await CardRequest.find(filter).sort({ createdAt: -1 });
 
@@ -1680,16 +1793,29 @@ router.get('/requests', requireAdmin, async (req, res) => {
   // clientId, so join it here rather than making the frontend do a
   // second round trip per row.
   const clientIds = [...new Set(requests.map((r) => r.clientId))];
-  const clients = await Client.find({ clientId: { $in: clientIds } }).select('clientId fullName');
-  const clientMap = Object.fromEntries(clients.map((c) => [c.clientId, c.fullName]));
+  const [clients, savedAddresses] = await Promise.all([
+    Client.find({ clientId: { $in: clientIds } }).select('clientId fullName phone cardType'),
+    ClientAddress.find({ clientId: { $in: clientIds } }).sort({ isDefault: -1, createdAt: -1 }),
+  ]);
+  const clientMap = Object.fromEntries(clients.map((client) => [client.clientId, client]));
+  const addressMap = {};
+  savedAddresses.forEach((address) => {
+    if (!addressMap[address.clientId]) addressMap[address.clientId] = address;
+  });
 
   // Resolve each variantBreakdown entry's variantId into a real name/shape
   // for display -- requests only store the ObjectId reference (see
   // CardRequest.variantBreakdown's own comment), joined here the same way
   // clientName above is, rather than making the frontend do its own
   // per-plan lookup.
-  const planKeys = [...new Set(requests.map((r) => r.requestedPlan).filter(Boolean))];
-  const plans = await CardPlan.find({ key: { $in: planKeys } }).select('key variants');
+  const planKeys = [
+    ...new Set([
+      ...requests.map((request) => request.requestedPlan),
+      ...clients.map((client) => client.cardType),
+    ].filter(Boolean)),
+  ];
+  const plans = await CardPlan.find({ key: { $in: planKeys } }).select('key name price priceAmount variants');
+  const planMap = Object.fromEntries(plans.map((plan) => [plan.key, plan]));
   const variantMap = {}; // `${planKey}:${variantId}` -> { name, shape }
   plans.forEach((p) => {
     p.variants.forEach((v) => {
@@ -1700,16 +1826,63 @@ router.get('/requests', requireAdmin, async (req, res) => {
   res.json(
     requests.map((r) => {
       const obj = r.toObject();
+      const client = clientMap[r.clientId];
+      const effectivePlanKey = obj.requestedPlan || client?.cardType;
+      const plan = planMap[effectivePlanKey];
+      const invoiceDisplay = obj.paymentStatus === 'paid'
+        ? normalizeCardInvoiceOrder(obj, client, plan, addressMap[r.clientId], plan ? getChargeAmount(plan) : 0)
+        : null;
       return {
         ...obj,
-        clientName: clientMap[r.clientId] || '(deleted client)',
+        ...(invoiceDisplay
+          ? {
+              orderNumber: invoiceDisplay.orderNumber,
+              delivery: invoiceDisplay.delivery,
+              subtotal: invoiceDisplay.subtotal,
+              deliveryFee: invoiceDisplay.deliveryFee,
+              gstPercent: invoiceDisplay.gstPercent,
+              gstAmount: invoiceDisplay.gstAmount,
+              amount: invoiceDisplay.amount,
+              legacyInvoice: invoiceDisplay.legacyInvoice,
+            }
+          : {}),
+        clientName: client?.fullName || '(deleted client)',
         variantBreakdown: (obj.variantBreakdown || []).map((entry) => ({
           ...entry,
-          ...(variantMap[`${obj.requestedPlan}:${String(entry.variantId)}`] || {}),
+          ...(variantMap[`${effectivePlanKey}:${String(entry.variantId)}`] || {}),
         })),
       };
     })
   );
+});
+
+// GET /api/admin/requests/:id/invoice -- the card-purchase equivalent of
+// Magic Poster invoices below. Only new paid checkouts with a snapshotted
+// address and price breakdown qualify; legacy/manual requests remain
+// visible but cannot produce an inaccurate tax invoice.
+router.get('/requests/:id/invoice', requireAdmin, async (req, res) => {
+  const request = await CardRequest.findOne({ _id: req.params.id, paymentStatus: 'paid' });
+  if (!request) {
+    return res.status(404).json({ error: 'Invoice is not available for this card purchase.' });
+  }
+  const [client, savedAddress] = await Promise.all([
+    Client.findOne({ clientId: request.clientId }).select('fullName phone cardType'),
+    ClientAddress.findOne({ clientId: request.clientId }).sort({ isDefault: -1, createdAt: -1 }),
+  ]);
+  const planKey = request.requestedPlan || client?.cardType;
+  const plan = planKey ? await CardPlan.findOne({ key: planKey }) : null;
+  const invoiceOrder = normalizeCardInvoiceOrder(
+    request,
+    client,
+    plan,
+    savedAddress,
+    plan ? getChargeAmount(plan) : 0
+  );
+  res.set({
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `attachment; filename="invoice-${invoiceOrder.orderNumber}.pdf"`,
+  });
+  buildInvoicePdf(invoiceOrder, client, res);
 });
 
 // PATCH /api/admin/requests/:id
@@ -2267,6 +2440,7 @@ function serializeMagicArt(doc) {
     imageHeight: doc.imageHeight,
     priceAmount: doc.priceAmount,
     discountPriceAmount: doc.discountPriceAmount,
+    weightGrams: doc.weightGrams,
     modelUrl: doc.modelUrl,
     modelType: doc.modelType,
     overlays: (doc.overlays || []).map((o) => ({
@@ -2321,6 +2495,13 @@ router.patch('/magic-art/:id', requireAdmin, async (req, res) => {
     }
     if (req.body.discountPriceAmount !== undefined) {
       doc.discountPriceAmount = req.body.discountPriceAmount === '' || req.body.discountPriceAmount === null ? null : Number(req.body.discountPriceAmount);
+    }
+    if (req.body.weightGrams !== undefined) {
+      const grams = Number(req.body.weightGrams);
+      if (!Number.isFinite(grams) || grams <= 0) {
+        return res.status(400).json({ error: 'weightGrams must be a positive number' });
+      }
+      doc.weightGrams = grams;
     }
     doc.updatedBy = req.admin?.email || 'unknown';
     await doc.save();

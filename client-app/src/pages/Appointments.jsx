@@ -91,7 +91,7 @@ function MiniMonthCalendar({ shownMonth, onShownMonthChange, selectedDay, onSele
   }
 
   return (
-    <div className="card solid-black-card" style={{ padding: 14 }}>
+    <div className="card solid-black-card mini-month-card" style={{ padding: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <strong style={{ fontSize: 13 }}>{shownMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</strong>
         <div style={{ display: 'flex', gap: 4 }}>
@@ -115,13 +115,13 @@ function MiniMonthCalendar({ shownMonth, onShownMonthChange, selectedDay, onSele
           </button>
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, fontSize: 10, color: 'var(--text-dim)', textAlign: 'center', marginBottom: 4 }}>
+      <div className="mini-month-weekdays" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, fontSize: 10, color: 'var(--text-dim)', textAlign: 'center', marginBottom: 4 }}>
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
           <div key={i}>{d}</div>
         ))}
       </div>
       {weeks.map((row, wi) => (
-        <div key={wi} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 2 }}>
+        <div className="mini-month-week" key={wi} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 2 }}>
           {row.map((d) => {
             const key = dateKey(d);
             const inMonth = d.getMonth() === month;
@@ -132,6 +132,7 @@ function MiniMonthCalendar({ shownMonth, onShownMonthChange, selectedDay, onSele
               <button
                 key={key}
                 type="button"
+                className={`mini-month-day${isSelected ? ' selected' : ''}`}
                 onClick={() => onSelectDate(d)}
                 style={{
                   position: 'relative',

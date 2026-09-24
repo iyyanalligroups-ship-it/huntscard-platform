@@ -54,6 +54,13 @@ const magicArtSchema = new mongoose.Schema(
     // shows no buy button on the public page.
     priceAmount: { type: Number, default: null },
     discountPriceAmount: { type: Number, default: null },
+    // Printed weight of ONE poster, in grams -- feeds the Magic Poster
+    // checkout's DTDC-lane delivery calculation (see backend/utils/
+    // deliveryRates.js), which is tiered by TOTAL cart weight, not just
+    // destination. Defaults to DEFAULT_POSTER_WEIGHT_GRAMS (same constant,
+    // see that file) rather than null, so a piece nobody's set a weight
+    // for yet still prices delivery sanely instead of as 0g.
+    weightGrams: { type: Number, default: 200 },
     // Optional 3D model shown ANCHORED above the tracked image in Magic
     // Camera (floats in front of it, like the video overlay's own plane
     // but a real 3D object) -- additive to the overlay video(s) above,
