@@ -177,7 +177,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
 
   return (
     <div className="auth-modal-backdrop" onClick={handleBackdropClick}>
-      <div className="auth-modal-card">
+      <div className={`auth-modal-card${mode === 'register' ? ' auth-modal-card--register' : ''}`}>
         <button className="auth-modal-close" onClick={onClose} aria-label="Close"><X size={18} /></button>
 
         <div className="brand" style={{ marginBottom: 20 }}>
@@ -323,7 +323,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
 
             {error && <div className="error-banner">{error}</div>}
 
-            <form onSubmit={handleRegister}>
+            <form className="auth-register-form" onSubmit={handleRegister}>
               <div className="field">
                 <label htmlFor="modalFullName">Full name</label>
                 <input id="modalFullName" value={fullName} onChange={(e) => setFullName(e.target.value)} required />

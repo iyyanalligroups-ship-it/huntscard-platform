@@ -21,12 +21,21 @@ function getTransporter() {
 
 async function sendEmail(to, subject, body) {
   const t = getTransporter();
+  const content = typeof body === 'string' ? { text: body } : body;
   if (!t) {
-    console.log(`[EMAIL STUB -- APP_EMAIL/APP_PASSWORD not set] to ${to} | subject: ${subject}\n${body}`);
+    console.log(
+      `[EMAIL STUB -- APP_EMAIL/APP_PASSWORD not set] to ${to} | subject: ${subject}\n${content?.text || ''}`
+    );
     return;
   }
   try {
-    await t.sendMail({ from: `huntsTAG <${process.env.APP_EMAIL}>`, to, subject, text: body });
+    await t.sendMail({
+      from: `HunsTAG <${process.env.APP_EMAIL}>`,
+      to,
+      subject,
+      text: content?.text || '',
+      ...(content?.html ? { html: content.html } : {}),
+    });
     console.log(`[EMAIL] sent to ${to}: ${subject}`);
   } catch (err) {
     console.error(`[EMAIL] failed to send to ${to}:`, err.message);

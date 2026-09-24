@@ -8,6 +8,7 @@ const { requireAuth } = require('../middleware/auth');
 const Client = require('../models/Client');
 const { sendSms } = require('../utils/sms');
 const { sendEmail } = require('../utils/email');
+const { passwordResetEmail } = require('../utils/emailTemplates');
 const { claimAppointmentRequests } = require('./appointments');
 
 const router = express.Router();
@@ -306,8 +307,8 @@ router.post('/forgot-password', otpLimiter, async (req, res) => {
       await client.save();
       await sendEmail(
         client.loginEmail,
-        'Your huntsTAG password reset code',
-        `Your password reset code is ${otp}. It expires in 10 minutes. If you didn't request this, you can ignore this email.`
+        'Your HunsTAG password reset code',
+        passwordResetEmail(otp)
       );
     }
 

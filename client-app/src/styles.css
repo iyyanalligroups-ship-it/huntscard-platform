@@ -1903,10 +1903,10 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
   align-items: center;
-  gap: 32px;
+  gap: 24px;
   max-width: 1160px;
   margin: 0 auto;
-  padding: 64px 8px 48px;
+  padding: 42px 8px 36px;
   overflow: hidden;
 }
 .d1-hero-col-text { position: relative; z-index: 1; }
@@ -1953,25 +1953,27 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 .d1-stats {
   position: relative;
   z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 28px;
-  max-width: 320px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 20px;
+  max-width: 520px;
 }
 .d1-stat-card {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 18px;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 58px;
+  padding: 9px 12px;
   border-radius: 12px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
   font-family: var(--font-mono);
 }
 .d1-stat-card b { color: #ff8a3d; font-size: 17px; font-weight: 500; white-space: nowrap; }
-.d1-stat-card span { font-size: 11px; color: var(--text-dim); letter-spacing: 0.04em; text-align: right; }
+.d1-stat-card span { font-size: 9px; color: var(--text-dim); letter-spacing: 0.04em; text-align: left; white-space: nowrap; }
 
 .d1-hero-col-visual { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
 .d1-tagline-label {
@@ -1993,23 +1995,33 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   line-height: 1.6;
 }
 
-/* Scoped size-up of the shared holo-card visual, D1 only -- Home.jsx
-   renders the same .hero-visual/.holo-card/.bg-ring classes at their
-   original (smaller) size, so overriding them here by ancestor selector
-   (rather than editing the base rules) means the D1 revert path stays
-   completely unaffected by this. Bigger because "the card space is
-   small" was the direct piece of feedback that triggered this pass. */
+/* Compact the D1 product visual without touching the shared Home.jsx
+   card. The surrounding rings intentionally extend well beyond the card
+   so the tap-wave remains visible at the smaller card size. */
 .d1-hero-col-visual .hero-visual {
-  height: 560px;
+  height: 410px;
   /* The outer .d1-hero already clips at the full hero width for
      page-overflow safety -- this inner clip only existed to trim the
      rings, but it was also cutting the corners off the card itself
      once it got bigger than the base design's card, so it's off here. */
   overflow: visible;
 }
-.d1-hero-col-visual .holo-card { width: 440px; height: 276px; }
-.d1-hero-col-visual .bg-ring-a { width: 520px; height: 520px; }
-.d1-hero-col-visual .bg-ring-b { width: 430px; height: 430px; }
+.d1-hero-col-visual .holo-card { width: 360px; height: 226px; }
+.d1-hero-col-visual .bg-ring-a {
+  width: 590px;
+  height: 590px;
+  border-color: var(--brand-accent-border);
+  box-shadow: 0 0 54px rgba(var(--brand-accent-rgb), .07) inset;
+}
+.d1-hero-col-visual .bg-ring-b {
+  width: 485px;
+  height: 485px;
+  border-color: color-mix(in srgb, var(--brand-accent-2) 32%, transparent);
+}
+@keyframes d1TapRingPulse {
+  0% { width: 130px; height: 130px; opacity: .62; }
+  100% { width: 560px; height: 560px; opacity: 0; }
+}
 
 @media (max-width: 900px) {
   .d1-hero { grid-template-columns: 1fr; text-align: center; padding-top: 48px; }
@@ -2019,10 +2031,10 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   .d1-hero .hero-cta-row { justify-content: center !important; }
   .d1-stats { margin-left: auto; margin-right: auto; }
   .d1-corner-mark { display: none; }
-  .d1-hero-col-visual .hero-visual { height: 340px; }
-  .d1-hero-col-visual .holo-card { width: 300px; height: 188px; }
-  .d1-hero-col-visual .bg-ring-a { width: 380px; height: 380px; }
-  .d1-hero-col-visual .bg-ring-b { width: 320px; height: 320px; }
+  .d1-hero-col-visual .hero-visual { height: 320px; }
+  .d1-hero-col-visual .holo-card { width: 280px; height: 176px; }
+  .d1-hero-col-visual .bg-ring-a { width: 420px; height: 420px; }
+  .d1-hero-col-visual .bg-ring-b { width: 350px; height: 350px; }
 }
 
 /* D1 -- features + how-it-works sections below the hero. New classes
@@ -2188,6 +2200,13 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 @keyframes tapRingPulse {
   0% { width: 140px; height: 140px; opacity: 0.7; }
   100% { width: 420px; height: 420px; opacity: 0; }
+}
+
+/* Keep the larger D1 wave after the shared tap-ring animation shorthand. */
+.d1-hero-col-visual .tap-ring,
+.d1-hero-col-visual .tap-ring.r2,
+.d1-hero-col-visual .tap-ring.r3 {
+  animation-name: d1TapRingPulse;
 }
 
 /* Orbit particles -- glowing motes swirling around the card, animated
@@ -4520,7 +4539,7 @@ body.public-site-active .hero-section-split,
 body.public-site-active .d1-hero {
   max-width: 1348px;
   margin: 4px auto 0;
-  padding: 46px 40px 50px;
+  padding: 34px 40px 36px;
   border: 1px solid var(--panel-border);
   border-radius: 18px;
   background:
@@ -6731,4 +6750,48 @@ body.client-dashboard-active .theme-select-panel button.selected {
   .dash-route-profile .profile-preview .pv-actions { flex-wrap: wrap; padding-inline: 14px; }
   .dash-route-profile .profile-preview .pv-btn { min-width: calc(50% - 5px); }
   .dash-route-profile .profile-preview .pv-actions > button { height: 42px; }
+}
+
+/* Register modal: two compact field columns remove the desktop-only inner
+   scrollbar while preserving the existing registration state and handlers. */
+.auth-modal-card.auth-modal-card--register {
+  width: min(760px, calc(100vw - 40px));
+  max-width: 760px;
+  max-height: none;
+  overflow: visible;
+  padding: 29px 34px 27px;
+}
+.auth-modal-card--register .brand { margin-bottom: 15px !important; }
+.auth-modal-card--register > h1 { margin-bottom: 5px; }
+.auth-modal-card--register > .subtitle { max-width: 560px; margin-bottom: 17px !important; }
+.auth-register-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px 16px;
+}
+.auth-register-form .field { min-width: 0; margin-bottom: 0; }
+.auth-register-form .field label { margin-bottom: 6px; }
+.auth-register-form input,
+.auth-register-form .theme-select-trigger,
+.auth-register-form .theme-date-trigger { min-height: 48px !important; }
+.auth-register-form > button[type="submit"] {
+  grid-column: 1 / -1;
+  min-height: 48px;
+  margin-top: 2px;
+}
+.auth-modal-card--register > .hint:last-child { margin: 13px 0 0 !important; }
+
+@media (max-width: 680px) {
+  .auth-modal-backdrop:has(.auth-modal-card--register) {
+    align-items: flex-start;
+    overflow-y: auto;
+    padding: 12px;
+  }
+  .auth-modal-card.auth-modal-card--register {
+    width: 100%;
+    margin: auto;
+    padding: 25px 21px 23px;
+  }
+  .auth-register-form { grid-template-columns: 1fr; gap: 12px; }
+  .auth-register-form > button[type="submit"] { grid-column: 1; }
 }
