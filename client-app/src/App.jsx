@@ -1,5 +1,5 @@
-import { Component, lazy, Suspense } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Component, lazy, Suspense, useLayoutEffect } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { isLoggedIn } from './api.js';
 import PublicLayout from './components/PublicLayout.jsx';
 import Home from './pages/HomeSwitch.jsx'; // renders Home.jsx or HomeD1.jsx per the admin-toggled theme setting
@@ -102,9 +102,24 @@ function RequireAuth({ children }) {
   return children;
 }
 
+// React Router keeps the browser's current scroll position during client-side
+// navigation. Reset it before paint so links near the footer open the next
+// page at its header instead of carrying the visitor's footer position across.
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [pathname]);
+
+  return null;
+}
+
 export default function App() {
   return (
-    <Routes>
+    <>
+      <ScrollToTop />
+      <Routes>
       {/* Public site -- anyone can browse and buy without an account */}
       <Route path="/" element={<PublicLayout />}>
         <Route index element={<Home />} />
@@ -204,6 +219,7 @@ export default function App() {
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+    </>
   );
 }

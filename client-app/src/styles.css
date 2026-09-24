@@ -2487,6 +2487,29 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 .step-item p { font-size: 12px; color: var(--text-dim); margin: 0; }
 
 /* --- shop --- */
+.shop-page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.shop-page-heading-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  color: var(--brand-accent);
+  background: var(--brand-accent-soft);
+  border: 1px solid var(--brand-accent-border);
+  border-radius: 13px;
+}
+.shop-success-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
 .shop-plan-desc { font-size: 13px; color: var(--text-dim); line-height: 1.6; margin: 8px 0 0; flex: 1; }
 
 /* Which admin-set feature flags (AR/Zing/Magic AR/etc, see CardPlan.js)
@@ -2505,6 +2528,8 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   border-radius: 999px;
   padding: 5px 10px;
 }
+.plan-feature-badge svg,
+.plan-feature-notes li > svg { flex: 0 0 auto; color: var(--brand-accent); }
 /* Plain-language explanation of each badge above -- a first-time shopper
    has no reason to already know what "Zing" or "Magic AR" means. */
 .plan-feature-notes {
@@ -2611,7 +2636,9 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
   border-bottom: 1px solid var(--panel-border);
 }
 .current-plan-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   background: var(--holo-gradient);
   color: #06120f;
   font-size: 10px;
@@ -2783,6 +2810,9 @@ button.secondary:hover { background: var(--panel-raised); color: var(--text); fi
 .plan-switch-pill:not(.active):hover:nth-child(6n + 5) { border-color: #fbbf24; box-shadow: 0 0 14px rgba(251, 191, 36, 0.55); }
 .plan-switch-pill:not(.active):hover:nth-child(6n + 6) { border-color: #60a5fa; box-shadow: 0 0 14px rgba(96, 165, 250, 0.55); }
 .plan-switch-pill .current-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 10px;
   padding: 2px 7px;
   border-radius: 999px;
@@ -6033,6 +6063,15 @@ body.public-site-active .home-motion .how-it-works-cta a { box-shadow: 0 8px 20p
 .card-checkout-address-form label > span { color: var(--text-dim); font-weight: 400; }
 .card-checkout-address-form .wide { grid-column: 1 / -1; }
 .card-checkout-address-form > button { width: max-content; min-height: 36px; padding: 7px 14px; }
+.card-checkout-address-form > button,
+.shop-checkout-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.shop-icon-spin { animation: shopIconSpin .8s linear infinite; }
+@keyframes shopIconSpin { to { transform: rotate(360deg); } }
 .card-checkout-summary {
   display: grid;
   gap: 8px;
@@ -6049,6 +6088,8 @@ body.public-site-active .home-motion .how-it-works-cta a { box-shadow: 0 8px 20p
 .card-request-actions { display: inline-flex; align-items: center; gap: 8px; }
 .card-order-number { display: block; margin-top: 2px; color: var(--text-dim); font: 500 10px/1.3 var(--font-mono); }
 .card-invoice-button { width: auto !important; min-height: 30px; display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px !important; font-size: 11px; }
+
+.dash-route-upgrade .shop-page-heading { justify-content: flex-start; }
 
 @media (max-width: 640px) {
   .card-checkout-delivery { padding: 14px; }

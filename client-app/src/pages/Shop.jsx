@@ -1,5 +1,24 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  BadgeCheck,
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  Download,
+  LoaderCircle,
+  LogIn,
+  MapPin,
+  Minus,
+  Palette,
+  Plus,
+  ScanLine,
+  ShoppingBag,
+  Sparkles,
+  Volume2,
+  X,
+  Zap,
+} from 'lucide-react';
 import { api, isLoggedIn } from '../api.js';
 import { loadRazorpayScript } from '../razorpay.js';
 import GeoSelect from '../components/GeoSelect.jsx';
@@ -20,27 +39,6 @@ const EMPTY_ADDRESS_FORM = {
   cityName: '',
   pincode: '',
 };
-
-function ShopIcon({ name, size = 16 }) {
-  const common = {
-    viewBox: '0 0 24 24',
-    width: size,
-    height: size,
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.9,
-    strokeLinecap: 'round',
-    strokeLinejoin: 'round',
-    'aria-hidden': true,
-  };
-  if (name === 'pin') {
-    return <svg {...common}><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg>;
-  }
-  if (name === 'download') {
-    return <svg {...common}><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>;
-  }
-  return <svg {...common}><path d="M12 5v14M5 12h14" /></svg>;
-}
 
 function PlanImageGallery({ images }) {
   const [index, setIndex] = useState(0);
@@ -92,31 +90,31 @@ function PlanImageGallery({ images }) {
 const PLAN_FEATURE_BADGES = [
   {
     key: 'arEnabled',
-    icon: '🥽',
+    Icon: ScanLine,
     label: 'AR feature',
     note: 'Anyone who scans your card can point their phone camera at it to unlock an AR experience.',
   },
   {
     key: 'zingEnabled',
-    icon: '⚡',
+    Icon: Zap,
     label: 'Zing',
     note: 'Share your contact card instantly from your dashboard with a tap — no app needed on their end.',
   },
   {
     key: 'requiresDesignUpload',
-    icon: '🎨',
+    Icon: Palette,
     label: 'Requires design upload',
     note: "You'll upload your own front and back artwork for this card during checkout.",
   },
   {
     key: 'magicEnabled',
-    icon: '✨',
+    Icon: Sparkles,
     label: 'Magic AR feature',
     note: 'Add your own photo or video effect that plays when someone scans your card in Magic Camera.',
   },
   {
     key: 'isSpecialEdition',
-    icon: '🔊',
+    Icon: Volume2,
     label: 'Special Edition (Sound)',
     note: 'Comes with a custom sound effect that plays when your card is scanned.',
   },
@@ -131,21 +129,27 @@ function PlanFeatureBadges({ plan }) {
   return (
     <>
       <div className="plan-feature-badges">
-        {active.map((f) => (
-          <span key={f.key} className="plan-feature-badge">
-            <span aria-hidden="true">{f.icon}</span> {f.label}
-          </span>
-        ))}
+        {active.map((f) => {
+          const FeatureIcon = f.Icon;
+          return (
+            <span key={f.key} className="plan-feature-badge">
+              <FeatureIcon size={14} strokeWidth={2} aria-hidden="true" /> {f.label}
+            </span>
+          );
+        })}
       </div>
       <ul className="plan-feature-notes">
-        {active.map((f) => (
-          <li key={f.key}>
-            <span aria-hidden="true">{f.icon}</span>
-            <span>
-              <strong>{f.label}</strong> — {f.note}
-            </span>
-          </li>
-        ))}
+        {active.map((f) => {
+          const FeatureIcon = f.Icon;
+          return (
+            <li key={f.key}>
+              <FeatureIcon size={17} strokeWidth={1.9} aria-hidden="true" />
+              <span>
+                <strong>{f.label}</strong> — {f.note}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </>
   );
@@ -226,7 +230,7 @@ function PlanHeroMedia({ variants, focusIndex, onFocusChange }) {
             onClick={() => onFocusChange((focusIndex - 1 + variants.length) % variants.length)}
             aria-label="Previous style"
           >
-            ‹
+            <ChevronLeft size={18} aria-hidden="true" />
           </button>
           <div className="plan-hero-thumbs">
             {variants.map((v, i) => (
@@ -247,7 +251,7 @@ function PlanHeroMedia({ variants, focusIndex, onFocusChange }) {
             onClick={() => onFocusChange((focusIndex + 1) % variants.length)}
             aria-label="Next style"
           >
-            ›
+            <ChevronRight size={18} aria-hidden="true" />
           </button>
         </div>
       )}
@@ -621,7 +625,10 @@ export default function Shop() {
 
   return (
     <div className={homeTheme === 'orange' ? 'theme-orange' : undefined}>
-      <h1 className="section-heading" style={{ marginTop: 0 }}>
+      <h1 className="section-heading shop-page-heading" style={{ marginTop: 0 }}>
+        <span className="shop-page-heading-icon" aria-hidden="true">
+          <ShoppingBag size={22} strokeWidth={1.9} />
+        </span>
         {loggedIn ? (hasCard ? 'Upgrade your card' : 'Get your card') : 'Choose your card'}
       </h1>
       <p className="section-subheading">
@@ -635,7 +642,8 @@ export default function Shop() {
       </p>
 
       {upgraded && !error && (
-        <p className="section-subheading" style={{ color: 'var(--holo-cyan)', fontWeight: 600 }}>
+        <p className="section-subheading shop-success-message" style={{ color: 'var(--holo-cyan)', fontWeight: 600 }}>
+          <BadgeCheck size={17} aria-hidden="true" />
           Payment successful — your card is {hasCard ? 'updated' : 'ready'}!
           {upgraded > 1 ? ` You're getting ${upgraded} physical cards, all with your profile.` : ''}
         </p>
@@ -655,7 +663,9 @@ export default function Shop() {
                   onClick={() => selectPlan(p.key)}
                 >
                   {p.name}
-                  {isCurrentPlan(p) && <span className="current-badge">Current</span>}
+                  {isCurrentPlan(p) && (
+                    <span className="current-badge"><BadgeCheck size={11} aria-hidden="true" />Current</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -665,7 +675,9 @@ export default function Shop() {
             <div className={`checkout-panel plan-detail-panel${hasVariantImages || selectedPlan.images?.length ? ' checkout-modal-card-wide' : ''}`}>
             <div className="card shop-detail-card">
             <div className="plan-detail-header">
-              {isCurrentPlan(selectedPlan) && <span className="current-plan-badge">Current Plan</span>}
+              {isCurrentPlan(selectedPlan) && (
+                <span className="current-plan-badge"><BadgeCheck size={13} aria-hidden="true" />Current Plan</span>
+              )}
               <h2 className="plan-detail-name">{selectedPlan.name}</h2>
               {selectedPlan.chargeAmount && (
                 <p className="plan-detail-price">
@@ -755,7 +767,7 @@ export default function Shop() {
                               disabled={qty <= 0}
                               aria-label={`Fewer ${v.name}`}
                             >
-                              −
+                              <Minus size={14} aria-hidden="true" />
                             </button>
                             <span className="qty-value">{qty}</span>
                             <button
@@ -765,7 +777,7 @@ export default function Shop() {
                               disabled={variantTotalQuantity >= MAX_QUANTITY}
                               aria-label={`More ${v.name}`}
                             >
-                              +
+                              <Plus size={14} aria-hidden="true" />
                             </button>
                           </div>
                         </div>
@@ -832,7 +844,7 @@ export default function Shop() {
                       disabled={quantity <= 1}
                       aria-label="Decrease quantity"
                     >
-                      −
+                      <Minus size={14} aria-hidden="true" />
                     </button>
                     <input
                       id="cardQuantity"
@@ -853,7 +865,7 @@ export default function Shop() {
                       disabled={quantity >= MAX_QUANTITY}
                       aria-label="Increase quantity"
                     >
-                      +
+                      <Plus size={14} aria-hidden="true" />
                     </button>
                     {quantity > 1 && (
                       <span className="hint" style={{ marginBottom: 0 }}>
@@ -866,7 +878,7 @@ export default function Shop() {
               {loggedIn && selectedPlan.chargeAmount && (
                 <section className="card-checkout-delivery" aria-labelledby="card-delivery-heading">
                   <div className="card-checkout-section-title">
-                    <span><ShopIcon name="pin" size={17} /></span>
+                    <span><MapPin size={17} strokeWidth={2} aria-hidden="true" /></span>
                     <div>
                       <h3 id="card-delivery-heading">Delivery address</h3>
                       <p>Your invoice and physical card will use this address.</p>
@@ -907,7 +919,10 @@ export default function Shop() {
                     className="secondary card-checkout-add-address"
                     onClick={() => setShowAddAddress((current) => !current)}
                   >
-                    <ShopIcon name="plus" size={14} />{showAddAddress ? 'Cancel' : 'Add new address'}
+                    {showAddAddress
+                      ? <X size={14} aria-hidden="true" />
+                      : <Plus size={14} aria-hidden="true" />}
+                    {showAddAddress ? 'Cancel' : 'Add new address'}
                   </button>
 
                   {showAddAddress && (
@@ -973,7 +988,10 @@ export default function Shop() {
                         />
                       </label>
                       <button type="button" disabled={savingAddress} onClick={handleSaveAddress}>
-                        {savingAddress ? 'Saving…' : 'Save address'}
+                        {savingAddress
+                          ? <LoaderCircle className="shop-icon-spin" size={15} aria-hidden="true" />
+                          : <BadgeCheck size={15} aria-hidden="true" />}
+                        <span>{savingAddress ? 'Saving…' : 'Save address'}</span>
                       </button>
                     </div>
                   )}
@@ -991,9 +1009,17 @@ export default function Shop() {
 
               <button
                 type="submit"
+                className="shop-checkout-button"
                 disabled={submitting || !selectedPlan.chargeAmount || !variantOk || !designOk || (loggedIn && !selectedAddress)}
               >
-                {submitting
+                {submitting ? (
+                  <LoaderCircle className="shop-icon-spin" size={17} aria-hidden="true" />
+                ) : !loggedIn ? (
+                  <LogIn size={17} aria-hidden="true" />
+                ) : (
+                  <CreditCard size={17} aria-hidden="true" />
+                )}
+                <span>{submitting
                   ? 'Waiting for payment…'
                   : !loggedIn
                   ? 'Log in to buy'
@@ -1005,7 +1031,7 @@ export default function Shop() {
                   ? 'Upload front & back design'
                   : loggedIn && !selectedAddress
                   ? 'Choose delivery address'
-                  : `Pay ₹${loggedIn ? checkoutTotal : cardSubtotal}`}
+                  : `Pay ₹${loggedIn ? checkoutTotal : cardSubtotal}`}</span>
               </button>
             </form>
             {!selectedPlan.chargeAmount && (
@@ -1039,7 +1065,7 @@ export default function Shop() {
                     className="secondary card-invoice-button"
                     onClick={() => api.downloadCardInvoice(r._id, r.orderNumber).catch((err) => setError(err.message))}
                   >
-                    <ShopIcon name="download" size={14} />Invoice
+                    <Download size={14} aria-hidden="true" />Invoice
                   </button>
                 )}
               </span>
