@@ -1,7 +1,7 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import gsap from 'gsap';
-import { ArrowRight, BadgeCheck, Box, Rotate3d, ScanLine, Sparkles } from 'lucide-react';
+import { ArrowRight, BadgeCheck, Box, ScanLine, Sparkles } from 'lucide-react';
 import { api, API_URL } from '../api.js';
 import ArView from './ArView.jsx';
 import './PublicProfile.css';
@@ -271,6 +271,15 @@ export default function PublicProfile() {
   const [toast, setToast] = useState('');
   const [copiedKey, setCopiedKey] = useState(null);
   const [showQrModal, setShowQrModal] = useState(false);
+  // GET /api/public/profile/:clientId also increments the server's tap
+  // counter (see routes/public.js) -- a real side effect, not a pure read.
+  // React 18 StrictMode deliberately double-invokes effects in dev (mount
+  // -> cleanup -> remount) to surface exactly this kind of non-idempotent
+  // effect, which without this guard would count one real page open as
+  // two taps while testing locally. Production builds don't double-invoke,
+  // so this only changes dev-server behavior -- but it makes the counter
+  // trustworthy to test against locally too.
+  const fetchedProfileKeyRef = useRef(null);
 
   // Dynamic Global Theme Color state
   const [accentTheme, setAccentTheme] = useState(() => {
@@ -327,6 +336,9 @@ export default function PublicProfile() {
 
   useEffect(() => {
     if (isArMode) return;
+    const key = `${clientId}:${cardNumber || ''}`;
+    if (fetchedProfileKeyRef.current === key) return;
+    fetchedProfileKeyRef.current = key;
     setBannerFailed(false);
     api
       .getPublicProfile(clientId, cardNumber)
@@ -499,15 +511,9 @@ export default function PublicProfile() {
             </button>
             {/* Separate camera page (MagicCamera3D.jsx) -- shows ONLY a 3D
                 model when this card has one set, kept apart from the plain
-                Magic Camera above so that flow's video is never affected. */}
-            <button type="button" className="ht-experience-option" onClick={(event) => chooseArExperience('3d', event)}>
-              <span className="ht-experience-option-icon"><Rotate3d size={23} /></span>
-              <span className="ht-experience-option-copy">
-                <strong>3D Camera</strong>
-                <small>Scan the card to see its 3D model</small>
-              </span>
-              <ArrowRight className="ht-experience-arrow" size={19} />
-            </button>
+                Magic Camera above so that flow's video is never affected.
+                Hidden for now -- feature isn't ready yet, will come back
+                once it's finished. Route/page itself is untouched. */}
           </div>
 
           <div className="ht-experience-footnote">

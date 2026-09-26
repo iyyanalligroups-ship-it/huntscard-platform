@@ -846,23 +846,9 @@ export default function MagicBusinessCard() {
             <div style={{ width: box.width }}>
               <p className="hint" style={{ margin: '0 0 8px' }}>3D model preview -- drag to rotate</p>
               <ArModelPreview modelUrl={card.modelUrl} modelType={card.modelType} width={box.width} height={box.height} />
-              {/* Opens the real scoped camera (mind-ar tracking a physical/
-                  on-screen card, not this drag-to-rotate preview) in a new
-                  tab -- lets testing this locally without a printed card
-                  yet: point the phone/webcam at the card image ABOVE on
-                  this same screen (or a second device showing it). */}
-              {clientId && (
-                <a
-                  href={`/magic-camera-3d/${clientId}${selectedCardNumber ? `?card=${selectedCardNumber}` : ''}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ display: 'block', marginTop: 10 }}
-                >
-                  <button type="button" className="secondary" style={{ width: '100%' }}>
-                    Test: open 3D Camera
-                  </button>
-                </a>
-              )}
+              {/* "Test: open 3D Camera" link to /magic-camera-3d hidden for
+                  now -- feature isn't ready yet, will come back once it's
+                  finished. Route/page itself is untouched. */}
             </div>
           )}
 
@@ -1139,13 +1125,9 @@ export default function MagicBusinessCard() {
               </button>
             )}
           </div>
-          {card?.modelUrl && clientId && (
-            <p className="hint" style={{ margin: '10px 0 0' }}>
-              <a href={`/magic-camera-3d/${clientId}${selectedCardNumber ? `?card=${selectedCardNumber}` : ''}`} target="_blank" rel="noopener noreferrer">
-                View your 3D model in AR →
-              </a>
-            </p>
-          )}
+          {/* "View your 3D model in AR" link to /magic-camera-3d hidden for
+              now -- feature isn't ready yet, will come back once it's
+              finished. Route/page itself is untouched. */}
         </div>
       )}
     </div>
