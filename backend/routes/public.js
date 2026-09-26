@@ -308,11 +308,11 @@ router.post('/design-upload', (req, res) => {
 // POST /api/public/contact
 router.post('/contact', async (req, res) => {
   try {
-    const { name, email, message } = req.body;
-    if (!name || !email || !message) {
-      return res.status(400).json({ error: 'name, email, and message are required' });
+    const { name, phone, email, message } = req.body;
+    if (!name || !phone || !email || !message) {
+      return res.status(400).json({ error: 'name, phone, email, and message are required' });
     }
-    await ContactMessage.create({ name, email: email.toLowerCase(), message });
+    await ContactMessage.create({ name, phone, email: email.toLowerCase(), message });
     res.status(201).json({ ok: true });
   } catch (err) {
     console.error('[public/contact POST]', err);
@@ -331,7 +331,7 @@ router.get('/profile/:clientId', async (req, res) => {
     { $inc: { tapCount: 1 } }, // simple tap analytics, per the report's spec -- kept even while paused, harmless
     { new: true }
   ).select(
-    'fullName jobTitle bio photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail loginEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType cardVariantId clientId cardActive customDesignFrontUrl'
+    'fullName jobTitle bio highlights photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail loginEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType cardVariantId clientId cardActive customDesignFrontUrl'
   );
 
   if (!client) {

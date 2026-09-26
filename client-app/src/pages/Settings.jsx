@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { api } from '../api.js';
 
 export default function Settings() {
@@ -8,6 +9,9 @@ export default function Settings() {
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   // Card status -- pause/unpause the public profile (see routes/public.js's
   // cardActive checks). Fetched independently of the password form above,
@@ -117,38 +121,53 @@ export default function Settings() {
       <form className="card" onSubmit={handleSubmit}>
         <div className="field">
           <label htmlFor="currentPassword">Current password</label>
-          <input
-            id="currentPassword"
-            type="password"
-            autoComplete="current-password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            required
-          />
+          <div className="password-input-wrap">
+            <input
+              id="currentPassword"
+              type={showCurrent ? 'text' : 'password'}
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+            />
+            <button type="button" className="password-eye-btn" onClick={() => setShowCurrent((v) => !v)} aria-label={showCurrent ? 'Hide' : 'Show'}>
+              {showCurrent ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
         </div>
         <div className="field">
           <label htmlFor="newPassword">New password</label>
-          <input
-            id="newPassword"
-            type="password"
-            autoComplete="new-password"
-            minLength={8}
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            required
-          />
+          <div className="password-input-wrap">
+            <input
+              id="newPassword"
+              type={showNew ? 'text' : 'password'}
+              autoComplete="new-password"
+              minLength={8}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+            />
+            <button type="button" className="password-eye-btn" onClick={() => setShowNew((v) => !v)} aria-label={showNew ? 'Hide' : 'Show'}>
+              {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
           <p className="hint" style={{ marginBottom: 0 }}>At least 8 characters.</p>
         </div>
         <div className="field">
           <label htmlFor="confirmPassword">Confirm new password</label>
-          <input
-            id="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-          />
+          <div className="password-input-wrap">
+            <input
+              id="confirmPassword"
+              type={showConfirm ? 'text' : 'password'}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+            />
+            <button type="button" className="password-eye-btn" onClick={() => setShowConfirm((v) => !v)} aria-label={showConfirm ? 'Hide' : 'Show'}>
+              {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
         </div>
         <button type="submit" disabled={saving}>
           {saving ? 'Saving…' : 'Update password'}

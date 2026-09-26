@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { Eye, EyeOff, X } from 'lucide-react';
 import { api, setSession } from '../api.js';
 import ThemedSelect from './ThemedSelect.jsx';
 import ThemeDatePicker from './ThemeDatePicker.jsx';
@@ -52,6 +52,11 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
   const [regDateOfBirth, setRegDateOfBirth] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
+  const [regDesignation, setRegDesignation] = useState('');
+
+  // password visibility toggles
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegPassword, setShowRegPassword] = useState(false);
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -75,8 +80,10 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
     };
   }, []);
 
+  // Backdrop click is intentionally a no-op -- the modal only closes via
+  // the X button, preventing accidental dismissal mid-form.
   function handleBackdropClick(e) {
-    if (e.target === e.currentTarget) onClose();
+    e.stopPropagation();
   }
 
   function switchLoginMethod(next) {
@@ -164,6 +171,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
         dateOfBirth: regDateOfBirth || undefined,
         loginEmail: regEmail,
         password: regPassword,
+        designation: regDesignation || undefined,
       });
       setSession({ token: res.token, clientId: res.clientId });
       onClose();
@@ -178,7 +186,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
   return (
     <div className="auth-modal-backdrop" onClick={handleBackdropClick}>
       <div className={`auth-modal-card${mode === 'register' ? ' auth-modal-card--register' : ''}`}>
-        <button className="auth-modal-close" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        <button className="auth-modal-close" onClick={onClose} aria-label="Close"><X size={22} /></button>
 
         <div className="brand" style={{ marginBottom: 20 }}>
           <div className="brand-mark" />
@@ -228,14 +236,24 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                 </div>
                 <div className="field">
                   <label htmlFor="modalLoginPassword">Password</label>
-                  <input
-                    id="modalLoginPassword"
-                    type="password"
-                    autoComplete="current-password"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    required
-                  />
+                  <div className="password-input-wrap">
+                    <input
+                      id="modalLoginPassword"
+                      type={showLoginPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="password-eye-btn"
+                      onClick={() => setShowLoginPassword((v) => !v)}
+                      aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showLoginPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
                 <button type="submit" disabled={loading}>
                   {loading ? 'Logging in…' : 'Log in'}
@@ -377,16 +395,36 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                 />
               </div>
               <div className="field">
-                <label htmlFor="modalRegPassword">Password</label>
+                <label htmlFor="modalRegDesignation">Designation (optional)</label>
                 <input
-                  id="modalRegPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  minLength={8}
-                  value={regPassword}
-                  onChange={(e) => setRegPassword(e.target.value)}
-                  required
+                  id="modalRegDesignation"
+                  type="text"
+                  placeholder="e.g. Software Engineer, Manager"
+                  value={regDesignation}
+                  onChange={(e) => setRegDesignation(e.target.value)}
                 />
+              </div>
+              <div className="field">
+                <label htmlFor="modalRegPassword">Password</label>
+                <div className="password-input-wrap">
+                  <input
+                    id="modalRegPassword"
+                    type={showRegPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    minLength={8}
+                    value={regPassword}
+                    onChange={(e) => setRegPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="password-eye-btn"
+                    onClick={() => setShowRegPassword((v) => !v)}
+                    aria-label={showRegPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showRegPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
                 <p className="hint" style={{ marginBottom: 0 }}>At least 8 characters.</p>
               </div>
               <button type="submit" disabled={loading}>

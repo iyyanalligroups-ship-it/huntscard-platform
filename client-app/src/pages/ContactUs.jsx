@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { api } from '../api.js';
+import { useEffect, useState } from 'react';
+import { api, isLoggedIn } from '../api.js';
 
 export default function ContactUs() {
   const [form, setForm] = useState({ name: '', phone: '', email: '', message: '' });
@@ -8,6 +8,24 @@ export default function ContactUs() {
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
+
+  // Logged-in clients shouldn't have to retype their own contact details --
+  // prefill from their profile. Signed-out visitors get a blank form, same
+  // as before.
+  useEffect(() => {
+    if (!isLoggedIn()) return;
+    api
+      .getProfile()
+      .then((p) => {
+        setForm((f) => ({
+          ...f,
+          name: f.name || p.fullName || '',
+          phone: f.phone || p.phone || '',
+          email: f.email || (p.loginEmail || '').toLowerCase(),
+        }));
+      })
+      .catch(() => {});
+  }, []);
 
   function validate(fields = form) {
     const errs = {};
@@ -91,7 +109,10 @@ export default function ContactUs() {
         email: form.email.trim().toLowerCase(),
         message: form.message.trim(),
       });
-      setForm({ name: '', phone: '', email: '', message: '' });
+      // Keep name/phone/email (prefilled for a logged-in client, or just
+      // typed in by a guest) so "Send another message" doesn't make them
+      // retype their own details -- only the message itself was one-off.
+      setForm((f) => ({ ...f, message: '' }));
       setFieldErrors({});
       setTouched({});
       setSent(true);

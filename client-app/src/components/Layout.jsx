@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Monitor, Moon, Sun } from 'lucide-react';
 import { api, clearSession, getImpersonatedBy } from '../api.js';
 
 /* Inline SVG icons -- no icon library dependency, keeps the bundle lean. */
@@ -138,6 +139,12 @@ export default function Layout() {
     if (typeof window === 'undefined') return 'teal';
     return window.localStorage.getItem('huntstag-dashboard-accent') || 'teal';
   });
+  // Color mode: 'system' | 'dark' | 'light' -- stored in localStorage so it
+  // persists across sessions. 'system' follows the OS preference.
+  const [colorMode, setColorMode] = useState(() => {
+    if (typeof window === 'undefined') return 'system';
+    return window.localStorage.getItem('huntstag-color-mode') || 'system';
+  });
   // Same admin-toggled setting PublicLayout.jsx reads -- adds .theme-orange
   // to the whole dashboard shell (sidebar + every page rendered through
   // Outlet below) when set, so the logged-in area matches the public
@@ -151,6 +158,25 @@ export default function Layout() {
       .catch(() => {});
   }, []);
 
+  // Apply color mode to <html> so CSS can pick it up via data-color-mode.
+  // 'system' resolves to dark or light based on the OS preference.
+  useEffect(() => {
+    window.localStorage.setItem('huntstag-color-mode', colorMode);
+    function applyMode() {
+      let resolved = colorMode;
+      if (colorMode === 'system') {
+        resolved = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      }
+      document.documentElement.dataset.colorMode = resolved;
+    }
+    applyMode();
+    if (colorMode === 'system') {
+      const mq = window.matchMedia('(prefers-color-scheme: light)');
+      mq.addEventListener('change', applyMode);
+      return () => mq.removeEventListener('change', applyMode);
+    }
+  }, [colorMode]);
+
   // Also toggled on <body> itself, not just .dash-shell -- the sidebar is
   // position:sticky with a fixed 100vh height, which should always cover
   // the full viewport regardless of scroll, but in practice the page
@@ -158,9 +184,11 @@ export default function Layout() {
   // strip under the Log out row on some scroll positions/viewport sizes.
   // Pinning body's own background removes that gap outright instead of
   // chasing the exact sticky/scroll interaction that caused it.
+  // NOTE: theme-orange is NOT toggled on body here to prevent the
+  // admin's orange theme from forcing a white/light background across the
+  // whole page -- .dash-shell.theme-orange already scopes it correctly.
   useEffect(() => {
     document.body.classList.add('client-dashboard-active');
-    document.body.classList.toggle('theme-orange', homeTheme === 'orange');
     document.body.classList.toggle('theme-cyber', homeTheme === 'cyber');
     return () => document.body.classList.remove('client-dashboard-active', 'theme-orange', 'theme-cyber');
   }, [homeTheme]);
@@ -369,6 +397,16 @@ export default function Layout() {
                       <i style={{ background: theme.color }} />
                       {theme.label}
                       {accentTheme === theme.id && <b>✓</b>}
+                    </button>
+                  ))}
+                  <hr style={{ border: 'none', borderTop: '1px solid var(--panel-border)', margin: '8px 0' }} />
+                  <strong>Appearance</strong>
+                  <span>Controls light / dark mode.</span>
+                  {[{ id: 'system', label: 'System', Icon: Monitor }, { id: 'dark', label: 'Dark', Icon: Moon }, { id: 'light', label: 'Light', Icon: Sun }].map(({ id, label, Icon }) => (
+                    <button type="button" key={id} className={colorMode === id ? 'selected' : ''} onClick={() => { setColorMode(id); setThemeOpen(false); }}>
+                      <Icon size={14} />
+                      {label}
+                      {colorMode === id && <b>✓</b>}
                     </button>
                   ))}
                 </div>

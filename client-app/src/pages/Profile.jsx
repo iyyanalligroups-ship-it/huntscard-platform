@@ -1,15 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import Zoom from 'react-medium-image-zoom';
 import 'react-medium-image-zoom/dist/styles.css';
 import { api } from '../api.js';
 import Magic3DPreview from '../components/Magic3DPreview.jsx';
 import ThemedSelect from '../components/ThemedSelect.jsx';
+import ThemeDatePicker from '../components/ThemeDatePicker.jsx';
+
+const MAX_HIGHLIGHTS = 8;
+
+function todayDateValue() {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+}
 
 // Name/job title stay above the tabs, same as the photo/banner -- they're
 // identity, not something that belongs to one of the five card tabs.
 const IDENTITY_FIELDS = [
   { key: 'fullName', label: 'Full name', type: 'text', required: true },
   { key: 'jobTitle', label: 'Job title', type: 'text' },
+  { key: 'designation', label: 'Designation (optional)', type: 'text' },
 ];
 
 // Everything else groups under the same five tabs the public card itself
@@ -49,6 +59,7 @@ const INPUT_TYPE = { text: 'text', phone: 'tel', url: 'url', email: 'email' };
 export default function Profile() {
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState({});
+  const [highlightInput, setHighlightInput] = useState('');
   const [previewUrl, setPreviewUrl] = useState(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
@@ -286,7 +297,7 @@ export default function Profile() {
     setSaving(true);
     setSaved(false);
     try {
-      const updates = { bio: form.bio || '' };
+      const updates = { bio: form.bio || '', highlights: form.highlights || [] };
       for (const { key } of IDENTITY_FIELDS) updates[key] = form[key] || '';
       for (const fields of Object.values(SECTION_FIELDS)) {
         for (const { key } of fields) updates[key] = form[key] || '';
@@ -736,11 +747,12 @@ export default function Profile() {
           </div>
           <div className="field">
             <label htmlFor="dateOfBirth">Date of birth</label>
-            <input
+            <ThemeDatePicker
               id="dateOfBirth"
-              type="date"
               value={(form.dateOfBirth || '').slice(0, 10)}
-              onChange={(e) => updateField('dateOfBirth', e.target.value)}
+              onChange={(value) => updateField('dateOfBirth', value)}
+              max={todayDateValue()}
+              ariaLabel="Date of birth"
             />
           </div>
         </div>
@@ -791,6 +803,51 @@ export default function Profile() {
                 resize: 'vertical',
               }}
             />
+          </div>
+        )}
+
+        {activeTab === 'bio' && (
+          <div className="field">
+            <label htmlFor="highlightInput">Expertise &amp; highlights</label>
+            <p className="hint" style={{ marginTop: -4, marginBottom: 10 }}>
+              Shown as #tags under your bio on your public card. Press Enter to add one, up to {MAX_HIGHLIGHTS}.
+            </p>
+            <div className="highlight-tag-editor">
+              {(form.highlights || []).map((tag, i) => (
+                <span key={`${tag}-${i}`} className="highlight-tag-chip">
+                  #{tag}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${tag}`}
+                    onClick={() => updateField('highlights', (form.highlights || []).filter((_, idx) => idx !== i))}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+              <input
+                id="highlightInput"
+                type="text"
+                className="highlight-tag-input"
+                placeholder={(form.highlights || []).length >= MAX_HIGHLIGHTS ? `Max ${MAX_HIGHLIGHTS} reached` : 'Add a highlight…'}
+                disabled={(form.highlights || []).length >= MAX_HIGHLIGHTS}
+                value={highlightInput}
+                onChange={(e) => setHighlightInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault();
+                    const clean = highlightInput.trim().replace(/^#/, '');
+                    const existing = form.highlights || [];
+                    if (clean && existing.length < MAX_HIGHLIGHTS && !existing.some((t) => t.toLowerCase() === clean.toLowerCase())) {
+                      updateField('highlights', [...existing, clean]);
+                    }
+                    setHighlightInput('');
+                  } else if (e.key === 'Backspace' && !highlightInput && (form.highlights || []).length) {
+                    updateField('highlights', (form.highlights || []).slice(0, -1));
+                  }
+                }}
+              />
+            </div>
           </div>
         )}
 

@@ -189,13 +189,10 @@ function buildInvoicePdf(order, client, res, options = {}) {
     doc.font('Helvetica-Bold').fontSize(7.5).fillColor(C.cyan).text(label, x + 14, detailY + 13, { characterSpacing: 0.8 });
   }
   detailCard(PAGE_LEFT, 'SOLD BY');
-  detailCard(buyerX, 'BILL TO / SHIP TO');
+  detailCard(buyerX, 'SHIP TO');
 
   doc.font('Helvetica-Bold').fontSize(10).fillColor(C.ink).text(BUSINESS.tradeName, PAGE_LEFT + 14, detailY + 31, { width: detailW - 28 });
-  doc.font('Helvetica').fontSize(7.7).fillColor(C.textDim);
-  doc.text(BUSINESS.legalName, PAGE_LEFT + 14, detailY + 47, { width: detailW - 28 });
-  doc.text(BUSINESS.address, PAGE_LEFT + 14, detailY + 60, { width: detailW - 28, lineGap: 1 });
-  doc.font('Helvetica-Bold').fontSize(7.7).fillColor(C.ink).text(`GSTIN: ${BUSINESS.gstin}`, PAGE_LEFT + 14, detailY + 94, { width: detailW - 28 });
+  doc.font('Helvetica-Bold').fontSize(7.7).fillColor(C.ink).text(`GSTIN: ${BUSINESS.gstin}`, PAGE_LEFT + 14, detailY + 50, { width: detailW - 28 });
 
   doc.font('Helvetica-Bold').fontSize(10).fillColor(C.ink).text(order.delivery.name, buyerX + 14, detailY + 31, { width: detailW - 28 });
   doc.font('Helvetica').fontSize(7.7).fillColor(C.textDim);

@@ -1,8 +1,15 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import { api, setSession } from '../api.js';
 import WaveBackdrop from '../components/WaveBackdrop.jsx';
 import ThemedSelect from '../components/ThemedSelect.jsx';
+import ThemeDatePicker from '../components/ThemeDatePicker.jsx';
+
+function todayDateValue() {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+}
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -11,6 +18,8 @@ export default function Register() {
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [designation, setDesignation] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -20,7 +29,7 @@ export default function Register() {
     setError('');
     setLoading(true);
     try {
-      const res = await api.register({ fullName, phone, gender: gender || undefined, dateOfBirth: dateOfBirth || undefined, loginEmail, password });
+      const res = await api.register({ fullName, phone, gender: gender || undefined, dateOfBirth: dateOfBirth || undefined, loginEmail, password, designation: designation || undefined });
       setSession({ token: res.token, clientId: res.clientId });
       navigate('/dashboard');
     } catch (err) {
@@ -80,11 +89,12 @@ export default function Register() {
           </div>
           <div className="field">
             <label htmlFor="dateOfBirth">Date of birth (optional)</label>
-            <input
+            <ThemeDatePicker
               id="dateOfBirth"
-              type="date"
               value={dateOfBirth}
-              onChange={(e) => setDateOfBirth(e.target.value)}
+              onChange={setDateOfBirth}
+              max={todayDateValue()}
+              ariaLabel="Date of birth"
             />
           </div>
           <div className="field">
@@ -99,16 +109,36 @@ export default function Register() {
             />
           </div>
           <div className="field">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="designation">Designation (optional)</label>
             <input
-              id="password"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
+              id="designation"
+              type="text"
+              placeholder="e.g. Software Engineer, Manager"
+              value={designation}
+              onChange={(e) => setDesignation(e.target.value)}
             />
+          </div>
+          <div className="field">
+            <label htmlFor="password">Password</label>
+            <div className="password-input-wrap">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                minLength={8}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="password-eye-btn"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
             <p className="hint" style={{ marginBottom: 0 }}>At least 8 characters.</p>
           </div>
           <button type="submit" disabled={loading}>
@@ -118,8 +148,6 @@ export default function Register() {
 
         <p className="hint" style={{ textAlign: 'center', marginTop: 16 }}>
           Already have an account? <Link to="/login" className="link-out">Log in</Link>
-          {' · '}
-          <Link to="/" className="link-out">Back to Home</Link>
         </p>
       </div>
     </div>

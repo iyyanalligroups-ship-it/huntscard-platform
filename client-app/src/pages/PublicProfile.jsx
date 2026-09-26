@@ -705,9 +705,13 @@ export default function PublicProfile() {
   const clampedTab = Math.min(activeTab, tabs.length - 1);
   const currentKey = tabs[clampedTab]?.key;
 
-  // Tech / Specialty tags derived dynamically or based on role
+  // Client-edited tags (Profile Settings -> About tab) win when set. Falls
+  // back to the old auto-picked-by-role guess only for profiles that
+  // predate this field, so they don't suddenly show no tags at all.
   const isDeveloper = /developer|engineer|coder|tech|fullstack|frontend|backend/i.test(`${profile.jobTitle || ''} ${profile.bio || ''}`);
-  const specialtyTags = isDeveloper
+  const specialtyTags = profile.highlights?.length
+    ? profile.highlights
+    : isDeveloper
     ? ['JavaScript', 'React', 'Node.js', 'TypeScript', 'APIs & Cloud', 'Clean Architecture']
     : ['NFC Smart Card', 'HuntsTAG Hologram', 'Instant Tap', 'Digital Bio', 'Verified Contact'];
 

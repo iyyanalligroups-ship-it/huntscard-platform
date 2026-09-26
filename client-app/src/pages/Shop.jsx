@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   BadgeCheck,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CreditCard,
@@ -300,6 +301,7 @@ export default function Shop() {
   const [cities, setCities] = useState([]);
   const [savingAddress, setSavingAddress] = useState(false);
   const [checkoutPricing, setCheckoutPricing] = useState(null);
+  const [expandedRequestId, setExpandedRequestId] = useState(null);
   // Same admin-toggled setting PublicLayout.jsx's header/footer follow --
   // fetched independently here (rather than threaded down as a prop)
   // because this page is mounted two different ways: standalone on the
@@ -458,7 +460,10 @@ export default function Shop() {
 
   const deliveryFee = checkoutPricing?.deliveryFee ?? 0;
   const gstPercent = checkoutPricing?.gstPercent ?? 0;
-  const gstAmount = Math.round((cardSubtotal + deliveryFee) * (gstPercent / 100));
+  // GST applies to the card subtotal only, not delivery -- matches the
+  // backend's computeMagicPosterTotals (utils/pricing.js), which actually
+  // computes the charged amount. This is a display-only estimate.
+  const gstAmount = Math.round(cardSubtotal * (gstPercent / 100));
   const checkoutTotal = cardSubtotal + deliveryFee + gstAmount;
 
   function adjustVariantQuantity(variantId, delta) {
@@ -1050,27 +1055,87 @@ export default function Shop() {
       {loggedIn && requests.length > 0 && (
         <div className="checkout-panel" style={{ marginTop: 32 }}>
           <p className="hint" style={{ marginBottom: 8 }}>Your purchase history</p>
-          {requests.map((r) => (
-            <div key={r._id} className="request-row">
-              <span>
-                {r.requestedPlan}
-                {r.paymentStatus === 'paid' && <span style={{ color: 'var(--holo-cyan)' }}> · Paid</span>}
-                {r.orderNumber && <small className="card-order-number">{r.orderNumber}</small>}
-              </span>
-              <span className="card-request-actions">
-                <span className="request-status">{r.status}</span>
-                {r.paymentStatus === 'paid' && (
-                  <button
-                    type="button"
-                    className="secondary card-invoice-button"
-                    onClick={() => api.downloadCardInvoice(r._id, r.orderNumber).catch((err) => setError(err.message))}
-                  >
-                    <Download size={14} aria-hidden="true" />Invoice
-                  </button>
+          {requests.map((r) => {
+            const planName = visiblePlans.find((p) => p.key === r.requestedPlan)?.name || r.requestedPlan;
+            const expanded = expandedRequestId === r._id;
+            const items = r.invoiceItems && r.invoiceItems.length > 0 ? r.invoiceItems : [{ name: planName, unitPrice: null, quantity: r.quantity }];
+            function toggle() {
+              setExpandedRequestId(expanded ? null : r._id);
+            }
+            return (
+              <div key={r._id} className="request-row-wrap">
+                <div
+                  className="request-row request-row-toggle"
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={expanded}
+                  onClick={toggle}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+                >
+                  <span>
+                    {planName}
+                    {r.quantity > 1 && <span className="hint" style={{ marginLeft: 4 }}>× {r.quantity}</span>}
+                    {r.paymentStatus === 'paid' && <span style={{ color: 'var(--holo-cyan)' }}> · Paid</span>}
+                    {r.orderNumber && <small className="card-order-number">{r.orderNumber}</small>}
+                  </span>
+                  <span className="card-request-actions">
+                    <span className="request-status">{r.status}</span>
+                    {r.paymentStatus === 'paid' && (
+                      <button
+                        type="button"
+                        className="secondary card-invoice-button"
+                        onClick={(e) => { e.stopPropagation(); api.downloadCardInvoice(r._id, r.orderNumber).catch((err) => setError(err.message)); }}
+                      >
+                        <Download size={14} aria-hidden="true" />Invoice
+                      </button>
+                    )}
+                    <ChevronDown size={16} className="request-row-chevron" aria-hidden="true" style={{ transform: expanded ? 'rotate(180deg)' : 'none' }} />
+                  </span>
+                </div>
+
+                {expanded && (
+                  <div className="request-row-detail">
+                    <div className="request-detail-items">
+                      {items.map((item, i) => (
+                        <div key={i} className="request-detail-item">
+                          <span>{item.name} <span className="hint">× {item.quantity}</span></span>
+                          {item.unitPrice != null && <span>₹{item.unitPrice * item.quantity}</span>}
+                        </div>
+                      ))}
+                    </div>
+
+                    {r.amount != null && (
+                      <div className="request-detail-totals">
+                        <div><span>Card subtotal</span><span>₹{r.subtotal}</span></div>
+                        <div><span>Delivery</span><span>₹{r.deliveryFee}</span></div>
+                        <div><span>GST ({r.gstPercent}%)</span><span>₹{r.gstAmount}</span></div>
+                        <div className="request-detail-total"><span>Total paid</span><span>₹{r.amount}</span></div>
+                      </div>
+                    )}
+
+                    {r.delivery?.line1 && (
+                      <div className="request-detail-address">
+                        <strong>{r.delivery.name}</strong>
+                        <span>{r.delivery.line1}{r.delivery.line2 ? `, ${r.delivery.line2}` : ''}</span>
+                        <span>{r.delivery.city}, {r.delivery.state} - {r.delivery.pincode}</span>
+                        <span>Phone: {r.delivery.phone}</span>
+                      </div>
+                    )}
+
+                    {r.trackingId && (
+                      <div className="request-detail-tracking"><span>Tracking ID</span><strong>{r.trackingId}</strong></div>
+                    )}
+
+                    {r.createdAt && (
+                      <div className="request-detail-date">
+                        Ordered on {new Date(r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </div>
+                    )}
+                  </div>
                 )}
-              </span>
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -519,6 +519,7 @@ const EDITABLE_FIELDS = [
   'fullName',
   'jobTitle',
   'bio',
+  'highlights',
   'phone',
   'whatsapp',
   'publicEmail',

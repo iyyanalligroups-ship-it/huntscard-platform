@@ -4,6 +4,8 @@ import {
   ArrowRight,
   AtSign,
   BadgeCheck,
+  Eye,
+  EyeOff,
   KeyRound,
   LockKeyhole,
   ShieldCheck,
@@ -18,6 +20,7 @@ export default function Login() {
   const [mode, setMode] = useState('password'); // 'password' | 'otp'
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -121,7 +124,6 @@ export default function Login() {
             <div className="login-auth__heading">
               <span className="login-auth__icon"><KeyRound size={21} /></span>
               <div>
-                <p>Welcome back</p>
                 <h1 id="login-title">Log in to your card</h1>
               </div>
             </div>
@@ -173,13 +175,21 @@ export default function Login() {
                     <LockKeyhole size={18} aria-hidden="true" />
                     <input
                       id="password"
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       autoComplete="current-password"
                       placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
                     />
+                    <button
+                      type="button"
+                      className="password-eye-btn"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
                 </div>
                 <div className="login-form__meta">

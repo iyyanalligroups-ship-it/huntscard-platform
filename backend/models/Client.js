@@ -34,6 +34,11 @@ const ClientSchema = new mongoose.Schema(
     fullName: { type: String, required: true, trim: true },
     jobTitle: { type: String, trim: true }, // e.g. "Designer @ Huntsworld"
     bio: { type: String, trim: true, maxlength: 280 }, // short "About" text
+    // "Expertise & Highlights" tags shown as #hashtags under bio on the
+    // public tap page (see PublicProfile.jsx). Empty means the tap page
+    // falls back to its own auto-picked defaults, so older profiles that
+    // predate this field don't suddenly show nothing.
+    highlights: { type: [String], default: [] },
 
     // ---- Admin-only fields (collected at registration, editable from
     // Profile Settings) -- deliberately NEVER selected/returned by the

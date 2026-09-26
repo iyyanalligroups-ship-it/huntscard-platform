@@ -370,7 +370,7 @@ export default function DashboardHome() {
             greeting: this column's own height grows to match instead. */}
         <div className="dash-left-col">
           <div className="dash-hero-left">
-            <h1 className="dash-hero-title">Welcome back, {firstName}</h1>
+            <h1 className="dash-hero-title">Welcome, {firstName}</h1>
             <p className="dash-hero-sub">
               {stage >= 1
                 ? 'Your HuntsTAG is live. Tap stats and order progress below.'
