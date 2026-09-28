@@ -103,6 +103,13 @@ export default function DashboardHome() {
     else if (cards.length > 0) setSelectedCardNumber(cards[0].cardNumber);
   }, [profile?.primaryCardNumber, cards, selectedCardNumber]);
 
+  // Which physical card the hero preview shows, resolved early so the
+  // composite effect right below can gate on its own magicEnabled flag
+  // (each card resolves this independently -- see backend's GET
+  // /api/profile/cards -- since one account can own several physical
+  // cards on different plans).
+  const selectedCard = cards.find((c) => c.cardNumber === selectedCardNumber) || null;
+
   // Hero card preview -- the same "design + AR QR baked in at its saved
   // position" composite Magic Business Card's "Download card (with QR)"
   // button produces (see cardComposite.js), not just the bare design
@@ -111,8 +118,20 @@ export default function DashboardHome() {
   // to the plain design image (heroCardDesignUrl, already showing) if
   // this fails for any reason -- a failed composite shouldn't blank the
   // card preview out.
+  //
+  // Gated on the SELECTED card's own magicEnabled -- not just "a Magic
+  // Business Card doc happens to exist for this card number". A client
+  // can own multiple cards across plans, or have set one up on a plan
+  // that included it and since moved/downgraded; either way the doc can
+  // outlive the entitlement, and the QR-in-corner look is specifically
+  // the Magic AR business card feature, not something every plan gets.
   useEffect(() => {
     if (!profile?.clientId || selectedCardNumber == null) return;
+    if (!selectedCard?.magicEnabled) {
+      setCardCompositeUrl(null);
+      setHeroImageDims(null);
+      return;
+    }
     let cancelled = false;
     setCardCompositeUrl(null); // clear the previous card's composite immediately on switch, don't show it under the new selection while the new one loads
     setHeroImageDims(null); // same -- don't size the new card's box off the old one's dims for a frame
@@ -134,7 +153,7 @@ export default function DashboardHome() {
     return () => {
       cancelled = true;
     };
-  }, [profile?.clientId, selectedCardNumber]);
+  }, [profile?.clientId, selectedCardNumber, selectedCard?.magicEnabled]);
 
   // Fallback path -- no Magic Business Card image to composite yet, so
   // the box falls back to the plain purchased-plan design (see
@@ -280,7 +299,7 @@ export default function DashboardHome() {
   // a DIFFERENT card's (profile.primaryCardNumber's) shape/image instead,
   // which looked like "the wrong card's picture" when switching the
   // picker to a card that's genuinely still blank.
-  const selectedCard = cards.find((c) => c.cardNumber === selectedCardNumber) || null;
+  // (selectedCard itself is resolved above, alongside the composite effect.)
   const heroCardShape = selectedCard ? selectedCard.shape : profile?.cardShape;
   const heroCardDesignUrl = selectedCard ? selectedCard.cardDesignUrl : profile?.cardFrontImageUrl;
   const heroCardType = selectedCard ? selectedCard.cardType : profile?.cardType;

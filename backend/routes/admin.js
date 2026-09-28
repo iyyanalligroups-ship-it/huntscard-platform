@@ -1477,13 +1477,36 @@ function mirrorCardOneToClient(card, fields) {
   return Client.updateOne({ clientId: card.clientId }, { $set: fields });
 }
 
+async function syncCardShipmentToPurchase(card, fields) {
+  let request = null;
+  if (card.purchaseRequestId) request = await CardRequest.findById(card.purchaseRequestId);
+  if (!request && card.orderNumber) request = await CardRequest.findOne({ orderNumber: card.orderNumber });
+  if (!request && card.createdAt) {
+    const createdAt = new Date(card.createdAt);
+    request = await CardRequest.findOne({
+      clientId: card.clientId,
+      type: 'upgrade',
+      paymentStatus: 'paid',
+      requestedPlan: card.cardType,
+      createdAt: { $gte: new Date(createdAt.getTime() - 30 * 60 * 1000), $lte: new Date(createdAt.getTime() + 30 * 60 * 1000) },
+    }).sort({ createdAt: -1 });
+  }
+  if (!request) return;
+  await CardRequest.updateOne({ _id: request._id }, { $set: fields });
+  if (!card.purchaseRequestId || (!card.orderNumber && request.orderNumber)) {
+    card.purchaseRequestId = request._id;
+    if (request.orderNumber) card.orderNumber = request.orderNumber;
+    await card.save();
+  }
+}
+
 // GET /api/admin/fulfillment
 // Every card on file, grouped by client, for the fulfillment pipeline view.
 // Includes already-delivered ones too (filter client-side) so the page can
 // show history.
 router.get('/fulfillment', requireAdmin, async (req, res) => {
   const cards = await Card.find({})
-    .select('clientId cardNumber cardType cardVariantId claimedBy assignedTo encoded encodedAt dispatched dispatchedAt dispatchedBy trackingId delivered deliveredAt createdAt')
+    .select('clientId cardNumber cardType cardVariantId purchaseRequestId orderNumber claimedBy assignedTo encoded encodedAt dispatched dispatchedAt dispatchedBy trackingId delivered deliveredAt createdAt')
     .sort({ createdAt: -1 });
 
   const clientIds = [...new Set(cards.map((c) => c.clientId))];
@@ -1505,6 +1528,7 @@ router.get('/fulfillment', requireAdmin, async (req, res) => {
       cardId: obj._id,
       cardNumber: obj.cardNumber,
       cardType: obj.cardType,
+      orderNumber: obj.orderNumber,
       variantName: variant?.name || null,
       shape: variant?.shape || null,
       claimedBy: obj.claimedBy,
@@ -1595,6 +1619,10 @@ router.patch('/fulfillment/cards/:cardId/dispatch', requireSeniorAdmin, async (r
     dispatchedBy: card.dispatchedBy,
     trackingId: card.trackingId,
   });
+  await syncCardShipmentToPurchase(card, {
+    trackingId: card.trackingId,
+    dispatchedAt: card.dispatchedAt,
+  });
   res.json(card);
 });
 
@@ -1611,6 +1639,11 @@ router.patch('/fulfillment/cards/:cardId/deliver', requireSeniorAdmin, async (re
   card.deliveredAt = new Date();
   await card.save();
   await mirrorCardOneToClient(card, { delivered: card.delivered, deliveredAt: card.deliveredAt });
+  await syncCardShipmentToPurchase(card, {
+    trackingId: card.trackingId,
+    dispatchedAt: card.dispatchedAt,
+    deliveredAt: card.deliveredAt,
+  });
   res.json(card);
 });
 

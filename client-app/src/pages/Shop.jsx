@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   CreditCard,
   Download,
   LoaderCircle,
@@ -16,6 +17,7 @@ import {
   ScanLine,
   ShoppingBag,
   Sparkles,
+  Truck,
   Volume2,
   X,
   Zap,
@@ -880,7 +882,7 @@ export default function Shop() {
                   </div>
                 </div>
               )}
-              {loggedIn && selectedPlan.chargeAmount && (
+              {loggedIn && selectedPlan.chargeAmount && variantOk && (
                 <section className="card-checkout-delivery" aria-labelledby="card-delivery-heading">
                   <div className="card-checkout-section-title">
                     <span><MapPin size={17} strokeWidth={2} aria-hidden="true" /></span>
@@ -1003,7 +1005,7 @@ export default function Shop() {
                 </section>
               )}
 
-              {selectedPlan.chargeAmount && loggedIn && (
+              {selectedPlan.chargeAmount && loggedIn && variantOk && (
                 <div className="card-checkout-summary">
                   <div><span>Card subtotal</span><strong>₹{cardSubtotal}</strong></div>
                   <div><span>Delivery</span><strong>₹{deliveryFee}</strong></div>
@@ -1056,9 +1058,18 @@ export default function Shop() {
         <div className="checkout-panel" style={{ marginTop: 32 }}>
           <p className="hint" style={{ marginBottom: 8 }}>Your purchase history</p>
           {requests.map((r) => {
-            const planName = visiblePlans.find((p) => p.key === r.requestedPlan)?.name || r.requestedPlan;
+            const requestPlan = visiblePlans.find((p) => p.key === r.requestedPlan);
+            const planName = requestPlan?.name || r.requestedPlan;
             const expanded = expandedRequestId === r._id;
             const items = r.invoiceItems && r.invoiceItems.length > 0 ? r.invoiceItems : [{ name: planName, unitPrice: null, quantity: r.quantity }];
+            const selectedVariants = (r.variantBreakdown || []).map((selection, index) => {
+              const variant = requestPlan?.variants?.find((item) => String(item._id) === String(selection.variantId));
+              return { ...variant, ...selection, name: variant?.name || items[index]?.name || `Card style ${index + 1}` };
+            });
+            const primaryVariant = selectedVariants[0] || requestPlan?.variants?.[0];
+            const frontImage = primaryVariant?.frontImageUrl || requestPlan?.images?.[0];
+            const backImage = primaryVariant?.backImageUrl || requestPlan?.images?.[1];
+            const activeFeatures = PLAN_FEATURE_BADGES.filter((feature) => requestPlan?.[feature.key]);
             function toggle() {
               setExpandedRequestId(expanded ? null : r._id);
             }
@@ -1095,42 +1106,91 @@ export default function Shop() {
 
                 {expanded && (
                   <div className="request-row-detail">
-                    <div className="request-detail-items">
-                      {items.map((item, i) => (
-                        <div key={i} className="request-detail-item">
-                          <span>{item.name} <span className="hint">× {item.quantity}</span></span>
-                          {item.unitPrice != null && <span>₹{item.unitPrice * item.quantity}</span>}
+                    <div className="purchase-detail-hero">
+                      <div className="purchase-detail-media">
+                        <div className={`purchase-detail-card-face ${primaryVariant?.shape === 'vertical' ? 'is-vertical' : ''}`}>
+                          {frontImage ? <img src={frontImage} alt={`${planName} front`} /> : <CreditCard size={34} aria-hidden="true" />}
+                          <span>Front</span>
                         </div>
-                      ))}
+                        {backImage && (
+                          <div className={`purchase-detail-card-face ${primaryVariant?.shape === 'vertical' ? 'is-vertical' : ''}`}>
+                            <img src={backImage} alt={`${planName} back`} />
+                            <span>Back</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="purchase-detail-plan">
+                        <span className="purchase-detail-kicker">Purchased plan</span>
+                        <h3>{planName}</h3>
+                        <code>{r.requestedPlan}</code>
+                        {requestPlan?.description && <p>{requestPlan.description}</p>}
+                        <div className="purchase-detail-meta">
+                          <div><span>Quantity</span><strong>{r.quantity || 1}</strong></div>
+                          <div><span>Plan price</span><strong>{requestPlan?.price || (requestPlan?.chargeAmount != null ? `₹${requestPlan.chargeAmount}` : 'Not set')}</strong></div>
+                          <div><span>Order number</span><strong>{r.orderNumber || 'Not available'}</strong></div>
+                          <div><span>Status</span><strong>{r.status}</strong></div>
+                        </div>
+                        {activeFeatures.length > 0 && (
+                          <div className="purchase-detail-features">
+                            {activeFeatures.map(({ key, Icon, label }) => <span key={key}><Icon size={12} aria-hidden="true" />{label}</span>)}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    {r.amount != null && (
-                      <div className="request-detail-totals">
-                        <div><span>Card subtotal</span><span>₹{r.subtotal}</span></div>
-                        <div><span>Delivery</span><span>₹{r.deliveryFee}</span></div>
-                        <div><span>GST ({r.gstPercent}%)</span><span>₹{r.gstAmount}</span></div>
-                        <div className="request-detail-total"><span>Total paid</span><span>₹{r.amount}</span></div>
-                      </div>
-                    )}
+                    <div className="purchase-detail-sections">
+                      <section className="purchase-detail-section">
+                        <div className="purchase-detail-section-title"><ShoppingBag size={15} /><div><strong>Order items</strong><span>Selected card styles and quantities</span></div></div>
+                        <div className="purchase-detail-items">
+                          {(selectedVariants.length > 0 ? selectedVariants : items).map((item, i) => (
+                            <div key={item.variantId || i} className="purchase-detail-item">
+                              <div className={`purchase-detail-item-image ${item.shape === 'vertical' ? 'is-vertical' : ''}`}>
+                                {item.frontImageUrl ? <img src={item.frontImageUrl} alt={item.name} /> : <CreditCard size={18} aria-hidden="true" />}
+                              </div>
+                              <div><strong>{item.name}</strong><span>{item.shape ? `${item.shape} · ` : ''}{item.quantity} {Number(item.quantity) === 1 ? 'card' : 'cards'}</span></div>
+                              {item.unitPrice != null && <b>₹{item.unitPrice * item.quantity}</b>}
+                            </div>
+                          ))}
+                        </div>
+                      </section>
 
-                    {r.delivery?.line1 && (
-                      <div className="request-detail-address">
-                        <strong>{r.delivery.name}</strong>
-                        <span>{r.delivery.line1}{r.delivery.line2 ? `, ${r.delivery.line2}` : ''}</span>
-                        <span>{r.delivery.city}, {r.delivery.state} - {r.delivery.pincode}</span>
-                        <span>Phone: {r.delivery.phone}</span>
-                      </div>
-                    )}
+                      {r.amount != null && (
+                        <section className="purchase-detail-section">
+                          <div className="purchase-detail-section-title"><CreditCard size={15} /><div><strong>Payment summary</strong><span>Verified checkout amount</span></div></div>
+                          <div className="request-detail-totals purchase-detail-totals">
+                            <div><span>Card subtotal</span><span>₹{r.subtotal}</span></div>
+                            <div><span>Delivery</span><span>₹{r.deliveryFee}</span></div>
+                            <div><span>GST ({r.gstPercent}%)</span><span>₹{r.gstAmount}</span></div>
+                            <div className="request-detail-total"><span>Total paid</span><span>₹{r.amount}</span></div>
+                          </div>
+                        </section>
+                      )}
 
-                    {r.trackingId && (
-                      <div className="request-detail-tracking"><span>Tracking ID</span><strong>{r.trackingId}</strong></div>
-                    )}
+                      {r.delivery?.line1 && (
+                        <section className="purchase-detail-section">
+                          <div className="purchase-detail-section-title"><MapPin size={15} /><div><strong>Delivery address</strong><span>Shipping destination</span></div></div>
+                          <div className="request-detail-address purchase-detail-address">
+                            <strong>{r.delivery.name} · {r.delivery.phone}</strong>
+                            <span>{r.delivery.line1}{r.delivery.line2 ? `, ${r.delivery.line2}` : ''}</span>
+                            <span>{r.delivery.city}, {r.delivery.state} - {r.delivery.pincode}</span>
+                            <span>{r.delivery.country}</span>
+                          </div>
+                        </section>
+                      )}
 
-                    {r.createdAt && (
-                      <div className="request-detail-date">
-                        Ordered on {new Date(r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </div>
-                    )}
+                      <section className="purchase-detail-section">
+                        <div className="purchase-detail-section-title"><Truck size={15} /><div><strong>Fulfillment</strong><span>Tracking and delivery progress</span></div></div>
+                        <div className="purchase-fulfillment-grid">
+                          <div><span>Tracking ID</span><strong>{r.trackingId || 'Not dispatched yet'}</strong></div>
+                          <div><span>Dispatched</span><strong>{r.dispatchedAt ? new Date(r.dispatchedAt).toLocaleString() : 'Pending'}</strong></div>
+                          <div><span>Delivered</span><strong>{r.deliveredAt ? new Date(r.deliveredAt).toLocaleString() : 'Pending'}</strong></div>
+                        </div>
+                      </section>
+
+                      <section className="purchase-detail-section purchase-detail-date-section">
+                        <div className="purchase-detail-section-title"><Clock3 size={15} /><div><strong>Order date</strong><span>{r.createdAt ? new Date(r.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not available'}</span></div></div>
+                      </section>
+                    </div>
                   </div>
                 )}
               </div>

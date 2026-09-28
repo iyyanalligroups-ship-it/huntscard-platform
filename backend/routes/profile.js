@@ -86,7 +86,7 @@ function parseVariantBreakdown(raw, plan) {
 // plan that doesn't have any. cardNumber continues from whatever's already
 // highest for this client, so a repeat purchase appends new numbers rather
 // than colliding with cards an earlier purchase already created.
-async function createCardsForPurchase({ clientId, cardType, quantity, variantBreakdown }) {
+async function createCardsForPurchase({ clientId, cardType, quantity, variantBreakdown, purchaseRequestId, orderNumber }) {
   const lastCard = await Card.findOne({ clientId }).sort({ cardNumber: -1 }).select('cardNumber');
   let nextNumber = (lastCard?.cardNumber || 0) + 1;
   const units = variantBreakdown && variantBreakdown.length > 0
@@ -97,6 +97,8 @@ async function createCardsForPurchase({ clientId, cardType, quantity, variantBre
     cardNumber: nextNumber++,
     cardType,
     cardVariantId: variantId,
+    purchaseRequestId: purchaseRequestId || null,
+    orderNumber: orderNumber || null,
   }));
   if (cardDocs.length > 0) await Card.insertMany(cardDocs);
 }
@@ -1472,6 +1474,8 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
       cardType: requestedPlan.toLowerCase(),
       quantity,
       variantBreakdown,
+      purchaseRequestId: request._id,
+      orderNumber: request.orderNumber,
     });
 
     res.status(201).json(request);
@@ -1971,7 +1975,7 @@ router.post('/new-card-confirm', requireAuth, async (req, res) => {
       mustChangePassword: true,
     });
 
-    await CardRequest.create({
+    const purchaseRequest = await CardRequest.create({
       clientId: req.user.clientId, // who paid, for audit -- not the new account
       type: 'new_card',
       requestedPlan: requestedPlan.toLowerCase(), // needed to resolve variantBreakdown's variantId for admin display (see admin.js's GET /requests)
@@ -1992,6 +1996,8 @@ router.post('/new-card-confirm', requireAuth, async (req, res) => {
       cardType: requestedPlan.toLowerCase(),
       quantity,
       variantBreakdown,
+      purchaseRequestId: purchaseRequest._id,
+      orderNumber: purchaseRequest.orderNumber,
     });
 
     res.status(201).json({
@@ -2043,7 +2049,61 @@ router.get('/requests', requireAuth, async (req, res) => {
     clientId: req.user.clientId,
     $or: [{ paymentStatus: 'paid' }, { razorpayOrderId: null }],
   }).sort({ createdAt: -1 });
-  res.json(requests);
+
+  // Fulfillment is stored per physical Card, while this endpoint returns
+  // the purchase-level CardRequest history. Join them here so tracking set
+  // from the Fulfillment screen also appears in /dashboard/upgrade. New
+  // cards have an exact purchaseRequestId/orderNumber link; the timestamp
+  // fallback covers purchases created before those fields were introduced.
+  const cards = await Card.find({ clientId: req.user.clientId })
+    .select('cardType purchaseRequestId orderNumber trackingId dispatchedAt deliveredAt createdAt')
+    .sort({ createdAt: -1 });
+  const usedLegacyCardIds = new Set();
+
+  const result = requests.map((request) => {
+    const obj = request.toObject();
+    let linkedCards = cards.filter((card) =>
+      (card.purchaseRequestId && String(card.purchaseRequestId) === String(request._id))
+      || (card.orderNumber && obj.orderNumber && card.orderNumber === obj.orderNumber),
+    );
+
+    if (linkedCards.length === 0 && obj.type === 'upgrade' && obj.paymentStatus === 'paid') {
+      const requestTime = new Date(obj.createdAt).getTime();
+      const samePlanCards = cards
+        .filter((card) => !usedLegacyCardIds.has(String(card._id)) && card.cardType === obj.requestedPlan)
+        .map((card) => {
+          const offset = new Date(card.createdAt).getTime() - requestTime;
+          return { card, offset, distance: Math.abs(offset) };
+        })
+        .filter(({ distance }) => Number.isFinite(distance));
+      // Checkout confirmation can happen well after the request snapshot
+      // was created, so don't impose a short time window. Prefer cards
+      // created after this order, then choose the nearest unmatched ones.
+      const afterRequest = samePlanCards.filter(({ offset }) => offset >= -60 * 1000);
+      const candidates = (afterRequest.length > 0 ? afterRequest : samePlanCards)
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, Math.max(1, Number(obj.quantity) || 1));
+      linkedCards = candidates.map(({ card }) => card);
+      linkedCards.forEach((card) => usedLegacyCardIds.add(String(card._id)));
+    }
+
+    const shipmentCards = linkedCards.filter((card) => card.trackingId || card.dispatchedAt || card.deliveredAt);
+    const primaryShipment = shipmentCards.find((card) => card.trackingId) || shipmentCards[0];
+    return {
+      ...obj,
+      trackingId: obj.trackingId || primaryShipment?.trackingId || null,
+      dispatchedAt: obj.dispatchedAt || primaryShipment?.dispatchedAt || null,
+      deliveredAt: obj.deliveredAt || primaryShipment?.deliveredAt || null,
+      shipments: linkedCards.map((card) => ({
+        cardId: card._id,
+        trackingId: card.trackingId || null,
+        dispatchedAt: card.dispatchedAt || null,
+        deliveredAt: card.deliveredAt || null,
+      })),
+    };
+  });
+
+  res.json(result);
 });
 
 // GET /api/profile/requests/:id/invoice -- GST invoice for this client's

@@ -22,6 +22,11 @@ const CardSchema = new mongoose.Schema(
     // own variants[], joined at read time rather than copied.
     cardType: { type: String, trim: true, lowercase: true, default: null },
     cardVariantId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    // Purchase that created this physical card. This keeps fulfillment
+    // tracking connected to the exact CardRequest shown in client purchase
+    // history, including repeat purchases of the same plan.
+    purchaseRequestId: { type: mongoose.Schema.Types.ObjectId, ref: 'CardRequest', default: null, index: true },
+    orderNumber: { type: String, trim: true, default: null, index: true },
     // Admin's own free-text nickname for THIS specific physical card (e.g.
     // "Front desk", "Spare for Priya") -- distinct from cardType/variant,
     // which describe the plan/style, not which literal object it is. Purely
