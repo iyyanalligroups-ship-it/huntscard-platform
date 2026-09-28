@@ -66,11 +66,15 @@ export default function Register() {
               id="phone"
               type="tel"
               inputMode="numeric"
+              minLength={10}
               maxLength={10}
+              pattern="[0-9]{10}"
+              title="Enter exactly 10 digits"
               value={phone}
               onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
               required
             />
+            <p className="hint" style={{ marginBottom: 0 }}>Enter exactly 10 digits.</p>
           </div>
           <div className="field">
             <label htmlFor="gender">Gender (optional)</label>

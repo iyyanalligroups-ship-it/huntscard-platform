@@ -51,6 +51,7 @@ const DEFAULT_QR_POSITION = { x: 71, y: 80 };
 const FaqEntry = require('../models/FaqEntry');
 const cardCrypto = require('../utils/crypto'); // named apart from the built-in `crypto` above (line 4)
 const { getChargeAmount, getMagicArtChargeAmount } = require('../utils/pricing');
+const createCardsForPurchase = require('../utils/createCardsForPurchase');
 
 const router = express.Router();
 
@@ -448,7 +449,12 @@ router.get('/stats', requireAdmin, async (req, res) => {
       },
       { $sort: { '_id.year': 1, '_id.month': 1 } },
     ]),
-    CardRequest.countDocuments({ status: 'pending' }),
+    // Same visibility rule as GET /requests below: an abandoned Razorpay
+    // checkout (unpaid, razorpayOrderId set) never surfaces on the
+    // Requests page, so it must not inflate this badge either -- otherwise
+    // the sidebar count can never reach 0 through anything admin can
+    // actually see or action.
+    CardRequest.countDocuments({ status: 'pending', $or: [{ paymentStatus: 'paid' }, { razorpayOrderId: null }] }),
     // Real count of clients per plan -- a client with a cardType assigned
     // represents a card sale, so this is a genuine sales-by-tier breakdown.
     Client.aggregate([
@@ -1970,8 +1976,9 @@ router.patch('/requests/:id/deliver', requireAdmin, async (req, res) => {
 });
 
 // PATCH /api/admin/requests/:id
-// Approving an 'upgrade' request actually applies the cardType change to
-// the client record -- this is the one place a request becomes real.
+// Approving an unpaid/manual 'upgrade' request creates its physical card.
+// Paid Razorpay/coupon requests already create their cards at checkout,
+// so the linkage check below makes approval safe to repeat.
 // Approving a 'new_card' request does NOT auto-create a second client
 // account (too ambiguous to automate safely); admin creates that manually
 // from the Clients screen, then marks this 'fulfilled' once done.
@@ -1986,24 +1993,44 @@ router.patch('/requests/:id', requireAdmin, async (req, res) => {
     if (!request) return res.status(404).json({ error: 'Request not found' });
 
     if (status === 'approved' && request.type === 'upgrade') {
-      await Client.findOneAndUpdate({ clientId: request.clientId }, { $set: { cardType: request.requestedPlan } });
-      // Same "only one plan at a time" rule as the paid self-service path
-      // (routes/profile.js's /upgrade-confirm) -- old Card(s) of a
-      // different plan, and their AR Layout / Magic Business Card
-      // customizations, are permanently deleted, not archived. A repeat
-      // approval for the SAME plan the client is already on leaves
-      // everything untouched.
-      const oldCards = await Card.find({
+      const existingCardCount = await Card.countDocuments({ clientId: request.clientId });
+      const linkedCard = await Card.findOne({
         clientId: request.clientId,
-        cardType: { $ne: request.requestedPlan },
-      }).select('cardNumber');
-      if (oldCards.length > 0) {
-        const oldCardNumbers = oldCards.map((c) => c.cardNumber);
-        await Promise.all([
-          Card.deleteMany({ clientId: request.clientId, cardNumber: { $in: oldCardNumbers } }),
-          ArLayout.deleteMany({ clientId: request.clientId, cardNumber: { $in: oldCardNumbers } }),
-          MagicBusinessCard.deleteMany({ clientId: request.clientId, cardNumber: { $in: oldCardNumbers } }),
-        ]);
+        $or: [
+          { purchaseRequestId: request._id },
+          ...(request.orderNumber ? [{ orderNumber: request.orderNumber }] : []),
+        ],
+      }).select('_id');
+
+      // A manual request has no card until approval. A paid checkout or
+      // coupon claim already has one linked by purchaseRequestId/orderNumber.
+      // Never delete older cards: every purchase is an additional physical
+      // card with its own plan, AR layout, Magic image and QR position.
+      if (!linkedCard) {
+        await createCardsForPurchase({
+          clientId: request.clientId,
+          cardType: request.requestedPlan,
+          quantity: request.quantity || 1,
+          variantBreakdown: request.variantBreakdown || [],
+          purchaseRequestId: request._id,
+          orderNumber: request.orderNumber,
+        });
+      }
+
+      // These Client fields are only the legacy mirror for card #1. Do not
+      // replace them when a client buys a second plan.
+      if (existingCardCount === 0) {
+        const primaryVariantId = request.variantBreakdown?.[0]?.variantId || null;
+        await Client.findOneAndUpdate(
+          { clientId: request.clientId },
+          {
+            $set: {
+              cardType: request.requestedPlan,
+              cardVariantId: primaryVariantId,
+              ...(request.paymentStatus === 'paid' ? { paid: true } : {}),
+            },
+          }
+        );
       }
     }
 

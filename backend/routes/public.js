@@ -331,7 +331,7 @@ router.get('/profile/:clientId', async (req, res) => {
     { $inc: { tapCount: 1 } }, // simple tap analytics, per the report's spec -- kept even while paused, harmless
     { new: true }
   ).select(
-    'fullName jobTitle bio highlights photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail loginEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType cardVariantId clientId cardActive customDesignFrontUrl'
+    'fullName jobTitle bio highlights photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail loginEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType cardVariantId clientId cardActive customDesignFrontUrl customDesignBackUrl'
   );
 
   if (!client) {
@@ -380,7 +380,19 @@ router.get('/profile/:clientId', async (req, res) => {
   // checkout-uploaded design for Custom Card, or the purchased variant's
   // own image for every other plan -- same resolution Magic Business
   // Card's derived image already uses (see GET /magic-card below).
-  clientObj.cardDesignUrl = resolved.requiresDesignUpload ? client.customDesignFrontUrl || null : resolved.frontImageUrl;
+  const frontDesignUrl = resolved.requiresDesignUpload
+    ? client.customDesignFrontUrl || resolved.frontImageUrl
+    : resolved.frontImageUrl;
+  const backDesignUrl = resolved.requiresDesignUpload
+    ? client.customDesignBackUrl || resolved.backImageUrl
+    : resolved.backImageUrl;
+  const magicDesign = resolved.magicEnabled && tappedCard
+    ? await MagicBusinessCard.findOne({ clientId: client.clientId, cardNumber: cardNumberParam }).select('imageUrl')
+    : null;
+  clientObj.cardDesignUrl = resolved.qrSide === 'front'
+    ? magicDesign?.imageUrl || frontDesignUrl || backDesignUrl || null
+    : backDesignUrl || frontDesignUrl || null;
+  clientObj.cardQrSide = resolved.qrSide;
   // client.toObject() does NOT flatten Map-type fields the way a Mongoose
   // document's own toJSON() would -- left as-is, customAttributes would
   // silently serialize as {} below, since a plain Map instance nested in a
@@ -563,9 +575,21 @@ router.get('/ar-layout/:clientId', async (req, res) => {
     // this feature) defaults to card #1, same convention cardBlockReason
     // already uses.
     const cardNumber = Number(req.query.card) || 1;
+    const card = await Card.findOne({ clientId: req.params.clientId, cardNumber }).select('cardType cardVariantId');
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+    const resolved = await resolveCardVariant(card);
     let layout = await ArLayout.findOne({ clientId: req.params.clientId, cardNumber });
+    const fallback = (await ArLayout.findOne({ key: 'global' })) || new ArLayout({ key: 'global' });
+    const magicCard = resolved.magicEnabled
+      ? await MagicBusinessCard.findOne({ clientId: req.params.clientId, cardNumber }).select('qrX qrY')
+      : null;
+    const qr = magicCard
+      ? { x: magicCard.qrX, y: magicCard.qrY, z: fallback.qr?.z ?? 0 }
+      : { ...resolved.defaultQrPosition, z: fallback.qr?.z ?? 0 };
     if (!layout) {
-      layout = (await ArLayout.findOne({ key: 'global' })) || new ArLayout({ key: 'global' }); // defaults only if truly nothing saved anywhere
+      layout = { ...fallback.toObject(), qr };
+    } else {
+      layout = { ...layout.toObject(), qr };
     }
     // HuntsAR World re-fetches this on every scan -- a stale cached copy
     // after the client just edited their layout would look exactly like a

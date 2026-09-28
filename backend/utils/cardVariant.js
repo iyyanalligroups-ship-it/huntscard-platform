@@ -80,6 +80,11 @@ async function resolveCardVariant(card, mapsOrNull) {
     requiresDesignUpload: Boolean(plan?.requiresDesignUpload),
     arEnabled: Boolean(plan?.arEnabled),
     magicEnabled: Boolean(plan?.magicEnabled),
+    // Printed-QR convention used by AR Layout/tracking: Magic plans
+    // (Limited Edition + Custom Card) print the QR on the front near the
+    // lower-right; standard plans print it centered on the back.
+    qrSide: plan?.magicEnabled ? 'front' : 'back',
+    defaultQrPosition: plan?.magicEnabled ? { x: 71, y: 80 } : { x: 50, y: 50 },
     planName: plan?.name || null,
   };
 }

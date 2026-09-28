@@ -74,8 +74,12 @@ function signToken(client) {
 router.post('/register', registerLimiter, async (req, res) => {
   try {
     const { fullName, phone, loginEmail, password, gender, dateOfBirth } = req.body;
-    if (!fullName || !loginEmail || !password) {
-      return res.status(400).json({ error: 'fullName, loginEmail, and password are required' });
+    if (!fullName || !phone || !loginEmail || !password) {
+      return res.status(400).json({ error: 'Full name, phone number, email, and password are required.' });
+    }
+    const normalizedPhone = String(phone).replace(/\D/g, '');
+    if (!/^\d{10}$/.test(normalizedPhone)) {
+      return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
     }
     if (password.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
@@ -88,6 +92,10 @@ router.post('/register', registerLimiter, async (req, res) => {
     if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists. Try logging in instead.' });
     }
+    const existingPhone = await Client.findOne({ phone: normalizedPhone }).select('_id');
+    if (existingPhone) {
+      return res.status(409).json({ error: 'An account with this phone number already exists. Try logging in instead.' });
+    }
 
     const passwordHash = await bcrypt.hash(password, 12);
     const client = await Client.create({
@@ -95,7 +103,7 @@ router.post('/register', registerLimiter, async (req, res) => {
       loginEmail: loginEmail.toLowerCase(),
       passwordHash,
       fullName,
-      phone: phone || '',
+      phone: normalizedPhone,
       gender: gender || null,
       dateOfBirth: dateOfBirth || null,
       mustChangePassword: false, // they chose this password themselves, no forced change needed

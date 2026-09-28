@@ -341,6 +341,7 @@ export default function ArLayout() {
     ...profile,
     cardShape: selectedCard.shape,
     cardDesignUrl: selectedCard.cardDesignUrl,
+    cardQrSide: selectedCard.qrSide,
     // So ArScanPreview's own QR texture (cosmetic mockup only, see that
     // file's comment) matches the SELECTED card too, not whatever
     // profile.cardNumber happened to be on the raw account-level profile.
@@ -384,7 +385,8 @@ export default function ArLayout() {
       <h1 className="page-title">AR Layout</h1>
       <CardPicker />
       <p className="subtitle">
-        The QR code is the anchor a phone locks onto when scanning -- its position is fixed, not something
+        Showing the <strong>{selectedCard.qrSide === 'back' ? 'back' : 'front'}</strong> side where this card's QR is printed.
+        {' '}The QR code is the anchor a phone locks onto when scanning -- its position is fixed, not something
         you can move here. Drag anything else, in either preview below, to where you want it to float relative
         to that QR; orbit either preview (drag empty space) to check the arrangement from any angle.
       </p>

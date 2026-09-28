@@ -12,6 +12,7 @@ const MagicBusinessCard = require('../models/MagicBusinessCard');
 const CardRequest = require('../models/CardRequest');
 const CardPlan = require('../models/CardPlan');
 const Card = require('../models/Card');
+const createCardsForPurchase = require('../utils/createCardsForPurchase');
 const AttributeDefinition = require('../models/AttributeDefinition');
 const MagicArt = require('../models/MagicArt');
 const MagicPosterOrder = require('../models/MagicPosterOrder');
@@ -86,22 +87,8 @@ function parseVariantBreakdown(raw, plan) {
 // plan that doesn't have any. cardNumber continues from whatever's already
 // highest for this client, so a repeat purchase appends new numbers rather
 // than colliding with cards an earlier purchase already created.
-async function createCardsForPurchase({ clientId, cardType, quantity, variantBreakdown, purchaseRequestId, orderNumber }) {
-  const lastCard = await Card.findOne({ clientId }).sort({ cardNumber: -1 }).select('cardNumber');
-  let nextNumber = (lastCard?.cardNumber || 0) + 1;
-  const units = variantBreakdown && variantBreakdown.length > 0
-    ? variantBreakdown.flatMap((entry) => Array(entry.quantity).fill(entry.variantId))
-    : Array(quantity).fill(null);
-  const cardDocs = units.map((variantId) => ({
-    clientId,
-    cardNumber: nextNumber++,
-    cardType,
-    cardVariantId: variantId,
-    purchaseRequestId: purchaseRequestId || null,
-    orderNumber: orderNumber || null,
-  }));
-  if (cardDocs.length > 0) await Card.insertMany(cardDocs);
-}
+// Moved to utils/createCardsForPurchase.js so routes/coupon.js's free-claim
+// path can create the same kind of Card record -- see that file's comment.
 
 // ---------------------------------------------------------------------
 // Photo upload -- stored on local disk under backend/uploads/photos,
@@ -1094,18 +1081,35 @@ router.get('/cards', requireAuth, async (req, res) => {
     // falling back to the one shared Client.customDesignFrontUrl.
     const magicDocs = await MagicBusinessCard.find({ clientId: req.user.clientId }).select('cardNumber imageUrl');
     const magicImageByCardNumber = Object.fromEntries(magicDocs.map((d) => [d.cardNumber, d.imageUrl || null]));
-    const client = await Client.findOne({ clientId: req.user.clientId }).select('customDesignFrontUrl');
+    const client = await Client.findOne({ clientId: req.user.clientId }).select('customDesignFrontUrl customDesignBackUrl');
     const withVariant = await Promise.all(
       cards.map(async (c) => {
         const resolved = await resolveCardVariant(c, maps);
-        // Same priority order serializeMyMagicCard uses: this card's own
-        // override, then the checkout design, then the purchased
-        // variant's own catalog image as a last resort (e.g. no checkout
-        // upload exists yet), then (for every other plan) that variant
-        // image directly.
-        const cardDesignUrl = resolved.requiresDesignUpload
-          ? magicImageByCardNumber[c.cardNumber] || client?.customDesignFrontUrl || resolved.frontImageUrl || null
-          : resolved.frontImageUrl;
+        // Two independent overrides, each gated on its OWN flag -- not on
+        // each other, and not on one standing in for the other:
+        //   1. A Magic Business Card image -- only for a magicEnabled card
+        //      (today that's Limited Edition and Custom Card). Using
+        //      requiresDesignUpload here instead would be wrong: it's a
+        //      checkout-artwork flag that happens to coincide with
+        //      magicEnabled for Custom Card today, but isn't the same
+        //      thing -- a future plan with one flag and not the other
+        //      would leak (or wrongly withhold) the Magic photo.
+        //   2. The client's own checkout-uploaded design -- only for a
+        //      requiresDesignUpload card (Custom Card).
+        // Falls through to the purchased variant's own catalog image as
+        // the last resort either way.
+        const frontDesignUrl =
+          (resolved.magicEnabled && magicImageByCardNumber[c.cardNumber]) ||
+          (resolved.requiresDesignUpload && client?.customDesignFrontUrl) ||
+          resolved.frontImageUrl ||
+          null;
+        const backDesignUrl =
+          (resolved.requiresDesignUpload && client?.customDesignBackUrl) ||
+          resolved.backImageUrl ||
+          null;
+        const cardDesignUrl = resolved.qrSide === 'front'
+          ? frontDesignUrl || backDesignUrl
+          : backDesignUrl || frontDesignUrl;
         return {
           cardNumber: c.cardNumber,
           cardType: c.cardType,
@@ -1120,6 +1124,8 @@ router.get('/cards', requireAuth, async (req, res) => {
           // without a second round trip per card.
           arEnabled: resolved.arEnabled,
           magicEnabled: resolved.magicEnabled,
+          qrSide: resolved.qrSide,
+          qrPosition: resolved.defaultQrPosition,
           // The actual purchased/uploaded design for THIS specific card --
           // most plans (e.g. Apex) don't let the client upload their own
           // image at all, so the AR Layout editor's card backdrop needs
@@ -2157,13 +2163,22 @@ router.get('/ar-layout', requireAuth, async (req, res) => {
     // Defaults to card #1 when omitted, same convention every other
     // per-card route in this file uses.
     const cardNumber = Number(req.query.card) || 1;
+    const card = await Card.findOne({ clientId, cardNumber }).select('cardType cardVariantId');
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+    const resolved = await resolveCardVariant(card);
     let layout = await ArLayout.findOne({ clientId, cardNumber });
+    const fallback = (await ArLayout.findOne({ key: 'global' })) || new ArLayout({ key: 'global' });
+    const magicCard = resolved.magicEnabled
+      ? await MagicBusinessCard.findOne({ clientId, cardNumber }).select('qrX qrY')
+      : null;
+    const qr = magicCard
+      ? { x: magicCard.qrX, y: magicCard.qrY, z: fallback.qr?.z ?? 0 }
+      : { ...resolved.defaultQrPosition, z: fallback.qr?.z ?? 0 };
     if (!layout) {
-      const fallback = (await ArLayout.findOne({ key: 'global' })) || new ArLayout({ key: 'global' });
       layout = new ArLayout({
         clientId,
         cardNumber,
-        qr: fallback.qr,
+        qr,
         video: fallback.video,
         contact: fallback.contact,
         portfolio: fallback.portfolio,
@@ -2181,6 +2196,10 @@ router.get('/ar-layout', requireAuth, async (req, res) => {
         videoScaleY: fallback.videoScaleY,
         customElements: fallback.customElements,
       });
+    } else {
+      // QR is a physical print position, not a client-editable layout
+      // preference. Correct legacy layouts when the selected card changes.
+      layout = { ...layout.toObject(), qr };
     }
     res.json(layout);
   } catch (err) {

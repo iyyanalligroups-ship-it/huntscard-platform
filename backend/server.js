@@ -13,6 +13,7 @@ const chatRoutes = require('./routes/chat');
 const publicRoutes = require('./routes/public');
 const adminAuthRoutes = require('./routes/adminAuth');
 const adminRoutes = require('./routes/admin');
+const couponRoutes = require('./routes/coupon'); // HuntsWorld free-card coupon claim -- separate feature
 
 async function main() {
   await connectDB();
@@ -49,6 +50,7 @@ async function main() {
   app.use('/api/profile', appointmentsRoutes);
   app.use('/api/profile', notificationsRoutes);
   app.use('/api/profile', chatRoutes);
+  app.use('/api/profile/coupon', couponRoutes);
   app.use('/api/public', publicRoutes);
   app.use('/api/admin/auth', adminAuthRoutes);
   app.use('/api/admin', adminRoutes);

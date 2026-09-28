@@ -93,6 +93,13 @@ const CardRequestSchema = new mongoose.Schema(
       ],
       default: [],
     },
+    // Set only when this request was claimed for free via a HuntsWorld
+    // coupon (see routes/coupon.js) instead of paid through Razorpay --
+    // paymentStatus is still 'paid' (amountPaid: 0) so it displays/behaves
+    // like any other paid request everywhere else; these two fields are
+    // purely so admin can see WHY it's free.
+    couponCode: { type: String, trim: true, default: null },
+    couponSource: { type: String, trim: true, default: null }, // e.g. 'huntsworld'
   },
   { timestamps: true }
 );

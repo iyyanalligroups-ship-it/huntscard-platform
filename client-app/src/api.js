@@ -300,6 +300,12 @@ export const api = {
       body: { requestedPlan, quantity, variants, deliveryAddressId },
     }),
   confirmUpgradePayment: (payload) => request('/api/profile/upgrade-confirm', { method: 'POST', body: payload }),
+
+  // HuntsWorld free-card coupon claim -- separate from the Razorpay
+  // upgrade flow above. preview() is read-only (doesn't consume the code);
+  // claim() actually redeems it and creates the request.
+  previewCoupon: (code) => request('/api/profile/coupon/preview', { method: 'POST', body: { code } }),
+  claimCoupon: (payload) => request('/api/profile/coupon/claim', { method: 'POST', body: payload }),
   downloadCardInvoice: async (requestId, orderNumber) => {
     const token = getToken();
     const res = await fetch(`${API_URL}/api/profile/requests/${requestId}/invoice`, {

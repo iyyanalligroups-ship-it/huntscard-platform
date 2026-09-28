@@ -17,6 +17,7 @@ import {
   ScanLine,
   ShoppingBag,
   Sparkles,
+  Ticket,
   Truck,
   Volume2,
   X,
@@ -314,6 +315,19 @@ export default function Shop() {
   // anywhere near this page's own content.
   const [homeTheme, setHomeTheme] = useState('default');
 
+  // HuntsWorld free-card coupon -- a separate claim path alongside the
+  // normal paid checkout above, not a variant of it. couponMode holds the
+  // plan a verified code unlocks; while set, the plan switcher is hidden
+  // (the coupon dictates the plan) and the variant picker/submit below
+  // behave as a single-card, zero-payment claim instead of a purchase.
+  const [couponInput, setCouponInput] = useState('');
+  const [couponSectionOpen, setCouponSectionOpen] = useState(false);
+  const [couponChecking, setCouponChecking] = useState(false);
+  const [couponError, setCouponError] = useState('');
+  const [couponMode, setCouponMode] = useState(null); // { code, plan } once a code is verified
+  const [couponClaiming, setCouponClaiming] = useState(false);
+  const [couponClaimSuccess, setCouponClaimSuccess] = useState('');
+
   useEffect(() => {
     api
       .getSiteSettings()
@@ -368,6 +382,20 @@ export default function Shop() {
     if (plans.some((p) => p.key === planKey)) selectPlan(planKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plans]);
+
+  // Deep-link from a HuntsWorld coupon email (/dashboard/upgrade?plan=
+  // <key>&coupon=<code>) -- the ?plan= param above already pre-selects the
+  // plan; this pre-fills the code and auto-checks it, so clicking the
+  // email button lands straight on the claim panel instead of an empty
+  // Shop page the merchant has to know to go find the coupon box on.
+  useEffect(() => {
+    const code = searchParams.get('coupon');
+    if (!code || !loggedIn || couponMode) return;
+    setCouponSectionOpen(true);
+    setCouponInput(code);
+    handleCheckCoupon(code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loggedIn, searchParams]);
 
   // A client can own cards across several DIFFERENT plans at once (see
   // routes/profile.js's upgrade-confirm) -- so "do they have a card at
@@ -469,12 +497,90 @@ export default function Shop() {
   const checkoutTotal = cardSubtotal + deliveryFee + gstAmount;
 
   function adjustVariantQuantity(variantId, delta) {
+    // Coupon claims are locked to exactly one card of one style -- picking
+    // a different variant replaces the previous choice rather than adding
+    // to it, unlike the normal multi-style order above.
+    if (couponMode) {
+      setVariantQuantities(delta > 0 ? { [variantId]: 1 } : {});
+      return;
+    }
     setVariantQuantities((prev) => {
       const current = prev[variantId] || 0;
       const others = variantTotalQuantity - current;
       const next = Math.max(0, Math.min(MAX_QUANTITY - others, current + delta));
       return { ...prev, [variantId]: next };
     });
+  }
+
+  async function handleCheckCoupon(codeOverride) {
+    const code = (codeOverride ?? couponInput).trim();
+    if (!code) {
+      setCouponError('Enter a coupon code.');
+      return;
+    }
+    if (!loggedIn) {
+      navigate('/register');
+      return;
+    }
+    setCouponChecking(true);
+    setCouponError('');
+    try {
+      const result = await api.previewCoupon(code);
+      selectPlan(result.plan.key);
+      setCouponMode({ code, plan: result.plan });
+    } catch (err) {
+      setCouponError(err.message);
+    } finally {
+      setCouponChecking(false);
+    }
+  }
+
+  function handleRemoveCoupon() {
+    setCouponMode(null);
+    setCouponInput('');
+    setCouponError('');
+    setVariantQuantities({});
+    setDesignFrontUrl('');
+    setDesignBackUrl('');
+  }
+
+  async function handleClaimCoupon(e) {
+    e.preventDefault();
+    if (!couponMode) return;
+    if (!variantOk) {
+      setError('Choose a card style before claiming.');
+      return;
+    }
+    if (!designOk) {
+      setError('Upload both a front and back design before claiming.');
+      return;
+    }
+    if (!selectedAddress) {
+      setError('Choose or add a delivery address before claiming.');
+      return;
+    }
+
+    setError('');
+    setCouponClaiming(true);
+    try {
+      const chosenVariantId = hasVariants ? variantEntries[0]?.variantId : undefined;
+      await api.claimCoupon({
+        code: couponMode.code,
+        variantId: chosenVariantId,
+        deliveryAddressId: selectedAddress._id,
+        designFrontUrl: designFrontUrl || undefined,
+        designBackUrl: designBackUrl || undefined,
+      });
+      setCouponClaimSuccess(`Your free ${couponMode.plan.name} card has been claimed!`);
+      const [fresh, reqs] = await Promise.all([api.getProfile(), api.listMyRequests()]);
+      setMyProfile(fresh);
+      setRequests(reqs.filter((r) => r.type === 'upgrade'));
+      handleRemoveCoupon();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCouponClaiming(false);
+    }
   }
 
   function updateAddressField(field, value) {
@@ -656,11 +762,56 @@ export default function Shop() {
         </p>
       )}
 
+      {couponClaimSuccess && !error && (
+        <p className="section-subheading shop-success-message" style={{ color: 'var(--holo-cyan)', fontWeight: 600 }}>
+          <BadgeCheck size={17} aria-hidden="true" />
+          {couponClaimSuccess}
+        </p>
+      )}
+
+      {/* HuntsWorld coupon entry -- a separate claim path from browsing/
+          buying a plan below. Collapsed by default so it doesn't compete
+          with the main "pick a plan" flow for most visitors; the email
+          deep-link (?coupon=) opens it pre-filled automatically. */}
+      {!couponMode ? (
+        <div className="card" style={{ marginBottom: 16, padding: 14 }}>
+          {!couponSectionOpen ? (
+            <button type="button" className="secondary" style={{ width: 'auto' }} onClick={() => setCouponSectionOpen(true)}>
+              Have a coupon code?
+            </button>
+          ) : (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                value={couponInput}
+                onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                placeholder="Enter your HuntsWorld coupon code"
+                style={{ flex: '1 1 220px', margin: 0 }}
+                disabled={couponChecking}
+              />
+              <button type="button" style={{ width: 'auto' }} disabled={couponChecking} onClick={() => handleCheckCoupon()}>
+                {couponChecking ? <LoaderCircle className="shop-icon-spin" size={15} aria-hidden="true" /> : 'Apply'}
+              </button>
+            </div>
+          )}
+          {couponError && <p className="error-banner" style={{ marginTop: 10 }}>{couponError}</p>}
+        </div>
+      ) : (
+        <div className="card" style={{ marginBottom: 16, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <span>
+            🎟 Coupon <strong style={{ fontFamily: 'var(--font-mono, monospace)' }}>{couponMode.code}</strong> applied —
+            claiming your <strong>{couponMode.plan.name}</strong>, free.
+          </span>
+          <button type="button" className="secondary" style={{ width: 'auto' }} onClick={handleRemoveCoupon}>
+            Remove coupon
+          </button>
+        </div>
+      )}
+
       {visiblePlans.length === 0 ? (
         <p className="subtitle" style={{ textAlign: 'center' }}>No other plans available right now.</p>
       ) : (
         <>
-          {visiblePlans.length > 1 && (
+          {!couponMode && visiblePlans.length > 1 && (
             <div className="plan-switcher">
               {visiblePlans.map((p) => (
                 <button
@@ -727,7 +878,7 @@ export default function Shop() {
                 </div>
               </div>
             )}
-            <form onSubmit={handleCheckout}>
+            <form onSubmit={couponMode ? handleClaimCoupon : handleCheckout}>
               {hasVariants && (
                 <div className="field">
                   <label>
@@ -781,7 +932,7 @@ export default function Shop() {
                               type="button"
                               className="qty-btn"
                               onClick={() => adjustVariantQuantity(v._id, 1)}
-                              disabled={variantTotalQuantity >= MAX_QUANTITY}
+                              disabled={couponMode ? active : variantTotalQuantity >= MAX_QUANTITY}
                               aria-label={`More ${v.name}`}
                             >
                               <Plus size={14} aria-hidden="true" />
@@ -793,7 +944,11 @@ export default function Shop() {
                   </div>
                   {variantTotalQuantity === 0 ? (
                     <p className="hint" style={{ marginBottom: 0 }}>
-                      Pick at least one style and quantity above.
+                      {couponMode ? 'Pick a card style above.' : 'Pick at least one style and quantity above.'}
+                    </p>
+                  ) : couponMode ? (
+                    <p className="hint" style={{ marginBottom: 0, color: 'var(--holo-cyan)', fontWeight: 600 }}>
+                      Free with your coupon
                     </p>
                   ) : (
                     selectedPlan.chargeAmount && (
@@ -838,7 +993,7 @@ export default function Shop() {
                   <p className="hint">We'll print this artwork on your card exactly as uploaded.</p>
                 </>
               )}
-              {selectedPlan.chargeAmount && !hasVariants && (
+              {selectedPlan.chargeAmount && !hasVariants && !couponMode && (
                 <div className="field">
                   <label htmlFor="cardQuantity">
                     How many cards? <span className="hint" style={{ fontWeight: 400 }}>(extra physical copies of the same profile)</span>
@@ -1005,28 +1160,49 @@ export default function Shop() {
                 </section>
               )}
 
-              {selectedPlan.chargeAmount && loggedIn && variantOk && (
+              {couponMode ? (
                 <div className="card-checkout-summary">
-                  <div><span>Card subtotal</span><strong>₹{cardSubtotal}</strong></div>
-                  <div><span>Delivery</span><strong>₹{deliveryFee}</strong></div>
-                  <div><span>GST ({gstPercent}%)</span><strong>₹{gstAmount}</strong></div>
-                  <div className="total"><span>Total</span><strong>₹{checkoutTotal}</strong></div>
+                  <div><span>Card</span><strong style={{ textDecoration: selectedPlan.chargeAmount ? 'line-through' : 'none', opacity: selectedPlan.chargeAmount ? 0.6 : 1 }}>₹{selectedPlan.chargeAmount || 0}</strong></div>
+                  <div className="total"><span>Total</span><strong style={{ color: 'var(--holo-cyan)' }}>FREE — coupon applied</strong></div>
                 </div>
+              ) : (
+                selectedPlan.chargeAmount && loggedIn && variantOk && (
+                  <div className="card-checkout-summary">
+                    <div><span>Card subtotal</span><strong>₹{cardSubtotal}</strong></div>
+                    <div><span>Delivery</span><strong>₹{deliveryFee}</strong></div>
+                    <div><span>GST ({gstPercent}%)</span><strong>₹{gstAmount}</strong></div>
+                    <div className="total"><span>Total</span><strong>₹{checkoutTotal}</strong></div>
+                  </div>
+                )
               )}
 
               <button
                 type="submit"
                 className="shop-checkout-button"
-                disabled={submitting || !selectedPlan.chargeAmount || !variantOk || !designOk || (loggedIn && !selectedAddress)}
+                disabled={
+                  couponMode
+                    ? couponClaiming || !variantOk || !designOk || !selectedAddress
+                    : submitting || !selectedPlan.chargeAmount || !variantOk || !designOk || (loggedIn && !selectedAddress)
+                }
               >
-                {submitting ? (
+                {(couponMode ? couponClaiming : submitting) ? (
                   <LoaderCircle className="shop-icon-spin" size={17} aria-hidden="true" />
                 ) : !loggedIn ? (
                   <LogIn size={17} aria-hidden="true" />
                 ) : (
                   <CreditCard size={17} aria-hidden="true" />
                 )}
-                <span>{submitting
+                <span>{couponMode
+                  ? (couponClaiming
+                      ? 'Claiming…'
+                      : !variantOk
+                      ? 'Choose a card style'
+                      : !designOk
+                      ? 'Upload front & back design'
+                      : !selectedAddress
+                      ? 'Choose delivery address'
+                      : 'Claim free card')
+                  : submitting
                   ? 'Waiting for payment…'
                   : !loggedIn
                   ? 'Log in to buy'
@@ -1041,7 +1217,7 @@ export default function Shop() {
                   : `Pay ₹${loggedIn ? checkoutTotal : cardSubtotal}`}</span>
               </button>
             </form>
-            {!selectedPlan.chargeAmount && (
+            {!couponMode && !selectedPlan.chargeAmount && (
               <p className="hint" style={{ marginTop: 10 }}>
                 This plan needs manual setup — <Link to="/contact" className="link-out">contact us</Link> to order it.
               </p>
@@ -1088,6 +1264,11 @@ export default function Shop() {
                     {r.quantity > 1 && <span className="hint" style={{ marginLeft: 4 }}>× {r.quantity}</span>}
                     {r.paymentStatus === 'paid' && <span style={{ color: 'var(--holo-cyan)' }}> · Paid</span>}
                     {r.orderNumber && <small className="card-order-number">{r.orderNumber}</small>}
+                    {r.couponCode && (
+                      <small className="card-coupon-tag" title={`Claimed free via ${r.couponSource || 'coupon'} code ${r.couponCode}`}>
+                        <Ticket size={10} aria-hidden="true" />{r.couponSource === 'huntsworld' ? 'HuntsWorld' : r.couponSource || 'Coupon'}
+                      </small>
+                    )}
                   </span>
                   <span className="card-request-actions">
                     <span className="request-status">{r.status}</span>
@@ -1129,6 +1310,12 @@ export default function Shop() {
                           <div><span>Plan price</span><strong>{requestPlan?.price || (requestPlan?.chargeAmount != null ? `₹${requestPlan.chargeAmount}` : 'Not set')}</strong></div>
                           <div><span>Order number</span><strong>{r.orderNumber || 'Not available'}</strong></div>
                           <div><span>Status</span><strong>{r.status}</strong></div>
+                          {r.couponCode && (
+                            <div>
+                              <span>Claimed via</span>
+                              <strong>{r.couponSource === 'huntsworld' ? 'HuntsWorld' : r.couponSource || 'Coupon'} · {r.couponCode}</strong>
+                            </div>
+                          )}
                         </div>
                         {activeFeatures.length > 0 && (
                           <div className="purchase-detail-features">
