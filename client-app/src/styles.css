@@ -5617,7 +5617,7 @@ html[data-color-mode="dark"] .dash-topbar {
 .client-dashboard-active .geo-select-option:hover,
 .client-dashboard-active .geo-select-option.selected { color: var(--dash-accent, #0d9394); background: rgba(13, 147, 148, 0.08); }
 
-.dash-route-view button:not(.secondary):not(.auth-modal-close):not(.pv-tab-btn):not(.qty-btn):not(.checkout-modal-media-nav):not(.plan-hero-thumb),
+.dash-route-view button:not(.secondary):not(.auth-modal-close):not(.pv-tab-btn):not(.qty-btn):not(.checkout-modal-media-nav):not(.plan-hero-thumb):not(.history-tab):not(.theme-select-trigger),
 .dash-route-view .dash-edit-profile-btn {
   color: #ffffff;
   background: linear-gradient(135deg, var(--dash-accent), var(--dash-accent-2));
@@ -7238,3 +7238,13 @@ body.client-dashboard-active .theme-select-panel button.selected {
   .auth-register-form { grid-template-columns: 1fr; gap: 12px; }
   .auth-register-form > button[type="submit"] { grid-column: 1; }
 }
+
+/* Shop purchase-history + Track Orders tab switcher, and the order dropdown */
+.history-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 14px; }
+.history-tab { display: inline-flex; align-items: center; gap: 6px; width: auto; padding: 8px 16px; border: 1px solid var(--panel-border); border-radius: 999px; background: var(--panel-raised); color: var(--text-dim); font-size: 13px; font-weight: 700; cursor: pointer; }
+.history-tab.active { background: var(--holo-cyan); border-color: var(--holo-cyan); color: #fff; }
+/* Beat the global/dashboard button skins so only the selected tab is filled */
+.history-tabs .history-tab { background: transparent; border: 1px solid var(--panel-border); color: var(--text-dim); box-shadow: none; }
+.history-tabs .history-tab.active { background: var(--holo-cyan); border-color: var(--holo-cyan); color: #fff; }
+.history-tabs .history-tab.active { box-shadow: 0 4px 12px var(--dash-accent-shadow, rgba(13, 147, 148, 0.25)); }
+.history-tabs .history-tab:not(.active):hover { color: var(--text); background: var(--panel-raised); filter: none; }

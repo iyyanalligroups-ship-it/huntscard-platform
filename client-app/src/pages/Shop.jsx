@@ -26,6 +26,7 @@ import {
 import { api, isLoggedIn } from '../api.js';
 import { loadRazorpayScript } from '../razorpay.js';
 import GeoSelect from '../components/GeoSelect.jsx';
+import MyMagicPosterOrders from './MyMagicPosterOrders.jsx';
 
 const PLAN_DISPLAY_ORDER = ['premium', 'elite', 'nova', 'custom', 'apex'];
 const COUNTRY_ISO = 'IN';
@@ -305,6 +306,7 @@ export default function Shop() {
   const [savingAddress, setSavingAddress] = useState(false);
   const [checkoutPricing, setCheckoutPricing] = useState(null);
   const [expandedRequestId, setExpandedRequestId] = useState(null);
+  const [historyTab, setHistoryTab] = useState(searchParams.get('history') === 'poster' ? 'poster' : 'card');
   // Same admin-toggled setting PublicLayout.jsx's header/footer follow --
   // fetched independently here (rather than threaded down as a prop)
   // because this page is mounted two different ways: standalone on the
@@ -1230,10 +1232,28 @@ export default function Shop() {
         </>
       )}
 
-      {loggedIn && requests.length > 0 && (
+      {loggedIn && (
         <div className="checkout-panel" style={{ marginTop: 32 }}>
           <p className="hint" style={{ marginBottom: 8 }}>Your purchase history</p>
-          {requests.map((r) => {
+          <div className="history-tabs" role="tablist">
+            {[['card', 'Card history'], ['poster', 'Magic Poster history']].map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={historyTab === key}
+                className={`history-tab ${historyTab === key ? 'active' : ''}`}
+                onClick={() => setHistoryTab(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {historyTab === 'poster' ? (
+            <MyMagicPosterOrders embedded />
+          ) : requests.length === 0 ? (
+            <p className="subtitle" style={{ margin: '12px 0 0' }}>You haven't purchased a card yet.</p>
+          ) : requests.map((r) => {
             const requestPlan = visiblePlans.find((p) => p.key === r.requestedPlan);
             const planName = requestPlan?.name || r.requestedPlan;
             const expanded = expandedRequestId === r._id;

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CreditCard, Image, PackageSearch, RotateCcw, Search, Truck } from 'lucide-react';
+import { CreditCard, Image, PackageSearch, Truck } from 'lucide-react';
 import { api } from '../api.js';
+import ThemedSelect from '../components/ThemedSelect.jsx';
 
 const POSTER_STATUS_ORDER = ['ordered', 'shipping', 'delivery', 'completed'];
 
@@ -108,7 +109,7 @@ function TrackingResult({ type, order, profile }) {
       <TrackingSteps steps={isCard ? cardSteps(order, profile) : posterSteps(order)} />
       <footer className="unified-track-result-foot">
         <span><Truck size={13} />{order.trackingId ? `Shipment ${order.trackingId}` : 'Shipment is being prepared'}</span>
-        <Link to={isCard ? '/dashboard/upgrade' : '/dashboard/magic-poster-orders'} className="link-out">
+        <Link to={isCard ? '/dashboard/upgrade' : '/dashboard/upgrade?history=poster'} className="link-out">
           View purchase history
         </Link>
       </footer>
@@ -116,56 +117,44 @@ function TrackingResult({ type, order, profile }) {
   );
 }
 
+function cardLabel(order) {
+  const names = (order.invoiceItems || []).map((item) => item.name).filter(Boolean).join(', ');
+  return `${names || order.requestedPlan || 'Physical card'} — ${order.orderNumber || 'No order number'}`;
+}
+
+function posterLabel(order) {
+  const names = (order.items || []).map((item) => item.name || 'Poster').join(', ') || 'Magic Poster';
+  return `${names} — ${order.orderNumber || 'No order number'}`;
+}
+
 export default function Track() {
   const [profile, setProfile] = useState(null);
   const [cardOrders, setCardOrders] = useState([]);
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState(null);
+  const [posterOrders, setPosterOrders] = useState([]);
+  const [tab, setTab] = useState('card');
+  const [selectedId, setSelectedId] = useState({ card: '', poster: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
-    Promise.all([api.getProfile(), api.listMyRequests()])
-      .then(([profileData, requestData]) => {
+    Promise.all([api.getProfile(), api.listMyRequests(), api.listMyMagicPosterOrders({ limit: 50 })])
+      .then(([profileData, requestData, posterData]) => {
+        const cards = requestData.filter((order) => order.type === 'upgrade' && order.paymentStatus === 'paid' && order.status !== 'rejected');
+        const posters = posterData.orders || [];
         setProfile(profileData);
-        setCardOrders(requestData.filter((order) => order.type === 'upgrade' && order.paymentStatus === 'paid' && order.status !== 'rejected'));
+        setCardOrders(cards);
+        setPosterOrders(posters);
+        setSelectedId({ card: cards[0]?._id || '', poster: posters[0]?._id || '' });
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleSearch(event) {
-    event.preventDefault();
-    const cleanQuery = query.trim().replace(/^#/, '');
-    if (!cleanQuery) return;
-
-    setSearching(true);
-    setError('');
-    try {
-      const needle = cleanQuery.toLowerCase();
-      const matchingCards = cardOrders.filter((order) =>
-        [order.orderNumber, order.trackingId].some((value) => String(value || '').toLowerCase().includes(needle)),
-      );
-      const posterResponse = await api.listMyMagicPosterOrders({ q: cleanQuery });
-      setResults({ cards: matchingCards, posters: posterResponse.orders || [] });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSearching(false);
-    }
-  }
-
-  function clearSearch() {
-    setQuery('');
-    setResults(null);
-    setError('');
-  }
-
   if (loading) return <p className="subtitle">Loading…</p>;
 
-  const latestCardOrder = cardOrders[0];
-  const resultCount = results ? results.cards.length + results.posters.length : 0;
+  const isCard = tab === 'card';
+  const orders = isCard ? cardOrders : posterOrders;
+  const selected = orders.find((order) => order._id === selectedId[tab]) || orders[0];
 
   return (
     <div className="unified-track-page">
@@ -174,59 +163,53 @@ export default function Track() {
         <div>
           <p>All purchases</p>
           <h1>Track an order</h1>
-          <div>Use one search for physical cards and Magic Poster shipments.</div>
+          <div>Pick a card or Magic Poster order to see its shipment progress.</div>
         </div>
       </div>
 
-      <form className="unified-track-search" onSubmit={handleSearch}>
-        <label htmlFor="unifiedTrackingSearch">Order number or tracking ID</label>
-        <div>
-          <span><Search size={18} /></span>
-          <input
-            id="unifiedTrackingSearch"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Example: HT26021 or MPTSP8XBT8Q0"
-          />
-          <button type="submit" disabled={searching || !query.trim()}>{searching ? 'Searching…' : 'Track order'}</button>
-          {results && <button type="button" className="secondary" onClick={clearSearch}><RotateCcw size={14} />Clear</button>}
-        </div>
-        <small>Searches your card purchases and Magic Poster purchases together.</small>
-      </form>
+      <div className="history-tabs" role="tablist">
+        {[['card', 'Card track', CreditCard], ['poster', 'Magic Poster track', Image]].map(([key, label, Icon]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            className={`history-tab ${tab === key ? 'active' : ''}`}
+            onClick={() => setTab(key)}
+          >
+            <Icon size={14} aria-hidden="true" /> {label}
+          </button>
+        ))}
+      </div>
 
       {error && <div className="error-banner">{error}</div>}
 
-      {results ? (
-        <section className="unified-track-results">
-          <div className="unified-track-results-title">
-            <div><h2>Tracking results</h2><p>{resultCount} {resultCount === 1 ? 'order' : 'orders'} found</p></div>
-          </div>
-          {resultCount === 0 ? (
-            <div className="unified-track-empty">
-              <PackageSearch size={28} />
-              <h3>No matching shipment</h3>
-              <p>Check the order number or tracking ID and try again.</p>
-            </div>
-          ) : (
-            <div className="unified-track-result-list">
-              {results.cards.map((order) => <TrackingResult key={`card-${order._id}`} type="card" order={order} profile={profile} />)}
-              {results.posters.map((order) => <TrackingResult key={`poster-${order._id}`} type="poster" order={order} profile={profile} />)}
-            </div>
-          )}
-        </section>
-      ) : latestCardOrder ? (
-        <section className="unified-track-latest">
-          <div className="unified-track-results-title">
-            <div><h2>Latest card shipment</h2><p>Search above to track any other card or Magic Poster order.</p></div>
-          </div>
-          <TrackingResult type="card" order={latestCardOrder} profile={profile} />
-        </section>
-      ) : (
+      {orders.length === 0 ? (
         <div className="unified-track-empty">
           <PackageSearch size={28} />
-          <h3>No card purchases yet</h3>
-          <p>You can still search for a Magic Poster order above, or <Link to="/dashboard/upgrade" className="link-out">browse cards</Link>.</p>
+          <h3>{isCard ? 'No card purchases yet' : 'No Magic Poster orders yet'}</h3>
+          <p>
+            {isCard
+              ? <>You haven't bought a card yet. <Link to="/dashboard/upgrade" className="link-out">Browse cards</Link>.</>
+              : <>You haven't ordered a Magic Poster yet. <Link to="/magic-art" className="link-out">Browse Magic Posters</Link>.</>}
+          </p>
         </div>
+      ) : (
+        <>
+          <div className="unified-track-search">
+            <label htmlFor="trackOrderSelect">{isCard ? 'Select a card order' : 'Select a Magic Poster order'}</label>
+            <ThemedSelect
+              id="trackOrderSelect"
+              className="track-order-select"
+              value={selected._id}
+              options={orders.map((order) => ({ value: order._id, label: isCard ? cardLabel(order) : posterLabel(order) }))}
+              onChange={(value) => setSelectedId((prev) => ({ ...prev, [tab]: value }))}
+            />
+          </div>
+          <section className="unified-track-latest">
+            <TrackingResult type={tab} order={selected} profile={profile} />
+          </section>
+        </>
       )}
     </div>
   );

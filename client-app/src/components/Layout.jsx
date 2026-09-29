@@ -100,7 +100,6 @@ const NAV_GROUPS = [
     items: [
       { to: '/dashboard/upgrade', label: 'Shop', icon: 'shop' },
       { to: '/dashboard/track', label: 'Track Orders', icon: 'track' },
-      { to: '/dashboard/magic-poster-orders', label: 'Magic Poster Orders', icon: 'posterOrders' },
     ],
   },
   {

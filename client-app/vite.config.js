@@ -74,7 +74,7 @@ export default defineConfig({
     // in over USB got ERR_EMPTY_RESPONSE with nothing listening there.
     // Binding IPv4 loopback explicitly (not `true`/0.0.0.0 -- no need to
     // expose this beyond the host) fixes phone-over-adb-reverse testing.
-    host: '127.0.0.1',
+    host: 'localhost',
     // Uploaded media (photos/banners/AR videos) get an absolute URL built
     // from PUBLIC_BASE_URL, which points at this dev server's own origin
     // (matching how one shared domain works in production) -- but the

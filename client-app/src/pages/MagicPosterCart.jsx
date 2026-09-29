@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { api, isLoggedIn } from '../api.js';
 import { loadRazorpayScript } from '../razorpay.js';
 import { useCart } from '../cart.jsx';
@@ -50,6 +50,15 @@ export default function MagicPosterCart() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [placed, setPlaced] = useState(null); // { amount } once an order is successfully paid
+  const navigate = useNavigate();
+
+  // After a successful payment, show the confirmation for a moment then
+  // land on the Magic Poster tab of the shop's purchase history.
+  useEffect(() => {
+    if (!placed) return undefined;
+    const timer = setTimeout(() => navigate('/dashboard/upgrade?history=poster'), 2500);
+    return () => clearTimeout(timer);
+  }, [placed, navigate]);
 
   useEffect(() => {
     if (!loggedIn) openLogin('/magic-poster-cart');
@@ -255,6 +264,8 @@ export default function MagicPosterCart() {
           Thanks! Your payment of ₹{placed.amount} went through and your order is now <b>Pending</b>. We'll get it
           on its way soon.
         </p>
+        <p className="subtitle">Taking you to your order history…</p>
+        <button type="button" onClick={() => navigate('/dashboard/upgrade?history=poster')}>View order history</button>
       </div>
     );
   }
