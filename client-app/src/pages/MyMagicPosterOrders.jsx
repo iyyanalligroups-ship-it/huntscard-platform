@@ -68,13 +68,6 @@ export default function MyMagicPosterOrders({ embedded = false }) {
         </>
       )}
 
-      {embedded && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '0 0 8px' }}>
-          <span className="hint">Your Magic Poster orders</span>
-          <Link to="/magic-art" className="link-out">Buy a Magic Poster →</Link>
-        </div>
-      )}
-
       {error && <div className="error-banner">{error}</div>}
 
       {loading ? (

@@ -26,7 +26,7 @@ const MAGIC_CAMERA_QR_URL = `${API_URL}/api/public/qr/magic-camera`;
 // Magic Camera -- modeled on the real Artivive product's own "scan this"
 // popup (see the reference screenshot this was built from), except
 // scanning this QR opens straight in the browser, no app install.
-export default function MagicArt() {
+export default function MagicArt({ embedded = false }) {
   const cart = useCart();
   const [pieces, setPieces] = useState(null);
   const [error, setError] = useState('');
@@ -58,7 +58,7 @@ export default function MagicArt() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <h1 className="section-heading" style={{ marginTop: 0 }}>Magic Poster</h1>
+          {!embedded && <h1 className="section-heading" style={{ marginTop: 0 }}>Magic Poster</h1>}
           <p className="section-subheading">
             Open Magic Camera -- no login needed -- and point it at one of the images below to see it come alive.
           </p>

@@ -7248,3 +7248,7 @@ body.client-dashboard-active .theme-select-panel button.selected {
 .history-tabs .history-tab.active { background: var(--holo-cyan); border-color: var(--holo-cyan); color: #fff; }
 .history-tabs .history-tab.active { box-shadow: 0 4px 12px var(--dash-accent-shadow, rgba(13, 147, 148, 0.25)); }
 .history-tabs .history-tab:not(.active):hover { color: var(--text); background: var(--panel-raised); filter: none; }
+
+/* Shop page: top-level Card Shop / Magic Poster Shop tabs */
+.shop-main-tabs { margin: 0 0 20px; }
+.shop-main-tabs .history-tab svg { flex: none; }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   BadgeCheck,
+  Image as ImageIcon,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -27,6 +28,7 @@ import { api, isLoggedIn } from '../api.js';
 import { loadRazorpayScript } from '../razorpay.js';
 import GeoSelect from '../components/GeoSelect.jsx';
 import MyMagicPosterOrders from './MyMagicPosterOrders.jsx';
+import MagicArt from './MagicArt.jsx';
 
 const PLAN_DISPLAY_ORDER = ['premium', 'elite', 'nova', 'custom', 'apex'];
 const COUNTRY_ISO = 'IN';
@@ -306,7 +308,10 @@ export default function Shop() {
   const [savingAddress, setSavingAddress] = useState(false);
   const [checkoutPricing, setCheckoutPricing] = useState(null);
   const [expandedRequestId, setExpandedRequestId] = useState(null);
-  const [historyTab, setHistoryTab] = useState(searchParams.get('history') === 'poster' ? 'poster' : 'card');
+  // Card Shop / Magic Poster Shop -- picks both the shop above and the history below it.
+  const [shopTab, setShopTab] = useState(
+    searchParams.get('tab') === 'poster' || searchParams.get('history') === 'poster' ? 'poster' : 'card'
+  );
   // Same admin-toggled setting PublicLayout.jsx's header/footer follow --
   // fetched independently here (rather than threaded down as a prop)
   // because this page is mounted two different ways: standalone on the
@@ -740,6 +745,26 @@ export default function Shop() {
 
   return (
     <div className={homeTheme === 'orange' ? 'theme-orange' : undefined}>
+      <div className="history-tabs shop-main-tabs" role="tablist">
+        {[
+          ['card', 'Card Shop', CreditCard],
+          ['poster', 'Magic Poster Shop', ImageIcon],
+        ].map(([key, label, Icon]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={shopTab === key}
+            className={`history-tab ${shopTab === key ? 'active' : ''}`}
+            onClick={() => setShopTab(key)}
+          >
+            <Icon size={15} aria-hidden="true" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {shopTab === 'card' && (
+        <>
       <h1 className="section-heading shop-page-heading" style={{ marginTop: 0 }}>
         <span className="shop-page-heading-icon" aria-hidden="true">
           <ShoppingBag size={22} strokeWidth={1.9} />
@@ -1232,24 +1257,17 @@ export default function Shop() {
         </>
       )}
 
+        </>
+      )}
+
+      {shopTab === 'poster' && <MagicArt embedded />}
+
       {loggedIn && (
         <div className="checkout-panel" style={{ marginTop: 32 }}>
-          <p className="hint" style={{ marginBottom: 8 }}>Your purchase history</p>
-          <div className="history-tabs" role="tablist">
-            {[['card', 'Card history'], ['poster', 'Magic Poster history']].map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={historyTab === key}
-                className={`history-tab ${historyTab === key ? 'active' : ''}`}
-                onClick={() => setHistoryTab(key)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {historyTab === 'poster' ? (
+          <p className="hint" style={{ marginBottom: 8 }}>
+            {shopTab === 'poster' ? 'Your Magic Poster purchase history' : 'Your card purchase history'}
+          </p>
+          {shopTab === 'poster' ? (
             <MyMagicPosterOrders embedded />
           ) : requests.length === 0 ? (
             <p className="subtitle" style={{ margin: '12px 0 0' }}>You haven't purchased a card yet.</p>
