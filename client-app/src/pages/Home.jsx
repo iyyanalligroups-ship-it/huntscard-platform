@@ -279,7 +279,7 @@ export default function Home() {
 
     const ctx = gsap.context(() => {
       const heroText = gsap.utils.toArray('.hero-col-text > *');
-      const heroVisual = heroRef.current?.querySelector('.hero-visual');
+      const heroVisual = root.querySelector('.hero-visual');
       const rings = heroRef.current?.querySelectorAll('.bg-ring');
 
       gsap.set(heroText, { opacity: 0, y: 30 });
@@ -369,64 +369,71 @@ export default function Home() {
             battery, no signal drop. Update your details anytime; every card in the world reflects it
             instantly, without a reprint.
           </p>
-          <div className="hero-cta-row" style={{ justifyContent: 'flex-start' }}>
-            <Link to="/shop" className="btn-primary" style={{ background: 'var(--holo-gradient)', color: '#06120f' }}>
+          <div className="hero-cta-row">
+            <Link to="/shop" className="btn-primary">
               Shop Cards
             </Link>
-            <Link to="/contact" className="btn-secondary" style={{ background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--panel-border)' }}>
+            <Link to="/contact" className="btn-secondary">
               Contact Us
             </Link>
           </div>
-          <div className="hero-spec-row" style={{ justifyContent: 'flex-start' }}>
-            <div><b><CountUp target={13.56} suffix=" MHz" /></b><span>NFC frequency</span></div>
-            <div><b><CountUp target={888} suffix=" bytes" /></b><span>NDEF capacity</span></div>
-            <div><b>Zero</b><span>battery required</span></div>
-          </div>
         </div>
 
-        {/* Signature visual: the tap card itself, mid-tap -- a real
-            holographic-foil surface that shifts color with the cursor
-            (same principle as tilting a real security hologram), with
-            energy motes orbiting it and induction rings representing
-            the NFC handshake. Shows whoever's actually signed in. */}
-        <div className="hero-visual" ref={stageRef} aria-hidden="true">
-          <div className="bg-ring bg-ring-a" />
-          <div className="bg-ring bg-ring-b" />
-          <div className="tap-ring r1" />
-          <div className="tap-ring r2" />
-          <div className="tap-ring r3" />
-          <div className="orbit-particle-layer" ref={orbitContainerRef} />
-          <div className="holo-card" ref={cardRef}>
-            <div className="holo-layer" />
-            <div className="holo-grating" />
-            <div className="holo-specular" />
-            <div className="holo-card-content">
-              <div className="holo-card-top">
-                <span className="holo-chip" />
-                <svg className="holo-card-wave" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round">
-                  <path d="M6 14a8 8 0 0 1 12 0" opacity="0.9" />
-                  <path d="M8.5 17a4.5 4.5 0 0 1 7 0" />
-                  <circle cx="12" cy="20" r="1.2" fill="#fff" stroke="none" />
-                </svg>
+      </div>
+
+      <section className="au-stats" aria-label="HuntsTAG at a glance">
+        <div className="hero-spec-row">
+          <div><b><CountUp target={13.56} suffix=" MHz" /></b><span>NFC frequency</span></div>
+          <div><b><CountUp target={888} suffix=" bytes" /></b><span>NDEF capacity</span></div>
+          <div><b>Zero</b><span>battery required</span></div>
+        </div>
+      </section>
+
+      <section className="home-features-section au-explore" ref={featuresRef} aria-label="HuntsTAG features">
+        <div className="au-explore-list">
+          <div className="feature-grid">
+            {FEATURES.map((f) => (
+              <div className="feature-card" key={f.title}>
+                <div className="feature-icon">{f.icon}</div>
+                <h3>{f.title}</h3>
+                <p>{f.desc}</p>
               </div>
-              <div>
-                <div className="holo-card-name">{cardName}</div>
-                <div className="holo-card-role">{cardRole}</div>
+            ))}
+          </div>
+        </div>
+        <div className="au-explore-visual">
+          {/* Signature visual: the tap card itself, mid-tap -- a real
+              holographic-foil surface that shifts color with the cursor
+              (same principle as tilting a real security hologram), with
+              energy motes orbiting it and induction rings representing
+              the NFC handshake. Shows whoever's actually signed in. */}
+          <div className="hero-visual" ref={stageRef} aria-hidden="true">
+            <div className="bg-ring bg-ring-a" />
+            <div className="bg-ring bg-ring-b" />
+            <div className="tap-ring r1" />
+            <div className="tap-ring r2" />
+            <div className="tap-ring r3" />
+            <div className="orbit-particle-layer" ref={orbitContainerRef} />
+            <div className="holo-card" ref={cardRef}>
+              <div className="holo-layer" />
+              <div className="holo-grating" />
+              <div className="holo-specular" />
+              <div className="holo-card-content">
+                <div className="holo-card-top">
+                  <span className="holo-chip" />
+                  <svg className="holo-card-wave" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round">
+                    <path d="M6 14a8 8 0 0 1 12 0" opacity="0.9" />
+                    <path d="M8.5 17a4.5 4.5 0 0 1 7 0" />
+                    <circle cx="12" cy="20" r="1.2" fill="#fff" stroke="none" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="holo-card-name">{cardName}</div>
+                  <div className="holo-card-role">{cardRole}</div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      <section className="home-features-section" ref={featuresRef} aria-label="HuntsTAG features">
-        <div className="feature-grid">
-        {FEATURES.map((f) => (
-          <div className="feature-card" key={f.title}>
-            <div className="feature-icon">{f.icon}</div>
-            <h3>{f.title}</h3>
-            <p>{f.desc}</p>
-          </div>
-        ))}
         </div>
       </section>
 

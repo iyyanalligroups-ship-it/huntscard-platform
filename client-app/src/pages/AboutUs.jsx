@@ -51,56 +51,58 @@ const FEATURES = [
 
 export default function AboutUs() {
   return (
-    <div>
-      <span className="hero-eyebrow" style={{ display: 'block', marginBottom: 8 }}>HuntsTAG</span>
-      <h1 className="section-heading" style={{ marginTop: 0 }}>
-        The Future of Networking is Here.
-        <br />
-        <span className="grad">One Tap. Infinite Connections.</span>
-      </h1>
-      <p className="section-subheading">
-        HuntsTAG is a next generation smart business card powered by NFC technology -- designed to replace
-        traditional visiting cards with a seamless, futuristic and powerful networking experience.
-      </p>
+    <div className="au-page">
+      <header className="au-page-hero">
+        <span className="hero-eyebrow">HuntsTAG</span>
+        <h1 className="section-heading">
+          The Future of Networking is Here.
+          <br />
+          <span className="grad">One Tap. Infinite Connections.</span>
+        </h1>
+        <p className="section-subheading">
+          HuntsTAG is a next generation smart business card powered by NFC technology -- designed to replace
+          traditional visiting cards with a seamless, futuristic and powerful networking experience.
+        </p>
+      </header>
 
-      <div className="checkout-panel" style={{ maxWidth: 720 }}>
-        <div className="card" style={{ marginBottom: 20 }}>
-          <h2 style={{ fontSize: 18, margin: '0 0 10px' }}>What is HuntsTAG</h2>
-          <p className="shop-plan-desc" style={{ marginBottom: 10 }}>
+      <section className="au-split">
+        <h2 className="section-heading">What is HuntsTAG</h2>
+        <div className="au-split-copy">
+          <p>
             In a world that moves at the speed of technology, your business card should too. HuntsTAG is a
             revolutionary smart card that connects people instantly with just a single tap. No more paper
             cards. No more manual typing. No more lost contacts.
           </p>
-          <p className="shop-plan-desc" style={{ marginBottom: 10 }}>
+          <p>
             Simply tap your HuntsTAG card on any smartphone and share your complete business profile,
             portfolio, social media, contact details and more -- instantly, effortlessly and unforgettably.
           </p>
-          <p className="shop-plan-desc" style={{ marginBottom: 0, fontWeight: 600 }}>
+          <p className="au-statement">
             HuntsTAG is not just a card. It is your digital identity.
           </p>
         </div>
-      </div>
+      </section>
 
-      <h2 className="section-heading">Key Features</h2>
-      <div className="feature-grid">
-        {FEATURES.map((f) => (
-          <div className="feature-card" key={f.title}>
-            <div className="feature-icon">{f.icon}</div>
-            <h3>{f.title}</h3>
-            <p>{f.desc}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="checkout-panel" style={{ maxWidth: 720, marginTop: 20 }}>
-        <div className="card">
-          <h2 style={{ fontSize: 18, margin: '0 0 10px' }}>Get in touch</h2>
-          <p className="shop-plan-desc" style={{ marginBottom: 14 }}>
-            Questions about a plan, an order, or anything else -- we'd like to hear from you.
-          </p>
-          <Link to="/contact" className="link-out">Contact us →</Link>
+      <section className="au-features">
+        <h2 className="section-heading">Key Features</h2>
+        <div className="feature-grid">
+          {FEATURES.map((f) => (
+            <div className="feature-card" key={f.title}>
+              <div className="feature-icon">{f.icon}</div>
+              <h3>{f.title}</h3>
+              <p>{f.desc}</p>
+            </div>
+          ))}
         </div>
-      </div>
+      </section>
+
+      <section className="au-cta-band">
+        <div>
+          <h2 className="section-heading">Get in touch</h2>
+          <p>Questions about a plan, an order, or anything else -- we'd like to hear from you.</p>
+        </div>
+        <Link to="/contact" className="btn-primary au-cta">Contact us →</Link>
+      </section>
     </div>
   );
 }

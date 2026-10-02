@@ -1,0 +1,2422 @@
+/* Public-site theme based on the "Auros" design system from styles.refero.design
+   ("abyssal terminal": deep teal canvas, teal surface steps instead of shadows, medium-weight
+   display type with tight tracking, uppercase tracked labels, one aurora-gradient CTA).
+
+   Scoped to `.sh-theme`, which only PublicLayout (Home, Shop, Catalog, Magic Poster, FAQ...)
+   sets, so the logged-in dashboard keeps its own look. All of it is overrides on top of
+   styles.css: remove the import in main.jsx (or the class in PublicLayout.jsx) to revert.
+   Page content and layout are untouched -- only the look changes.
+
+   Surfaces: Liquid Abyss #012624 canvas, Liquid Deep #011d1c recessed (footer, inputs),
+   Liquid Kelp #003734 raised cards. Text: white headings, Silver Mist #bbc7c6 body, Liquid Mist
+   #edfffe emphasis. Lavender Phosphor #fde9ff for big numbers. The aurora gradient is reserved
+   for primary buttons. Matter (the brand's face) is not available, so Inter stands in. */
+
+html .sh-theme {
+  --au-abyss: #012624;
+  --au-deep: #011d1c;
+  --au-kelp: #003734;
+  --au-kelp-hi: #05443f;
+  --au-mist: #edfffe;
+  --au-silver: #bbc7c6;
+  --au-lavender: #fde9ff;
+  --au-line: rgba(255, 255, 255, 0.12);
+  --au-aurora: linear-gradient(90deg, rgb(203, 255, 252) 0%, rgb(237, 255, 254) 26%, rgb(255, 253, 250) 48%, rgb(250, 209, 255) 89%);
+
+  /* re-point the app's own tokens so existing components pick the theme up */
+  --space: var(--au-abyss);
+  --panel: var(--au-kelp);
+  --panel-raised: var(--au-deep);
+  --panel-border: var(--au-line);
+  --text: #ffffff;
+  --text-dim: var(--au-silver);
+  --brand-accent: #cbfffc;
+  --brand-accent-2: #fad1ff;
+  --brand-accent-rgb: 203, 255, 252;
+  --brand-accent-soft: rgba(203, 255, 252, 0.08);
+  --brand-accent-border: rgba(203, 255, 252, 0.25);
+  --brand-accent-shadow: rgba(0, 0, 0, 0);
+  --holo-cyan: #cbfffc;
+  --holo-violet: #00827c;
+  --holo-magenta: #fde9ff;
+  --holo-gradient: var(--au-aurora);
+  --glow-cyan: none;
+  --glow-violet: none;
+  --glow-soft: none;
+  --radius: 16px;
+  --font-ui: "Inter", "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Inter", "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  background: var(--au-abyss);
+  color: #ffffff;
+  font-family: var(--font-ui);
+  min-height: 100vh;
+  color-scheme: dark;
+}
+
+/* the page behind the shell and the Three.js globe (it reads colours from <body>) */
+html:has(.sh-theme),
+html:has(.sh-theme) body { background: #012624 !important; }
+html:has(.sh-theme) body {
+  --holo-cyan: #cbfffc;
+  --holo-violet: #00827c;
+  --holo-magenta: #fde9ff;
+}
+
+/* ---------- typography: medium weight only, tight tracking on big sizes ---------- */
+html .sh-theme h1,
+html .sh-theme h2,
+html .sh-theme h3,
+html .sh-theme .section-heading {
+  font-family: var(--font-display);
+  font-weight: 500;
+  color: #ffffff;
+}
+html .sh-theme h1 { letter-spacing: -0.04em; line-height: 1; }
+html .sh-theme h2,
+html .sh-theme .section-heading { letter-spacing: -0.03em; line-height: 1.05; }
+html .sh-theme h3 { letter-spacing: -0.02em; line-height: 1.15; }
+html .sh-theme .hero-section h1 { font-size: clamp(2.6rem, 6vw, 4.6rem); }
+html .sh-theme p,
+html .sh-theme .section-subheading,
+html .sh-theme .subtitle,
+html .sh-theme .hint { color: var(--au-silver); line-height: 1.4; }
+html .sh-theme .hero-section h1 .grad {
+  background: none;
+  -webkit-text-fill-color: var(--au-mist);
+  color: var(--au-mist);
+}
+html .sh-theme .glitch-text::before,
+html .sh-theme .glitch-text::after { display: none; }
+/* eyebrow / kicker: uppercase, wide tracking, no pill */
+html .sh-theme .hero-eyebrow {
+  background: transparent;
+  color: var(--au-silver);
+  border: 0;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+html .sh-theme .hero-eyebrow::before { background: #cbfffc; box-shadow: none; }
+
+/* ---------- header: thin transparent bar, uppercase tracked links ---------- */
+html .sh-theme .top-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(1, 38, 36, 0.78);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border: 0;
+  border-bottom: 1px solid var(--au-line);
+  border-radius: 0;
+  box-shadow: none;
+}
+html .sh-theme .top-nav-power-glow,
+html .sh-theme .top-nav-scan-beam,
+html .sh-theme .top-nav-spotlight,
+html .sh-theme .top-nav-scan-particle,
+html .sh-theme .top-nav-corner { display: none; }
+html .sh-theme .brand-name { font-family: var(--font-ui); font-weight: 500; letter-spacing: 0.02em; color: #ffffff; }
+html .sh-theme .brand-mark { box-shadow: none; border-radius: 6px; }
+html .sh-theme .nav-link {
+  color: var(--au-silver);
+  font-weight: 400;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+html .sh-theme .nav-link:hover,
+html .sh-theme .nav-link.active { color: #ffffff; }
+html .sh-theme .nav-link::after { background: #cbfffc; }
+html .sh-theme .status-indicator { color: var(--au-silver); letter-spacing: 0.12em; }
+html .sh-theme .status-dot { background: #cbfffc; box-shadow: none; }
+
+/* ---------- buttons: the aurora gradient CTA; everything else is a quiet kelp/ghost ---------- */
+html .sh-theme .btn-primary,
+html .sh-theme button:not(.secondary):not(.pill-outline):not(.history-tab):not(.plan-switch-pill):not(.qty-btn):not(.nav-menu-btn):not(.checkout-modal-media-nav):not([class*="close"]):not([class*="thumb"]):not(.public-nav-icon-button),
+html .sh-theme .public-account-action.pill-outline:last-child {
+  background: var(--au-aurora) !important;
+  color: #222222 !important;
+  -webkit-text-fill-color: #222222;
+  border: 0 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+html .sh-theme .btn-primary:hover,
+html .sh-theme button:not(.secondary):not(.pill-outline):not(.history-tab):not(.plan-switch-pill):not(.qty-btn):not(.nav-menu-btn):not(.checkout-modal-media-nav):not([class*="close"]):not([class*="thumb"]):not(.public-nav-icon-button):hover,
+html .sh-theme .public-account-action.pill-outline:last-child:hover { filter: brightness(1.06); transform: none; }
+html .sh-theme .btn-secondary,
+html .sh-theme button.secondary,
+html .sh-theme .pill-outline {
+  background: var(--au-kelp) !important;
+  color: #ffffff !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+html .sh-theme .btn-secondary:hover,
+html .sh-theme button.secondary:hover,
+html .sh-theme .pill-outline:hover { background: var(--au-kelp-hi) !important; color: #ffffff !important; filter: none; }
+html .sh-theme .public-nav-icon-button { background: var(--au-kelp) !important; border: 0 !important; color: #ffffff !important; }
+
+/* ---------- Shop tabs / plan switch / quantity ---------- */
+html .sh-theme .history-tab,
+html .sh-theme .plan-switch-pill { background-image: none !important; }
+html .sh-theme .history-tab:not(.active),
+html .sh-theme .plan-switch-pill:not(.active) {
+  background-color: transparent !important;
+  color: var(--au-silver) !important;
+  border: 1px solid var(--au-line) !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+html .sh-theme .history-tab:not(.active):hover,
+html .sh-theme .plan-switch-pill:not(.active):hover { background-color: var(--au-kelp) !important; color: #ffffff !important; }
+html .sh-theme .history-tab.active,
+html .sh-theme .plan-switch-pill.active {
+  background-color: var(--au-kelp) !important;
+  color: #ffffff !important;
+  border: 1px solid #cbfffc !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  font-weight: 500;
+}
+html .sh-theme .history-tabs .history-tab.active svg { color: #cbfffc; }
+html .sh-theme .qty-btn {
+  background: var(--au-kelp-hi) !important;
+  background-image: none !important;
+  border: 0 !important;
+  color: #ffffff !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+}
+html .sh-theme .qty-btn:disabled { background: var(--au-deep) !important; color: #707777 !important; }
+html .sh-theme .qty-btn:hover:not(:disabled) { background: #0b5a54 !important; }
+
+/* ---------- cards: raised kelp surface, no border, no shadow ---------- */
+html .sh-theme .card,
+html .sh-theme .feature-card,
+html .sh-theme .checkout-panel,
+html .sh-theme .plan-detail-panel,
+html .sh-theme .plan-variant-card,
+html .sh-theme .step-item {
+  background: var(--au-kelp);
+  border: 0;
+  border-radius: 16px;
+  box-shadow: none;
+  backdrop-filter: none;
+  color: #ffffff;
+}
+html .sh-theme .feature-card { padding: 32px; }
+html .sh-theme .feature-card::before,
+html .sh-theme .feature-card::after { display: none; }
+html .sh-theme .feature-card:hover,
+html .sh-theme .plan-variant-card:hover { transform: none; background: var(--au-kelp-hi); }
+html .sh-theme .plan-variant-card.active { box-shadow: 0 0 0 1px #cbfffc; }
+html .sh-theme .feature-card h3,
+html .sh-theme .step-item h3 { font-size: 1.35rem; }
+html .sh-theme .feature-card p,
+html .sh-theme .step-item p { color: var(--au-silver); }
+html .sh-theme .feature-icon,
+html .sh-theme .shop-page-heading-icon,
+html .sh-theme .step-number {
+  background: rgba(3, 81, 75, 0.5);
+  color: #ffffff;
+  border: 0;
+  border-radius: 6px;
+  box-shadow: none;
+}
+/* inline icon colours inside feature icons (teal/violet/red tints) become one white */
+html .sh-theme .feature-icon svg { color: #ffffff; stroke: currentColor; }
+
+/* the inner panels inside a card sit one step deeper */
+html .sh-theme .card .card,
+html .sh-theme .plan-detail-panel .card,
+html .sh-theme .checkout-panel .card { background: var(--au-deep); }
+
+/* ---------- hero: open canvas, no frame, the particle globe is the visual ---------- */
+html .sh-theme .hero-section,
+html .sh-theme .hero-section-split {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+html .sh-theme .hero-section::before { display: none; }
+html .sh-theme .hero-spotlight,
+html .sh-theme .hero-scanline,
+html .sh-theme .bg-ring,
+html .sh-theme .tap-ring,
+html .sh-theme .orbit-particle-layer { display: none; }
+html .sh-theme .tech-globe { opacity: 0.9; }
+html .sh-theme .hero-spec-row { gap: 40px; }
+html .sh-theme .hero-spec-row,
+html .sh-theme .hero-spec-row * { font-family: var(--font-ui); color: var(--au-silver); letter-spacing: 0.08em; text-transform: uppercase; font-size: 11px; }
+
+/* ---------- section headings ---------- */
+html .sh-theme .section-heading { font-size: clamp(2rem, 4vw, 3.4rem); }
+
+/* ---------- forms: recessed wells ---------- */
+html .sh-theme input,
+html .sh-theme select,
+html .sh-theme textarea {
+  background: var(--au-deep);
+  color: #ffffff;
+  border: 1px solid var(--au-line);
+  border-radius: 6px;
+}
+html .sh-theme input::placeholder,
+html .sh-theme textarea::placeholder { color: #707777; }
+html .sh-theme input:focus,
+html .sh-theme select:focus,
+html .sh-theme textarea:focus { border-color: #cbfffc; box-shadow: none; outline: none; }
+
+/* ---------- prices / numbers use the lavender highlight ---------- */
+html .sh-theme .total,
+html .sh-theme .plan-price { color: var(--au-lavender); }
+
+/* ---------- footer: recessed well ---------- */
+html .sh-theme footer,
+html .sh-theme .site-footer { background: var(--au-deep); border-top: 0; color: var(--au-silver); }
+
+/* ---------- misc ---------- */
+html .sh-theme .error-banner { background: rgba(255, 99, 99, 0.12); color: #ffd9d9; border: 1px solid rgba(255, 99, 99, 0.35); border-radius: 6px; }
+html .sh-theme hr,
+html .sh-theme .purchase-detail-section-title { border-color: var(--au-line); }
+html .sh-theme .public-page-shell a:not([class]),
+html .sh-theme p a:not([class]) { color: var(--au-mist); text-decoration: underline; text-underline-offset: 3px; }
+
+/* styles.css gives the selected plan pill a brand gradient with a very specific selector */
+html body.public-site-active .sh-theme .plan-switch-pill.active,
+html body.public-site-active .sh-theme .history-tab.active,
+html body.public-site-active .sh-theme button.plan-switch-pill.active:not(:disabled) {
+  background: var(--au-kelp) !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  border: 1px solid #cbfffc !important;
+  box-shadow: none !important;
+}
+
+/* =====================================================================
+   STRUCTURE (Auros layout) -- Home
+   hero: centred text stack over the particle globe, full viewport tall
+   stats: three big lavender numbers
+   explore: two columns, feature rows on the left, the card on the right
+   ===================================================================== */
+html .sh-theme .home-motion { max-width: 1440px; margin: 0 auto; padding: 0 40px; overflow: visible; }
+
+html .sh-theme .hero-section.hero-section-split {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: calc(100vh - 88px);
+  max-width: none;
+  padding: 80px 0 64px;
+  overflow: hidden;
+}
+html .sh-theme .hero-section .tech-globe {
+  position: absolute;
+  inset: 0;
+  opacity: 0.75;
+  z-index: 0;
+}
+html .sh-theme .hero-col-text { max-width: 760px; margin: 0 auto; z-index: 1; text-align: center; }
+html .sh-theme .hero-col-text > p { max-width: 560px; margin: 24px auto 0; font-size: 18px; }
+html .sh-theme .hero-section h1 { font-size: clamp(3rem, 7.4vw, 6rem); letter-spacing: -0.045em; }
+html .sh-theme .hero-eyebrow { display: inline-block; margin-bottom: 28px; }
+html .sh-theme .hero-eyebrow::before { display: none; }
+html .sh-theme .hero-cta-row { display: flex; gap: 12px; justify-content: center !important; margin-top: 40px; }
+html .sh-theme .hero-cta-row .btn-primary,
+html .sh-theme .hero-cta-row .btn-secondary { padding: 16px 28px; text-transform: uppercase; font-size: 13px; letter-spacing: 0.08em; }
+
+/* statistic counters */
+html .sh-theme .au-stats { padding: 40px 0 88px; border-top: 1px solid var(--au-line); }
+html .sh-theme .au-stats .hero-spec-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  justify-content: stretch !important;
+  text-align: left;
+}
+html .sh-theme .au-stats .hero-spec-row > div { display: flex; flex-direction: column; gap: 14px; }
+html .sh-theme .au-stats .hero-spec-row b {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(2.6rem, 6.4vw, 5.4rem);
+  line-height: 1;
+  letter-spacing: -0.045em;
+  color: var(--au-lavender);
+  text-transform: none;
+}
+html .sh-theme .au-stats .hero-spec-row span:last-child {
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--au-mist);
+}
+
+/* explore: asymmetric two columns */
+html .sh-theme .au-explore {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 64px;
+  align-items: center;
+  padding: 24px 0 96px;
+}
+html .sh-theme .au-explore::before { display: none; }
+html .sh-theme .au-explore .feature-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+}
+html .sh-theme .au-explore .feature-card {
+  position: relative;
+  display: block;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--au-line);
+  padding: 40px 96px 40px 36px;
+  text-align: left;
+}
+html .sh-theme .au-explore .feature-card:hover { background: var(--au-kelp); }
+html .sh-theme .au-explore .feature-card h3 { font-size: clamp(1.5rem, 2.4vw, 2.25rem); line-height: 1; letter-spacing: -0.03em; margin: 0 0 16px; }
+html .sh-theme .au-explore .feature-card p { margin: 0; max-width: 520px; font-size: 16px; }
+/* the icon becomes the small square corner button */
+html .sh-theme .au-explore .feature-icon {
+  position: absolute;
+  top: 36px;
+  right: 36px;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 7px;
+  background: rgba(3, 81, 75, 0.5);
+}
+html .sh-theme .au-explore-visual { display: flex; align-items: center; justify-content: center; }
+html .sh-theme .au-explore-visual .hero-visual { width: 100%; height: 440px; overflow: visible; }
+
+/* how it works */
+html .sh-theme .home-motion > div:not(.hero-section) > .section-heading,
+html .sh-theme .home-motion > div:not(.hero-section) > .section-subheading { text-align: center; }
+html .sh-theme .steps-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 48px; }
+html .sh-theme .step-item { text-align: left; padding: 36px; }
+html .sh-theme .step-item h4 { font-size: 1.5rem; font-weight: 500; letter-spacing: -0.02em; margin: 20px 0 10px; color: #fff; }
+html .sh-theme .step-number { width: 40px; height: 40px; display: grid; place-items: center; font-weight: 500; letter-spacing: 0.1em; }
+html .sh-theme .how-it-works-cta a {
+  background: var(--au-aurora) !important;
+  color: #222222 !important;
+  border-radius: 6px !important;
+  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 500 !important;
+  letter-spacing: 0.08em;
+}
+
+@media (max-width: 900px) {
+  html .sh-theme .home-motion { padding: 0 20px; }
+  html .sh-theme .au-stats .hero-spec-row { grid-template-columns: 1fr; }
+  html .sh-theme .au-explore { grid-template-columns: 1fr; gap: 32px; }
+  html .sh-theme .steps-row { grid-template-columns: 1fr; }
+  html .sh-theme .hero-section.hero-section-split { min-height: 80vh; }
+}
+
+/* =====================================================================
+   FOOTER -- recessed well, oversized wordmark as environment
+   ===================================================================== */
+html .sh-theme .site-footer {
+  background: var(--au-deep) !important;
+  border: 0 !important;
+  margin-top: 40px;
+  padding: 120px 40px 48px;
+  box-shadow: none;
+}
+html .sh-theme .site-footer::before { display: none !important; }
+html .sh-theme .site-footer-watermark-wrap { border: 0 !important; }
+html .sh-theme .site-footer-watermark {
+  background: none !important;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: var(--au-kelp);
+  color: var(--au-kelp);
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(5rem, 20vw, 17rem);
+  letter-spacing: -0.046em;
+  line-height: 0.9;
+  opacity: 1 !important;
+  filter: none;
+  text-shadow: none;
+}
+html .sh-theme .site-footer-grid { max-width: 1440px; margin: 56px auto 0; border: 0; }
+html .sh-theme .site-footer-heading { color: var(--au-silver); font-size: 12px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; }
+html .sh-theme .site-footer-col a { color: #ffffff; }
+html .sh-theme .site-footer-col a:hover { color: #cbfffc; text-decoration: none; }
+html .sh-theme .site-footer-tagline { color: var(--au-silver); font-size: 15px; }
+html .sh-theme .site-footer-bottom { border-top: 1px solid var(--au-line) !important; color: var(--au-silver); max-width: 1440px; margin: 56px auto 0; }
+
+/* the counter number is a <span> inside <b>: it must inherit the big lavender style, only the label is small */
+html .sh-theme .au-stats .hero-spec-row b,
+html .sh-theme .au-stats .hero-spec-row b * {
+  font-size: clamp(2.6rem, 6.4vw, 5.4rem);
+  letter-spacing: -0.045em;
+  text-transform: none;
+  color: var(--au-lavender);
+}
+html .sh-theme .au-stats .hero-spec-row > div > span {
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--au-mist);
+}
+html .sh-theme .au-stats .hero-spec-row > div > b > span:last-child {
+  font-size: clamp(2.6rem, 6.4vw, 5.4rem);
+  letter-spacing: -0.045em;
+  text-transform: none;
+  color: var(--au-lavender);
+}
+
+/* =====================================================================
+   How it works: step number badges; HuntsWorld section as a recessed well
+   ===================================================================== */
+html body.public-site-active .sh-theme .step-number {
+  background: rgba(3, 81, 75, 0.5) !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  border: 0;
+  box-shadow: none !important;
+  border-radius: 6px;
+}
+
+/* "What is HuntsWorld and why": the deepest surface, two columns --
+   headline + intro on the left, the three points as rows on the right */
+html body.public-site-active .sh-theme .why-huntsworld {
+  background: var(--au-deep) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 16px;
+  box-shadow: none !important;
+  margin: 24px 0 0;
+  padding: 120px 64px;
+  color: var(--au-silver);
+}
+html body.public-site-active .sh-theme .why-huntsworld::before,
+html body.public-site-active .sh-theme .why-huntsworld::after { display: none !important; }
+html .sh-theme .why-huntsworld-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  column-gap: 72px;
+  align-content: start;
+  text-align: left;
+}
+html .sh-theme .why-huntsworld-inner > .section-heading,
+html .sh-theme .why-huntsworld-inner > .why-huntsworld-intro,
+html .sh-theme .why-huntsworld-inner > .why-huntsworld-sub { grid-column: 1; text-align: left !important; }
+html .sh-theme .why-huntsworld-inner > .section-heading {
+  font-size: clamp(2.4rem, 4.4vw, 4rem);
+  line-height: 1;
+  letter-spacing: -0.045em;
+  margin: 0 0 24px !important;
+  color: #ffffff;
+}
+html .sh-theme .why-huntsworld-intro {
+  color: var(--au-silver) !important;
+  opacity: 1;
+  font-size: 17px;
+  line-height: 1.5;
+  max-width: 460px;
+  margin: 0 0 40px;
+}
+html .sh-theme .why-huntsworld-sub {
+  color: var(--au-mist) !important;
+  font-size: 12px !important;
+  font-weight: 500;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase;
+  margin: 0;
+}
+html .sh-theme .why-huntsworld .feature-grid {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+}
+html .sh-theme .why-huntsworld .feature-card {
+  position: relative;
+  background: var(--au-kelp);
+  padding: 36px 96px 36px 36px;
+  text-align: left;
+}
+html .sh-theme .why-huntsworld .feature-card h3 { font-size: 1.6rem; letter-spacing: -0.03em; line-height: 1.05; margin: 0 0 12px; }
+html .sh-theme .why-huntsworld .feature-card p { margin: 0; font-size: 15px; }
+html .sh-theme .why-huntsworld .feature-icon {
+  position: absolute;
+  top: 32px;
+  right: 32px;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 7px;
+  background: rgba(3, 81, 75, 0.5);
+}
+@media (max-width: 900px) {
+  html body.public-site-active .sh-theme .why-huntsworld { padding: 64px 24px; }
+  html .sh-theme .why-huntsworld-inner { grid-template-columns: 1fr; }
+  html .sh-theme .why-huntsworld .feature-grid { grid-column: 1; grid-row: auto; margin-top: 32px; }
+}
+
+/* =====================================================================
+   How it works -- redesigned as a numbered list: headline + button on the
+   left, three big-numeral rows on the right separated by hairlines
+   ===================================================================== */
+html .sh-theme .home-motion > div:has(.steps-row) {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  column-gap: 72px;
+  align-items: start;
+  padding: 24px 0 96px;
+}
+html .sh-theme .home-motion > div:has(.steps-row) > .section-heading,
+html .sh-theme .home-motion > div:has(.steps-row) > .section-subheading,
+html .sh-theme .home-motion > div:has(.steps-row) > .how-it-works-cta { grid-column: 1; text-align: left !important; }
+html .sh-theme .home-motion > div:has(.steps-row) > .section-heading {
+  font-size: clamp(2.6rem, 5vw, 4.4rem);
+  line-height: 1;
+  letter-spacing: -0.045em;
+  margin: 0 0 20px !important;
+}
+html .sh-theme .home-motion > div:has(.steps-row) > .section-subheading {
+  font-size: 17px;
+  max-width: 360px;
+  margin: 0 0 40px !important;
+}
+html .sh-theme .home-motion > div:has(.steps-row) > .how-it-works-cta { margin-top: 0 !important; }
+
+html .sh-theme .steps-row {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  border-top: 1px solid var(--au-line);
+}
+html .sh-theme .steps-row .step-item {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  grid-template-areas: "num title" "num desc";
+  column-gap: 24px;
+  row-gap: 8px;
+  align-items: start;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0;
+  border-bottom: 1px solid var(--au-line);
+  padding: 44px 0;
+  text-align: left;
+}
+html .sh-theme .steps-row .step-number {
+  grid-area: num;
+  width: auto;
+  height: auto;
+  display: block;
+  background: none !important;
+  background-image: none !important;
+  border-radius: 0;
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: clamp(3.4rem, 6vw, 5.4rem);
+  font-weight: 500;
+  line-height: 0.9;
+  letter-spacing: -0.045em;
+  color: var(--au-lavender) !important;
+  -webkit-text-fill-color: var(--au-lavender);
+}
+html .sh-theme .steps-row .step-item h4 { grid-area: title; margin: 0; font-size: clamp(1.5rem, 2.6vw, 2.2rem); line-height: 1.05; letter-spacing: -0.03em; }
+html .sh-theme .steps-row .step-item p { grid-area: desc; margin: 0; font-size: 16px; max-width: 420px; }
+
+@media (max-width: 900px) {
+  html .sh-theme .home-motion > div:has(.steps-row) { grid-template-columns: 1fr; }
+  html .sh-theme .steps-row { grid-column: 1; grid-row: auto; margin-bottom: 32px; }
+  html .sh-theme .steps-row .step-item { grid-template-columns: 90px 1fr; padding: 28px 0; }
+}
+
+/* How it works: keep the left column tight, and the numerals big + lavender (beat the earlier badge rule) */
+html .sh-theme .home-motion > div:has(.steps-row) { grid-template-rows: auto auto auto 1fr; }
+html .sh-theme .home-motion > div:has(.steps-row) > .section-heading,
+html .sh-theme .home-motion > div:has(.steps-row) > .section-subheading,
+html .sh-theme .home-motion > div:has(.steps-row) > .how-it-works-cta { align-self: start; }
+html .sh-theme .steps-row { grid-row: 1 / -1; }
+html body.public-site-active .sh-theme .steps-row .step-number {
+  background: none !important;
+  background-color: transparent !important;
+  color: var(--au-lavender) !important;
+  -webkit-text-fill-color: var(--au-lavender);
+  width: auto;
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* =====================================================================
+   HEADER + FOOTER -- reworked after the auros.global site:
+   header: logo left, links centred, quiet actions right (text "Log in", one gradient CTA)
+   footer: a big statement line, link columns, one hairline + copyright. No wordmark.
+   ===================================================================== */
+
+/* ---------- header ---------- */
+html .sh-theme .top-nav {
+  position: sticky;
+  top: 0;
+  background: linear-gradient(180deg, rgba(1, 38, 36, 0.92), rgba(1, 38, 36, 0.55));
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 0 !important;
+  border-radius: 0 !important;
+  max-width: none;
+  margin: 0;
+  padding: 0 40px;
+}
+html .sh-theme .top-nav-row {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 22px 0;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 32px;
+}
+/* the menu wrapper dissolves so links sit in the centre column and actions in the right one */
+html .sh-theme .nav-menu { display: contents; }
+html .sh-theme .brand { justify-self: start; gap: 12px; }
+html .sh-theme .brand-name { font-size: 18px; letter-spacing: -0.02em; font-weight: 500; }
+html .sh-theme .nav-links { grid-column: 2; justify-content: center; flex: none; gap: 8px; flex-wrap: nowrap; }
+html .sh-theme .nav-link { margin: 0 12px; padding: 6px 0; font-size: 12px; font-weight: 500; letter-spacing: 0.14em; }
+html .sh-theme .nav-link::after { left: 0; right: 0; bottom: 0; height: 1px; border-radius: 0; background: #ffffff; }
+html .sh-theme .nav-link:focus { outline: none; }
+html .sh-theme .nav-link:focus-visible { outline: 1px solid #cbfffc; outline-offset: 6px; border-radius: 2px; }
+html .sh-theme .nav-actions { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 20px; }
+html .sh-theme .public-account-actions { display: flex; align-items: center; gap: 20px; }
+
+/* cart: icon only; status: just the dot; log in: plain text; register: the one CTA */
+html .sh-theme .public-nav-icon-button { background: transparent !important; width: auto; height: auto; padding: 4px !important; }
+html .sh-theme .public-online-status span:last-child { display: none; }
+html .sh-theme .public-account-action svg { display: none; }
+html .sh-theme .public-account-action {
+  font-size: 12px !important;
+  letter-spacing: 0.14em !important;
+  text-transform: uppercase;
+  padding: 10px 4px !important;
+  height: auto !important;
+}
+html .sh-theme .public-account-actions .pill-outline:not(:last-child),
+html .sh-theme .public-account-actions .public-logout-action {
+  background: transparent !important;
+  color: #ffffff !important;
+}
+html .sh-theme .public-account-actions .pill-outline:not(:last-child):hover { background: transparent !important; color: #cbfffc !important; }
+html .sh-theme .public-account-actions .pill-outline:last-child:not(.public-logout-action) { padding: 14px 22px !important; }
+
+@media (max-width: 860px) {
+  html .sh-theme .top-nav { padding: 0 20px; }
+  html .sh-theme .top-nav-row { display: flex; justify-content: space-between; padding: 16px 0; }
+  html .sh-theme .nav-menu { display: none; }
+  html .sh-theme .nav-menu.open {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 24px;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    padding: 24px 20px 32px;
+    background: var(--au-abyss);
+    border-bottom: 1px solid var(--au-line);
+  }
+  html .sh-theme .nav-menu.open .nav-links { flex-direction: column; align-items: flex-start; gap: 16px; }
+  html .sh-theme .nav-menu.open .nav-link { margin: 0; font-size: 14px; }
+  html .sh-theme .nav-menu.open .nav-actions { flex-wrap: wrap; justify-self: start; }
+}
+
+/* ---------- footer ---------- */
+html .sh-theme .site-footer {
+  background: var(--au-deep) !important;
+  margin-top: 56px;
+  padding: 112px 40px 40px;
+}
+html .sh-theme .site-footer-watermark-wrap { display: none; }
+html .sh-theme .site-footer-grid {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr;
+  column-gap: 64px;
+  row-gap: 48px;
+  align-items: start;
+}
+/* the tagline becomes the big statement; the small logo sits above it */
+html .sh-theme .site-footer-brand { max-width: none; display: flex; flex-direction: column; gap: 28px; }
+html .sh-theme .site-footer-brand .brand { margin: 0 !important; }
+html .sh-theme .site-footer-tagline {
+  order: 2;
+  max-width: 520px;
+  color: #ffffff;
+  font-size: clamp(1.9rem, 3.4vw, 3rem);
+  font-weight: 500;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+}
+html .sh-theme .site-footer-col { gap: 16px; }
+html .sh-theme .site-footer-heading { margin-bottom: 12px; font-size: 11px; letter-spacing: 0.14em; color: var(--au-silver); }
+html .sh-theme .site-footer-col a { font-size: 18px; letter-spacing: -0.01em; color: #ffffff; position: relative; }
+html .sh-theme .site-footer-col a:hover { color: #cbfffc; text-decoration: none; }
+html .sh-theme .site-footer-bottom {
+  max-width: 1440px;
+  margin: 96px auto 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--au-line) !important;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--au-silver);
+}
+@media (max-width: 860px) {
+  html .sh-theme .site-footer { padding: 72px 20px 32px; }
+  html .sh-theme .site-footer-grid { grid-template-columns: 1fr 1fr; }
+  html .sh-theme .site-footer-brand { grid-column: 1 / -1; }
+  html .sh-theme .site-footer-bottom { margin-top: 56px; }
+}
+
+/* =====================================================================
+   MOTION -- background waves (ParticleWaves.jsx), GSAP reveals (PublicMotion.jsx)
+   ===================================================================== */
+html .sh-theme .particle-waves {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+html .sh-theme .particle-waves canvas { display: block; width: 100%; height: 100%; }
+/* everything else paints above the waves; sections without their own surface let them show through */
+html .sh-theme .top-nav { z-index: 50; }
+html .sh-theme .public-page-shell,
+html .sh-theme .site-footer { position: relative; z-index: 1; }
+
+/* the hero globe is now one of two particle layers; keep it a little quieter */
+html .sh-theme .hero-section .tech-globe { opacity: 0.6; will-change: transform; }
+
+/* gradient CTAs: a slow shimmer that speeds up on hover (pure CSS, no layout cost) */
+html .sh-theme .btn-primary,
+html .sh-theme .public-account-action.pill-outline:last-child,
+html .sh-theme .how-it-works-cta a,
+html .sh-theme button:not(.secondary):not(.pill-outline):not(.history-tab):not(.plan-switch-pill):not(.qty-btn):not(.nav-menu-btn):not(.checkout-modal-media-nav):not([class*="close"]):not([class*="thumb"]):not(.public-nav-icon-button) {
+  background-size: 220% 100% !important;
+  background-position: 0% 50%;
+  animation: au-shimmer 7s ease-in-out infinite alternate;
+  will-change: transform;
+}
+html .sh-theme .btn-primary:hover,
+html .sh-theme .public-account-action.pill-outline:last-child:hover,
+html .sh-theme .how-it-works-cta a:hover { animation-duration: 1.6s; }
+@keyframes au-shimmer { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+
+/* ghost buttons: the kelp fill slides in from the left */
+html .sh-theme .btn-secondary,
+html .sh-theme button.secondary {
+  background-image: linear-gradient(90deg, var(--au-kelp-hi), var(--au-kelp-hi)) !important;
+  background-repeat: no-repeat !important;
+  background-size: 0% 100% !important;
+  background-position: 0 0 !important;
+  transition: background-size 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+html .sh-theme .btn-secondary:hover,
+html .sh-theme button.secondary:hover { background-size: 100% 100% !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  html .sh-theme .btn-primary,
+  html .sh-theme .public-account-action.pill-outline:last-child { animation: none; }
+}
+
+/* =====================================================================
+   FOOTER (final) -- modelled on the reactbits-pro "footer-8" look:
+   statement left, link columns with a hairline above each heading,
+   a huge OUTLINED wordmark cropped by the bottom bar, copyright + link row
+   ===================================================================== */
+html .sh-theme .site-footer {
+  background: var(--au-deep) !important;
+  margin: 56px 16px 16px;
+  padding: 72px 40px 0;
+  border-radius: 24px;
+  overflow: hidden;
+}
+html .sh-theme .site-footer-grid {
+  max-width: 1440px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  column-gap: 40px;
+  row-gap: 40px;
+  align-items: start;
+}
+/* statement on the left */
+html .sh-theme .site-footer-brand { display: flex; flex-direction: column; gap: 22px; max-width: 380px; }
+html .sh-theme .site-footer-brand .brand { order: 2; margin: 0 !important; }
+html .sh-theme .site-footer-tagline {
+  order: 1;
+  max-width: 340px;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+}
+/* link columns: a hairline on top, white heading, silver links */
+html .sh-theme .site-footer-col { gap: 12px; border-top: 1px solid var(--au-line); padding-top: 28px; }
+html .sh-theme .site-footer-heading {
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  color: #ffffff;
+  margin: 0 0 8px;
+}
+html .sh-theme .site-footer-col a { font-size: 18px; color: var(--au-silver); letter-spacing: -0.005em; }
+html .sh-theme .site-footer-col a:hover { color: #ffffff; text-decoration: none; }
+
+/* huge outlined wordmark, only its top part shows, fading out into the bottom bar */
+html .sh-theme .site-footer-watermark-wrap {
+  display: block;
+  position: relative;
+  height: clamp(110px, 17vw, 260px);
+  margin-top: 48px;
+  overflow: hidden;
+  text-align: center;
+  -webkit-mask-image: linear-gradient(180deg, #000 30%, transparent 98%);
+  mask-image: linear-gradient(180deg, #000 30%, transparent 98%);
+}
+html .sh-theme .site-footer-watermark {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(5rem, 21vw, 19rem);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: none !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  -webkit-text-stroke: 1.5px rgba(237, 255, 254, 0.38);
+  opacity: 1 !important;
+  transform: none;
+}
+html .sh-theme .site-footer-bottom {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 26px 0 30px;
+  border-top: 1px solid var(--au-line) !important;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  font-size: 15px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--au-silver);
+}
+html .sh-theme .site-footer-bottom a { color: var(--au-silver); text-decoration: none; }
+html .sh-theme .site-footer-bottom a:hover { color: #ffffff; }
+
+@media (max-width: 960px) {
+  html .sh-theme .site-footer { margin: 40px 8px 8px; padding: 48px 20px 0; border-radius: 18px; }
+  html .sh-theme .site-footer-grid { grid-template-columns: 1fr 1fr; }
+  html .sh-theme .site-footer-brand { grid-column: 1 / -1; max-width: none; }
+  html .sh-theme .site-footer-bottom { flex-direction: column; align-items: flex-start; gap: 8px; }
+}
+
+/* wordmark: sized so all letters fit the footer width, a clearer outline */
+html .sh-theme .site-footer-watermark {
+  font-size: clamp(3.4rem, 15.2vw, 14rem) !important;
+  letter-spacing: -0.01em !important;
+  -webkit-text-stroke: 1.5px rgba(237, 255, 254, 0.5);
+}
+html .sh-theme .site-footer-watermark-wrap { height: clamp(90px, 13vw, 200px); }
+
+/* =====================================================================
+   FORMS / CONTACT -- readable labels, inputs and the address block
+   ===================================================================== */
+html body.public-site-active .sh-theme .contact-info-row { margin: 8px 0 28px; }
+html body.public-site-active .sh-theme .contact-info-item {
+  background: var(--au-kelp) !important;
+  border: 0 !important;
+  border-radius: 16px;
+  box-shadow: none !important;
+  padding: 22px 36px;
+  text-align: center;
+  color: var(--au-silver) !important;
+  font-size: 15px;
+}
+html body.public-site-active .sh-theme .contact-info-item b {
+  display: block;
+  color: #ffffff !important;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+/* the form panel is one raised surface; the inner card stops being a second box */
+html .sh-theme .checkout-panel { background: var(--au-kelp); padding: 40px; }
+html .sh-theme .checkout-panel > .card { background: transparent !important; padding: 0 !important; box-shadow: none !important; }
+html .sh-theme .field label,
+html .sh-theme .field > span,
+html .sh-theme label {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+html .sh-theme .field .hint,
+html .sh-theme .field small { color: var(--au-silver); }
+html .sh-theme input,
+html .sh-theme select,
+html .sh-theme textarea {
+  background: var(--au-deep) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border-radius: 6px !important;
+  font-size: 16px;
+}
+html .sh-theme input::placeholder,
+html .sh-theme textarea::placeholder { color: #8fa6a4 !important; -webkit-text-fill-color: #8fa6a4; opacity: 1; }
+html .sh-theme input:focus,
+html .sh-theme select:focus,
+html .sh-theme textarea:focus { border-color: #cbfffc !important; box-shadow: 0 0 0 1px #cbfffc !important; }
+html .sh-theme input:-webkit-autofill { -webkit-text-fill-color: #ffffff; box-shadow: 0 0 0 100px var(--au-deep) inset; }
+
+/* nav labels never wrap onto two lines; tighter spacing on mid-size screens */
+html .sh-theme .nav-link { white-space: nowrap; }
+@media (max-width: 1180px) {
+  html .sh-theme .top-nav-row { gap: 16px; }
+  html .sh-theme .nav-link { margin: 0 8px; letter-spacing: 0.1em; }
+  html .sh-theme .public-online-status { display: none; }
+}
+
+/* =====================================================================
+   MAGIC POSTER CARD -- editorial poster tile: full-bleed image, big title,
+   lavender price, stepper + gradient "Add to cart", numbered steps
+   ===================================================================== */
+html .sh-theme .magic-art-gallery { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
+html body.public-site-active .sh-theme .magic-art-card {
+  background: var(--au-kelp) !important;
+  padding: 0 !important;
+  overflow: hidden;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+html .sh-theme .magic-art-card-media { position: relative; overflow: hidden; }
+html .sh-theme .magic-art-lightbox-trigger { display: block; position: relative; }
+html .sh-theme .magic-art-lightbox-trigger img {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border: 0;
+  border-radius: 0;
+  transition: transform 0.9s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+html .sh-theme .magic-art-card:hover .magic-art-lightbox-trigger img { transform: scale(1.04); }
+/* gradient fade so the title area reads cleanly under the image */
+html .sh-theme .magic-art-card-media::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 38%;
+  background: linear-gradient(180deg, transparent, var(--au-kelp));
+  pointer-events: none;
+}
+html .sh-theme .magic-art-badge {
+  top: 16px;
+  left: 16px;
+  background: rgba(1, 29, 28, 0.62) !important;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: #ffffff !important;
+  border-radius: 6px;
+  box-shadow: none;
+  padding: 7px 11px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* text block */
+html .sh-theme .magic-art-card-title {
+  margin: 4px 28px 0;
+  font-size: clamp(1.7rem, 2.4vw, 2.2rem);
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  color: #ffffff;
+  position: relative;
+  z-index: 1;
+}
+html .sh-theme .magic-art-card-camera-link {
+  align-self: flex-start;
+  margin: 14px 28px 0 !important;
+  color: #cbfffc !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(203, 255, 252, 0.4) !important;
+  padding: 0 0 3px !important;
+  background: none !important;
+}
+html .sh-theme .magic-art-card-camera-link:hover { color: #ffffff !important; border-bottom-color: #ffffff !important; text-decoration: none; }
+html .sh-theme .magic-art-card-description { margin: 14px 28px 0; font-size: 15px; color: var(--au-silver); line-height: 1.45; }
+
+/* price + quantity + add to cart */
+html .sh-theme .magic-art-buy {
+  display: grid !important;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 14px 16px !important;
+  margin: 22px 28px 0 !important;
+}
+html .sh-theme .magic-art-price {
+  font-size: 2.2rem;
+  font-weight: 500 !important;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--au-lavender);
+}
+html .sh-theme .magic-art-price span { color: var(--au-silver) !important; font-size: 14px !important; letter-spacing: 0; margin-left: 8px !important; }
+html .sh-theme .magic-art-qty {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0 !important;
+  border: 1px solid var(--au-line);
+  border-radius: 6px;
+  overflow: hidden;
+  color: #ffffff;
+}
+html .sh-theme .magic-art-qty > span { min-width: 34px !important; font-weight: 500; }
+html .sh-theme .magic-art-qty-btn {
+  width: 34px !important;
+  height: 36px !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  font-size: 16px;
+}
+html .sh-theme .magic-art-qty-btn:hover { background: var(--au-kelp-hi) !important; }
+html .sh-theme .magic-art-add {
+  grid-column: 1 / -1;
+  width: 100% !important;
+  padding: 14px 18px !important;
+  background: var(--au-aurora) !important;
+  background-size: 220% 100% !important;
+  color: #222222 !important;
+  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  border-radius: 6px !important;
+}
+
+/* how it works: numbered steps */
+html .sh-theme .magic-art-card-steps {
+  margin: 26px 28px 28px;
+  padding-top: 22px;
+  border-top: 1px solid var(--au-line);
+}
+html .sh-theme .magic-art-card-steps-title { font-size: 11px; font-weight: 500; letter-spacing: 0.14em; color: var(--au-silver); margin-bottom: 14px; }
+html .sh-theme .magic-art-card-steps ol { list-style: none; counter-reset: step; padding: 0; margin: 0; display: grid; gap: 12px; }
+html .sh-theme .magic-art-card-steps li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 40px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--au-silver);
+}
+html .sh-theme .magic-art-card-steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: -1px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(3, 81, 75, 0.55);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* poster card buttons: beat the generic button rules */
+html body.public-site-active .sh-theme button.magic-art-card-camera-link {
+  background: none !important;
+  background-image: none !important;
+  animation: none;
+  color: #cbfffc !important;
+  -webkit-text-fill-color: #cbfffc;
+  border-radius: 0 !important;
+  width: auto !important;
+  box-shadow: none !important;
+}
+html body.public-site-active .sh-theme button.magic-art-card-camera-link:hover { color: #ffffff !important; -webkit-text-fill-color: #ffffff; }
+html body.public-site-active .sh-theme button.secondary.magic-art-add {
+  background: var(--au-aurora) !important;
+  background-image: var(--au-aurora) !important;
+  background-size: 220% 100% !important;
+  background-position: 0% 50% !important;
+  color: #222222 !important;
+  -webkit-text-fill-color: #222222;
+  animation: au-shimmer 7s ease-in-out infinite alternate;
+}
+html body.public-site-active .sh-theme button.secondary.magic-art-qty-btn {
+  background: transparent !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+}
+html body.public-site-active .sh-theme button.secondary.magic-art-qty-btn:hover { background: var(--au-kelp-hi) !important; }
+
+/* id-level specificity: the generic gradient-button rule has a long :not() chain */
+html body.public-site-active .sh-theme button.magic-art-card-camera-link:not(#_a):not(#_b) {
+  background: none !important;
+  background-image: none !important;
+  color: #cbfffc !important;
+  -webkit-text-fill-color: #cbfffc;
+  animation: none;
+  padding: 0 0 3px !important;
+}
+
+/* =====================================================================
+   LOG IN / REGISTER MODAL -- one calm surface, uppercase tabs, text links,
+   recessed fields, a single gradient submit button
+   ===================================================================== */
+html body.public-site-active .sh-theme .auth-modal-backdrop {
+  background: rgba(1, 20, 19, 0.74);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+html body.public-site-active .sh-theme .auth-modal-card {
+  background: var(--au-kelp);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  box-shadow: none;
+  padding: 44px 44px 36px;
+  max-width: 460px;
+  color: #ffffff;
+}
+html body.public-site-active .sh-theme .auth-modal-card.auth-modal-card--register { max-width: 880px; padding: 44px 48px 36px; }
+
+/* heading block */
+html .sh-theme .auth-modal-card .brand { margin-bottom: 28px !important; }
+html .sh-theme .auth-modal-card .brand-mark { width: 44px; height: 44px; border-radius: 10px; }
+html .sh-theme .auth-modal-card .brand-name { font-size: 17px; font-weight: 500; letter-spacing: -0.02em; }
+html .sh-theme .auth-modal-card > h1 {
+  font-size: clamp(2rem, 4vw, 2.7rem);
+  line-height: 1;
+  letter-spacing: -0.045em;
+  font-weight: 500;
+  margin: 0 0 12px;
+}
+html .sh-theme .auth-modal-card > .subtitle,
+html .sh-theme .auth-modal-card > p.subtitle { color: var(--au-silver); font-size: 15px; line-height: 1.45; margin: 0 0 26px; }
+
+/* close button: small square */
+html body.public-site-active .sh-theme .auth-modal-close {
+  top: 18px;
+  right: 18px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(3, 81, 75, 0.5) !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  font-size: 22px;
+  box-shadow: none !important;
+}
+html body.public-site-active .sh-theme .auth-modal-close:hover { background: var(--au-kelp-hi) !important; }
+
+/* Password / OTP tabs: plain uppercase tabs with an underline on the active one */
+html body.public-site-active .sh-theme .auth-modal-card > div[style*="flex"]:has(> button) { gap: 24px !important; justify-content: flex-start !important; border-bottom: 1px solid var(--au-line); margin-bottom: 26px !important; }
+html body.public-site-active .sh-theme .auth-modal-card > div:has(> button.secondary) > button,
+html body.public-site-active .sh-theme .auth-modal-card > div:has(> button:not(.secondary)) > button:not(#_a):not(#_b) {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  width: auto !important;
+  padding: 10px 0 12px !important;
+  margin-bottom: -1px;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--au-silver) !important;
+  -webkit-text-fill-color: var(--au-silver);
+  animation: none;
+}
+html body.public-site-active .sh-theme .auth-modal-card > div:has(> button.secondary) > button:not(.secondary):not(#_a):not(#_b) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  border-bottom-color: #cbfffc !important;
+}
+
+/* fields */
+html .sh-theme .auth-modal-card .field { margin-bottom: 18px; }
+html .sh-theme .auth-modal-card .field > label,
+html .sh-theme .auth-modal-card label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--au-silver);
+  margin-bottom: 8px;
+  display: block;
+}
+html .sh-theme .auth-modal-card input {
+  height: 52px;
+  padding: 0 16px;
+  font-size: 16px;
+}
+html .sh-theme .auth-modal-card .hint { color: var(--au-silver); font-size: 13px; margin-top: 8px; }
+html .sh-theme .auth-modal-card .password-eye-btn:not(#_a):not(#_b) {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: var(--au-silver) !important;
+  -webkit-text-fill-color: var(--au-silver);
+  width: 36px;
+  height: 36px;
+  right: 8px;
+  border-radius: 6px;
+  animation: none;
+}
+html .sh-theme .auth-modal-card .password-eye-btn:hover { color: #ffffff !important; background: rgba(255, 255, 255, 0.08) !important; }
+
+/* gender / date-of-birth dropdown triggers match the text fields */
+html body.public-site-active .sh-theme .auth-modal-card .theme-select-trigger:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .auth-modal-card .theme-date-trigger:not(#_a):not(#_b) {
+  height: 52px;
+  min-height: 52px;
+  padding: 0 16px;
+  background: var(--au-deep) !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  animation: none;
+}
+html body.public-site-active .sh-theme .auth-modal-card .theme-select-trigger:hover,
+html body.public-site-active .sh-theme .auth-modal-card .theme-select-trigger.open,
+html body.public-site-active .sh-theme .auth-modal-card .theme-date-trigger:hover,
+html body.public-site-active .sh-theme .auth-modal-card .theme-date-trigger.open { border-color: #cbfffc !important; box-shadow: 0 0 0 1px #cbfffc !important; }
+html .sh-theme .auth-modal-card .theme-select-placeholder,
+html .sh-theme .auth-modal-card .theme-date-trigger .placeholder { color: #8fa6a4 !important; -webkit-text-fill-color: #8fa6a4; }
+html .sh-theme .auth-modal-card .theme-date-chevron { color: var(--au-silver); }
+
+/* dropdown / calendar panels */
+html .sh-theme .theme-select-panel,
+html .sh-theme .theme-date-panel {
+  background: var(--au-deep) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45) !important;
+  color: #ffffff;
+}
+html body.public-site-active .sh-theme .theme-select-panel button:not(#_a),
+html body.public-site-active .sh-theme .theme-date-panel button:not(#_a) {
+  background: transparent !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  border: 0 !important;
+  box-shadow: none !important;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 400;
+  animation: none;
+}
+html body.public-site-active .sh-theme .theme-select-panel button:hover,
+html body.public-site-active .sh-theme .theme-select-panel button.highlighted,
+html body.public-site-active .sh-theme .theme-date-panel button:hover:not(:disabled) { background: rgba(3, 81, 75, 0.7) !important; }
+html body.public-site-active .sh-theme .theme-select-panel button.selected,
+html body.public-site-active .sh-theme .theme-date-panel button.selected {
+  background: var(--au-aurora) !important;
+  color: #222222 !important;
+  -webkit-text-fill-color: #222222;
+}
+html .sh-theme .theme-date-panel .outside { opacity: 0.35; }
+html .sh-theme .theme-date-weekdays span { color: var(--au-silver); }
+
+/* submit + links */
+html .sh-theme .auth-modal-card form > button[type="submit"],
+html .sh-theme .auth-modal-card button[type="submit"] {
+  height: 54px;
+  text-transform: uppercase;
+  font-size: 13px !important;
+  letter-spacing: 0.12em;
+  margin-top: 8px;
+}
+html body.public-site-active .sh-theme .auth-modal-card .link-out:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .auth-modal-card .auth-modal-link:not(#_a):not(#_b) {
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: #cbfffc !important;
+  -webkit-text-fill-color: #cbfffc;
+  padding: 0 !important;
+  width: auto !important;
+  border-radius: 0 !important;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-color: rgba(203, 255, 252, 0.4);
+  animation: none;
+}
+html body.public-site-active .sh-theme .auth-modal-card .link-out:hover,
+html body.public-site-active .sh-theme .auth-modal-card .auth-modal-link:hover { color: #ffffff !important; -webkit-text-fill-color: #ffffff; text-decoration-color: #ffffff; }
+
+@media (max-width: 720px) {
+  html body.public-site-active .sh-theme .auth-modal-card,
+  html body.public-site-active .sh-theme .auth-modal-card.auth-modal-card--register { padding: 32px 22px 26px; border-radius: 16px; }
+}
+
+/* dropdown + calendar panels are portals/popovers with their own light rules; make them match */
+html body.public-site-active .sh-theme .theme-select-panel:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .theme-date-panel:not(#_a):not(#_b),
+html body.public-site-active .theme-select-panel:not(#_a):not(#_b),
+html body.public-site-active .theme-date-panel:not(#_a):not(#_b) {
+  background: #011d1c !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5) !important;
+  color: #ffffff !important;
+}
+html body.public-site-active .theme-select-panel button:not(#_a):not(#_b),
+html body.public-site-active .theme-date-panel button:not(#_a):not(#_b) {
+  background: transparent !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  border: 0 !important;
+  box-shadow: none !important;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 400;
+  animation: none;
+}
+html body.public-site-active .theme-select-panel button:hover:not(#_a),
+html body.public-site-active .theme-select-panel button.highlighted:not(#_a),
+html body.public-site-active .theme-date-panel button:hover:not(:disabled):not(#_a) { background: rgba(3, 81, 75, 0.75) !important; }
+html body.public-site-active .theme-select-panel button.selected:not(#_a) { color: #cbfffc !important; -webkit-text-fill-color: #cbfffc; background: rgba(3, 81, 75, 0.5) !important; }
+html body.public-site-active .theme-date-panel button.selected:not(#_a) {
+  background: linear-gradient(90deg, #cbfffc, #fde9ff) !important;
+  color: #222222 !important;
+  -webkit-text-fill-color: #222222;
+}
+html body.public-site-active .theme-date-panel button:disabled { opacity: 0.35; }
+html body.public-site-active .theme-date-panel button.today:not(.selected) { box-shadow: inset 0 0 0 1px #cbfffc !important; }
+html body.public-site-active .theme-date-weekdays span,
+html body.public-site-active .theme-date-header { color: #bbc7c6; }
+html body.public-site-active .theme-select-panel svg { color: #cbfffc; }
+
+/* =====================================================================
+   REGISTER MODAL -- compact: three columns, tighter spacing, always fits the screen
+   ===================================================================== */
+html body.public-site-active .sh-theme .auth-modal-backdrop:has(.auth-modal-card--register) { align-items: flex-start; overflow-y: auto; padding: 16px; }
+html body.public-site-active .sh-theme .auth-modal-card.auth-modal-card--register {
+  width: min(1000px, calc(100vw - 32px));
+  max-width: 1000px;
+  max-height: none;
+  margin: auto;
+  padding: 28px 36px 24px;
+  overflow: visible;
+}
+html .sh-theme .auth-modal-card--register .brand { margin-bottom: 14px !important; }
+html .sh-theme .auth-modal-card--register .brand-mark { width: 38px; height: 38px; }
+html .sh-theme .auth-modal-card--register > h1 { font-size: 2rem; margin-bottom: 6px; }
+html .sh-theme .auth-modal-card--register > .subtitle { margin: 0 0 18px !important; font-size: 14px; max-width: none; }
+html body.public-site-active .sh-theme .auth-modal-card--register .auth-modal-close { top: 14px; right: 14px; width: 32px; height: 32px; }
+html .sh-theme .auth-register-form { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 18px; }
+html .sh-theme .auth-register-form .field { margin-bottom: 0; }
+html .sh-theme .auth-register-form .field label { margin-bottom: 6px; font-size: 11px; }
+html .sh-theme .auth-register-form input { height: 46px; min-height: 46px !important; }
+html body.public-site-active .sh-theme .auth-register-form .theme-select-trigger:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .auth-register-form .theme-date-trigger:not(#_a):not(#_b) { height: 46px; min-height: 46px !important; }
+html .sh-theme .auth-register-form .hint { margin-top: 5px; font-size: 12px; }
+html .sh-theme .auth-register-form > button[type="submit"] { height: 48px; min-height: 48px; margin-top: 6px; grid-column: 1 / -1; }
+html .sh-theme .auth-modal-card--register > .hint:last-child { margin: 12px 0 0 !important; }
+@media (max-width: 900px) { html .sh-theme .auth-register-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  html body.public-site-active .sh-theme .auth-modal-card.auth-modal-card--register { padding: 24px 18px 20px; }
+  html .sh-theme .auth-register-form { grid-template-columns: 1fr; }
+}
+
+/* =====================================================================
+   STANDALONE AUTH PAGES -- /login, /register, /forgot-password, /reset-password
+   (they all share .login-page). Same Auros look as the public site: deep teal canvas with the
+   particle waves behind, a two-panel frame (kelp showcase + recessed form), uppercase labels,
+   aurora submit button. Remove this block to go back to the old light card.
+   ===================================================================== */
+html body .login-page {
+  --au-abyss: #012624; --au-deep: #011d1c; --au-kelp: #003734; --au-kelp-hi: #05443f;
+  --au-silver: #bbc7c6; --au-mist: #edfffe; --au-line: rgba(255, 255, 255, 0.12);
+  --au-aurora: linear-gradient(90deg, rgb(203, 255, 252) 0%, rgb(237, 255, 254) 26%, rgb(255, 253, 250) 48%, rgb(250, 209, 255) 89%);
+  --brand-accent: #cbfffc;
+  --brand-accent-2: #fad1ff;
+  --text: #ffffff;
+  --text-dim: var(--au-silver);
+  --panel: var(--au-deep);
+  --panel-raised: var(--au-kelp);
+  --panel-border: var(--au-line);
+  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--au-abyss) !important;
+  color: #ffffff;
+  font-family: var(--font-ui);
+  color-scheme: dark;
+}
+html:has(.login-page) body { background: #012624 !important; }
+html body .login-page::before,
+html body .login-page .wave-backdrop,
+html body .login-page .login-page__glow { display: none !important; }
+html body .login-page .particle-waves { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+html body .login-page .particle-waves canvas { display: block; width: 100%; height: 100%; }
+
+/* frame */
+html body .login-page .login-frame {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  background: var(--au-deep);
+  box-shadow: none;
+}
+html body .login-page .login-showcase {
+  background: var(--au-kelp) !important;
+  padding: 44px 48px;
+}
+html body .login-page .login-showcase::before { display: none; }
+html body .login-page .login-showcase::after { opacity: 0.12; }
+html body .login-page .login-brand .brand-mark { border-radius: 10px; }
+html body .login-page .login-brand__name { font-family: var(--font-ui); font-weight: 500; font-size: 18px; letter-spacing: -0.02em; }
+html body .login-page .login-brand__label,
+html body .login-page .login-showcase__footer { color: var(--au-silver); letter-spacing: 0.12em; text-transform: uppercase; font-size: 11px; }
+html body .login-page .login-eyebrow {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--au-silver);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+html body .login-page .login-showcase h2 {
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 4.2vw, 3.6rem);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.045em;
+  color: #ffffff;
+}
+html body .login-page .login-showcase p { color: var(--au-silver); font-size: 16px; line-height: 1.45; }
+html body .login-page .login-benefits { gap: 12px; }
+html body .login-page .login-benefits span { color: #ffffff; font-weight: 400; font-size: 15px; }
+html body .login-page .login-benefits svg {
+  background: rgba(3, 81, 75, 0.6);
+  border-radius: 6px;
+  padding: 7px;
+  width: 32px;
+  height: 32px;
+  color: #ffffff;
+}
+
+/* form side */
+html body .login-page .login-auth { background: var(--au-deep) !important; color: #ffffff; padding: 44px 52px; }
+html body .login-page .login-auth__badge {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--au-silver);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+html body .login-page .login-auth__heading p { color: var(--au-silver); font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; }
+html body .login-page .login-auth h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 3.4vw, 2.8rem);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.045em;
+  color: #ffffff;
+}
+html body .login-page .login-auth__icon {
+  background: rgba(3, 81, 75, 0.6);
+  color: #ffffff;
+  border-radius: 6px;
+  box-shadow: none;
+}
+html body .login-page .login-auth__subtitle { color: var(--au-silver); font-size: 15px; line-height: 1.45; }
+
+/* recovery steps */
+html body .login-page .recovery-progress span i {
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--au-line);
+  color: var(--au-silver);
+}
+html body .login-page .recovery-progress span.active i {
+  background: #cbfffc;
+  border-color: #cbfffc;
+  color: #012624;
+}
+html body .login-page .recovery-progress span::before,
+html body .login-page .recovery-progress span::after { background: var(--au-line); }
+html body .login-page .recovery-progress span.active::before,
+html body .login-page .recovery-progress span.active::after { background: #cbfffc; }
+
+/* fields */
+html body .login-page .field label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--au-silver);
+}
+html body .login-page .login-input {
+  background: var(--au-kelp);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  color: var(--au-silver);
+  box-shadow: none;
+}
+html body .login-page .login-input:focus-within {
+  border-color: #cbfffc;
+  box-shadow: 0 0 0 1px #cbfffc;
+  background: var(--au-kelp);
+  color: #cbfffc;
+}
+html body .login-page .login-input input,
+html body .login-page .login-input input:focus,
+html body .login-page input {
+  background: transparent !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  box-shadow: none !important;
+}
+html body .login-page .login-input input::placeholder,
+html body .login-page input::placeholder { color: #8fa6a4; -webkit-text-fill-color: #8fa6a4; }
+html body .login-page input:-webkit-autofill { -webkit-text-fill-color: #ffffff; box-shadow: 0 0 0 100px #003734 inset !important; }
+html body .login-page .hint,
+html body .login-page .login-form__meta { color: var(--au-silver); }
+
+/* buttons + links */
+html body .login-page .login-submit {
+  background: var(--au-aurora) !important;
+  background-image: var(--au-aurora) !important;
+  color: #222222 !important;
+  -webkit-text-fill-color: #222222;
+  border: 0 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  height: 52px;
+}
+html body .login-page .login-submit:hover { filter: brightness(1.05); }
+html body .login-page .login-secondary,
+html body .login-page button.secondary {
+  background: transparent !important;
+  color: #ffffff !important;
+  border: 1px solid var(--au-line) !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+html body .login-page .login-secondary:hover:not(:disabled) { background: var(--au-kelp) !important; }
+html body .login-page .password-eye-btn { background: transparent !important; box-shadow: none !important; color: var(--au-silver) !important; }
+html body .login-page .login-auth__footer,
+html body .login-page .login-auth__footer span { color: var(--au-silver); }
+html body .login-page a,
+html body .login-page .link-out,
+html body .login-page .login-auth__footer a {
+  color: #cbfffc;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-color: rgba(203, 255, 252, 0.4);
+}
+html body .login-page a:hover { color: #ffffff; text-decoration-color: #ffffff; }
+html body .login-page .error-banner { background: rgba(255, 99, 99, 0.12); color: #ffd9d9; border: 1px solid rgba(255, 99, 99, 0.35); border-radius: 6px; }
+html body .login-page .recovery-success { color: #ffffff; }
+
+/* Password / OTP switch on the login page: underline tabs */
+html body .login-page .login-mode-switch { background: transparent; border: 0; border-bottom: 1px solid var(--au-line); border-radius: 0; padding: 0; gap: 24px; }
+html body .login-page .login-mode-switch button {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  color: var(--au-silver) !important;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 10px 0 12px;
+  width: auto;
+}
+html body .login-page .login-mode-switch button.active { color: #ffffff !important; border-bottom-color: #cbfffc !important; }
+
+@media (max-width: 900px) {
+  html body .login-page .login-showcase { display: none; }
+  html body .login-page .login-auth { padding: 32px 22px; }
+}
+
+/* =====================================================================
+   CART (/magic-poster-cart) -- two columns: items + delivery on the left,
+   a sticky order summary with the Pay button on the right
+   ===================================================================== */
+html .sh-theme .cart-page { max-width: 1120px; margin: 0 auto; padding: 8px 0 72px; }
+html .sh-theme .cart-page > .section-heading { text-align: left; font-size: clamp(2.4rem, 4.6vw, 4rem); letter-spacing: -0.045em; margin: 0 0 32px !important; }
+
+html .sh-theme .cart-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.75fr); gap: 24px; align-items: start; }
+html .sh-theme .cart-main { display: grid; gap: 24px; min-width: 0; }
+
+/* login gate / order placed / empty */
+html body.public-site-active .sh-theme .cart-gate {
+  max-width: 520px;
+  margin: 72px auto;
+  padding: 48px 40px;
+  text-align: center;
+  background: var(--au-kelp) !important;
+}
+html .sh-theme .cart-gate h1 { font-size: clamp(1.8rem, 3.4vw, 2.5rem); line-height: 1; letter-spacing: -0.045em; margin: 0 0 14px; }
+html .sh-theme .cart-gate .subtitle { margin: 0 0 24px; font-size: 16px; color: var(--au-silver); }
+html .sh-theme .cart-gate button { width: 100%; height: 52px; text-transform: uppercase; font-size: 13px; letter-spacing: 0.12em; }
+html body.public-site-active .sh-theme .cart-empty { background: var(--au-kelp) !important; padding: 56px 24px; }
+
+/* cards */
+html body.public-site-active .sh-theme .cart-items,
+html body.public-site-active .sh-theme .cart-address,
+html body.public-site-active .sh-theme .cart-summary { background: var(--au-kelp) !important; padding: 8px 32px 12px; border: 0; box-shadow: none; }
+html .sh-theme .cart-address { padding: 32px !important; }
+html .sh-theme .cart-address h2 { font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--au-silver); margin: 0 0 20px; }
+
+/* line items */
+html .sh-theme .cart-item {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto auto;
+  grid-template-areas: "img info qty total" "img info remove remove";
+  gap: 4px 20px;
+  align-items: center;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--au-line);
+}
+html .sh-theme .cart-item:last-child { border-bottom: 0; }
+html .sh-theme .cart-item-img { grid-area: img; width: 76px; height: 96px; object-fit: cover; border-radius: 10px; }
+html .sh-theme .cart-item-info { grid-area: info; min-width: 0; }
+html .sh-theme .cart-item-name { font-size: 1.3rem; font-weight: 500; letter-spacing: -0.03em; line-height: 1.1; color: #ffffff; }
+html .sh-theme .cart-item-info .hint { margin-top: 6px; color: var(--au-silver); }
+html .sh-theme .cart-qty { grid-area: qty; display: inline-flex !important; align-items: center; border: 1px solid var(--au-line); border-radius: 6px; overflow: hidden; }
+html .sh-theme .cart-qty-value { min-width: 34px; text-align: center; font-weight: 500; color: #fff; }
+html body.public-site-active .sh-theme button.secondary.cart-qty-btn:not(#_a) {
+  width: 34px !important;
+  height: 36px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  font-size: 16px;
+}
+html body.public-site-active .sh-theme button.secondary.cart-qty-btn:hover { background: var(--au-kelp-hi) !important; }
+html .sh-theme .cart-item-total { grid-area: total; min-width: 84px; text-align: right; font-size: 1.5rem; font-weight: 500; letter-spacing: -0.03em; color: var(--au-lavender); }
+html body.public-site-active .sh-theme button.secondary.cart-remove:not(#_a) {
+  grid-area: remove;
+  justify-self: end;
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  padding: 2px 0 !important;
+  width: auto !important;
+  color: var(--au-silver) !important;
+  -webkit-text-fill-color: var(--au-silver);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+html body.public-site-active .sh-theme button.secondary.cart-remove:hover { color: #ff9a9a !important; -webkit-text-fill-color: #ff9a9a; }
+
+/* delivery addresses */
+html .sh-theme .cart-address label.card {
+  background: var(--au-deep) !important;
+  border: 1px solid var(--au-line) !important;
+  border-radius: 12px;
+  padding: 18px 20px;
+  transition: border-color 0.2s;
+}
+html .sh-theme .cart-address label.card:has(input:checked) { border-color: #cbfffc !important; box-shadow: 0 0 0 1px #cbfffc !important; }
+html .sh-theme .cart-address input[type="radio"] { accent-color: #cbfffc; width: 18px; height: 18px; height: auto; background: transparent !important; }
+html .sh-theme .cart-address label.card div { color: #ffffff; }
+
+/* summary */
+html body.public-site-active .sh-theme .cart-summary { position: sticky; top: 104px; padding: 32px !important; }
+html .sh-theme .cart-summary-row { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; font-size: 15px; color: var(--au-silver); border-bottom: 1px solid var(--au-line); }
+html .sh-theme .cart-summary-row span:last-child { color: #ffffff; }
+html .sh-theme .cart-summary-total { border-bottom: 0; padding: 22px 0 8px; align-items: baseline; }
+html .sh-theme .cart-summary-total span:first-child { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; }
+html .sh-theme .cart-summary-total span:last-child { font-size: 2.6rem; font-weight: 500; letter-spacing: -0.045em; line-height: 1; color: var(--au-lavender); }
+html .sh-theme .cart-pay { width: 100%; height: 54px; margin-top: 18px; text-transform: uppercase; font-size: 13px; letter-spacing: 0.12em; }
+html .sh-theme .cart-pay:disabled { opacity: 0.45; filter: grayscale(0.4); cursor: not-allowed; }
+
+@media (max-width: 900px) {
+  html .sh-theme .cart-layout { grid-template-columns: 1fr; }
+  html body.public-site-active .sh-theme .cart-summary { position: static; }
+  html .sh-theme .cart-item { grid-template-columns: 64px minmax(0, 1fr); grid-template-areas: "img info" "qty total" "remove remove"; }
+  html .sh-theme .cart-item-img { width: 64px; height: 80px; }
+  html .sh-theme .cart-item-total { text-align: right; }
+  html body.public-site-active .sh-theme .cart-items { padding: 4px 18px 8px; }
+}
+
+/* =====================================================================
+   CARD PURCHASE HISTORY (Shop page, below the plans) -- full-width panel,
+   readable rows, a two-column detail view that no longer gets squeezed
+   ===================================================================== */
+html body.public-site-active .sh-theme .checkout-panel:has(.request-row-wrap),
+html body.public-site-active .sh-theme .checkout-panel:has(> .hint + .subtitle) {
+  width: 100%;
+  max-width: 1120px !important;
+  margin: 40px auto 0 !important;
+  padding: 36px 40px 28px;
+  background: var(--au-kelp) !important;
+}
+html .sh-theme .checkout-panel:has(.request-row-wrap) > .hint,
+html .sh-theme .checkout-panel:has(> .hint + .subtitle) > .hint {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--au-silver);
+  margin: 0 0 18px !important;
+}
+
+/* each purchase row */
+html .sh-theme .request-row-wrap { border-bottom: 1px solid var(--au-line); }
+html .sh-theme .request-row-wrap:last-child { border-bottom: 0; }
+html .sh-theme .request-row-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 12px;
+  margin: 0 -12px;
+  border-radius: 12px;
+}
+html .sh-theme .request-row-toggle:hover { background: rgba(3, 81, 75, 0.35); }
+html .sh-theme .request-row-toggle > span:first-child { flex: 1; min-width: 0; font-size: 1.35rem; font-weight: 500; letter-spacing: -0.03em; color: #ffffff; line-height: 1.15; }
+html .sh-theme .request-row-toggle > span:first-child small,
+html .sh-theme .request-row-toggle > span:first-child .hint,
+html .sh-theme .request-row-toggle > span:first-child code { display: block; margin-top: 6px; font-size: 12px; letter-spacing: 0.08em; color: var(--au-silver); font-weight: 400; }
+html .sh-theme .request-status { color: var(--au-silver); font-size: 13px; letter-spacing: 0.04em; }
+html .sh-theme .request-row-chevron { color: var(--au-silver); }
+html body.public-site-active .sh-theme .card-invoice-button:not(#_a),
+html body.public-site-active .sh-theme .request-row .secondary:not(#_a) {
+  background: transparent !important;
+  background-image: none !important;
+  border: 1px solid var(--au-line) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  border-radius: 6px !important;
+  padding: 8px 14px !important;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+/* expanded detail */
+html .sh-theme .request-row-detail { padding: 8px 0 30px; }
+html .sh-theme .purchase-detail-hero {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(0, 1.15fr);
+  gap: 0;
+  border: 0;
+  border-radius: 16px;
+  background: var(--au-deep);
+  overflow: hidden;
+}
+html .sh-theme .purchase-detail-media {
+  min-height: 340px;
+  gap: 18px;
+  padding: 32px;
+  background: var(--au-deep);
+}
+html .sh-theme .purchase-detail-card-face {
+  width: min(210px, 44%);
+  background: #000;
+  border: 1px solid var(--au-line);
+  border-radius: 10px;
+  box-shadow: none;
+}
+html .sh-theme .purchase-detail-card-face.is-vertical { width: min(150px, 38%); }
+html .sh-theme .purchase-detail-card-face > span { background: rgba(1, 29, 28, 0.8); color: #fff; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 8px; border-radius: 6px; }
+html .sh-theme .purchase-detail-plan { padding: 36px 40px; display: flex; flex-direction: column; justify-content: center; }
+html .sh-theme .purchase-detail-kicker { font-size: 11px; font-weight: 500; letter-spacing: 0.14em; color: var(--au-silver); }
+html .sh-theme .purchase-detail-plan h3 { font-size: clamp(2rem, 3.4vw, 3rem); font-weight: 500; letter-spacing: -0.045em; line-height: 1; margin: 12px 0 0; color: #fff; }
+html .sh-theme .purchase-detail-plan > code { margin-top: 10px; font-size: 12px; color: #cbfffc; letter-spacing: 0.06em; }
+html .sh-theme .purchase-detail-plan > p { font-size: 15px; color: var(--au-silver); line-height: 1.45; margin-top: 14px; }
+html .sh-theme .purchase-detail-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
+html .sh-theme .purchase-detail-meta > div,
+html .sh-theme .purchase-fulfillment-grid > div { background: var(--au-kelp); border: 0; border-radius: 10px; padding: 14px 16px; }
+html .sh-theme .purchase-detail-meta span,
+html .sh-theme .purchase-fulfillment-grid span { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--au-silver); margin-bottom: 6px; }
+html .sh-theme .purchase-detail-meta strong { font-size: 15px; font-weight: 500; color: #fff; white-space: normal; overflow: visible; text-overflow: clip; }
+html .sh-theme .purchase-detail-features span { background: rgba(3, 81, 75, 0.6); color: #cbfffc; font-size: 11px; padding: 6px 10px; border-radius: 6px; letter-spacing: 0.04em; }
+
+/* items / totals / address / fulfilment blocks: three even columns */
+html .sh-theme .purchase-detail-sections { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+html .sh-theme .purchase-detail-section { background: var(--au-deep); border: 0; border-radius: 16px; padding: 24px; }
+html .sh-theme .purchase-detail-section-title { margin-bottom: 18px; color: #cbfffc; }
+html .sh-theme .purchase-detail-section-title > svg { width: 34px; height: 34px; flex-basis: 34px; padding: 8px; border-radius: 6px; background: rgba(3, 81, 75, 0.6); }
+html .sh-theme .purchase-detail-section-title strong { font-size: 12px; letter-spacing: 0.12em; color: #fff; font-weight: 500; }
+html .sh-theme .purchase-detail-section-title span { font-size: 12px; color: var(--au-silver); }
+html .sh-theme .purchase-detail-item { background: var(--au-kelp); border: 0; border-radius: 10px; padding: 10px 12px; }
+html .sh-theme .purchase-detail-item strong { font-size: 14px; color: #fff; }
+html .sh-theme .purchase-detail-item span { font-size: 12px; color: var(--au-silver); }
+html .sh-theme .purchase-detail-item > b { font-size: 14px; color: var(--au-lavender); font-weight: 500; }
+html .sh-theme .purchase-detail-item-image { background: #000; }
+html .sh-theme .purchase-detail-totals > div { font-size: 14px; color: var(--au-silver); padding: 6px 0; display: flex; justify-content: space-between; }
+html .sh-theme .purchase-detail-totals > div:last-child { color: #fff; font-size: 17px; font-weight: 500; border-top: 1px solid var(--au-line); margin-top: 6px; padding-top: 12px; }
+html .sh-theme .purchase-detail-address { font-size: 14px; line-height: 1.55; color: var(--au-silver); }
+html .sh-theme .purchase-fulfillment-grid { gap: 10px; }
+html .sh-theme .purchase-fulfillment-grid strong { font: 500 13px/1.4 var(--font-ui); letter-spacing: 0; color: #fff; }
+html .sh-theme .purchase-detail-date-section { grid-column: 1 / -1; }
+
+@media (max-width: 1000px) {
+  html body.public-site-active .sh-theme .checkout-panel:has(.request-row-wrap) { padding: 24px 18px; }
+  html .sh-theme .purchase-detail-hero { grid-template-columns: 1fr; }
+  html .sh-theme .purchase-detail-media { min-height: 260px; padding: 22px; }
+  html .sh-theme .purchase-detail-plan { padding: 26px 22px; }
+  html .sh-theme .purchase-detail-sections { grid-template-columns: 1fr; }
+  html .sh-theme .request-row-toggle { flex-wrap: wrap; gap: 10px 16px; }
+}
+
+/* history row header: name · qty · Paid on one line, order number + coupon underneath */
+html .sh-theme .request-row-toggle > span:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 12px;
+  row-gap: 8px;
+  text-transform: capitalize;
+}
+html .sh-theme .request-row-toggle > span:first-child > span { font-size: 13px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; margin: 0 !important; color: var(--au-silver); }
+html .sh-theme .request-row-toggle > span:first-child > span[style] { color: #cbfffc !important; }
+html .sh-theme .request-row-toggle .card-order-number { flex-basis: 100%; margin: 0; font: 400 12px/1.4 var(--font-ui); letter-spacing: 0.12em; color: var(--au-silver); text-transform: uppercase; }
+html .sh-theme .request-row-toggle .card-coupon-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(3, 81, 75, 0.6);
+  color: #cbfffc;
+  font: 500 11px/1 var(--font-ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+html .sh-theme .card-request-actions { display: flex; align-items: center; gap: 14px; flex: none; }
+html .sh-theme .request-status { text-transform: uppercase; letter-spacing: 0.12em; font-size: 12px; }
+/* detail blocks: as many even columns as fit, no empty third column */
+html .sh-theme .purchase-detail-sections { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+html .sh-theme .purchase-detail-date-section { grid-column: 1 / -1; }
+
+/* =====================================================================
+   "Current" badges -- fixed colours that never depend on the dashboard accent/colour mode
+   ===================================================================== */
+html body .sh-theme .plan-switch-pill .current-badge:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .plan-switch-pill .current-badge:not(#_a):not(#_b) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(3, 81, 75, 0.75) !important;
+  background-image: none !important;
+  color: #cbfffc !important;
+  -webkit-text-fill-color: #cbfffc;
+  border: 0 !important;
+  border-radius: 6px !important;
+  padding: 4px 8px !important;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  box-shadow: none !important;
+}
+html body .sh-theme .plan-switch-pill .current-badge svg { color: #cbfffc; stroke: currentColor; }
+html body .sh-theme .plan-switch-pill.active .current-badge:not(#_a):not(#_b) { background: rgba(203, 255, 252, 0.16) !important; }
+html body .sh-theme .current-plan-badge:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .current-plan-badge:not(#_a):not(#_b) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(3, 81, 75, 0.75) !important;
+  background-image: none !important;
+  color: #cbfffc !important;
+  -webkit-text-fill-color: #cbfffc;
+  border: 1px solid rgba(203, 255, 252, 0.35) !important;
+  border-radius: 6px !important;
+  padding: 7px 12px !important;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  box-shadow: none !important;
+}
+html body .sh-theme .current-plan-badge svg { color: #cbfffc; }
+
+/* =====================================================================
+   PORTALS (rendered on <body>, outside .sh-theme): the notification popup and list. They used the
+   dashboard's accent/colour-mode variables, so a dashboard theme change recoloured them. On the public
+   site they now carry their own fixed Auros values.
+   ===================================================================== */
+body.public-site-active .au-portal {
+  --panel: #011d1c;
+  --panel-raised: #003734;
+  --panel-border: rgba(255, 255, 255, 0.14);
+  --text: #ffffff;
+  --text-dim: #bbc7c6;
+  --brand-accent: #cbfffc;
+  --brand-accent-soft: rgba(203, 255, 252, 0.1);
+  --holo-cyan: #cbfffc;
+  --radius: 12px;
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  color: #ffffff;
+}
+body.public-site-active .au-portal > div { background: #011d1c !important; border-color: rgba(255, 255, 255, 0.14) !important; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5) !important; }
+body.public-site-active .au-portal p { color: #bbc7c6 !important; }
+body.public-site-active .au-portal button:not(.secondary):not(#_a):not(#_b) {
+  background: linear-gradient(90deg, #cbfffc, #fde9ff) !important;
+  background-image: linear-gradient(90deg, #cbfffc, #fde9ff) !important;
+  color: #222222 !important;
+  -webkit-text-fill-color: #222222;
+  border: 0 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+body.public-site-active .au-portal button.secondary:not(#_a) {
+  background: transparent !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 6px !important;
+}
+
+/* =====================================================================
+   ABOUT US + WHAT IS HUNTSWORLD -- content pages in the Auros layout:
+   centred hero, a two-column text split, feature rows, numbered steps, a CTA band
+   ===================================================================== */
+html .sh-theme .au-page { max-width: 1280px; margin: 0 auto; padding: 24px 0 96px; }
+
+/* hero */
+html .sh-theme .au-page-hero { text-align: center; max-width: 960px; margin: 0 auto 120px; padding-top: 48px; }
+html .sh-theme .au-page-hero .hero-eyebrow { display: inline-block; margin-bottom: 28px; }
+html .sh-theme .au-page-hero .hero-eyebrow::before { display: none; }
+html .sh-theme .au-page-hero h1 {
+  font-size: clamp(2.8rem, 6.6vw, 5.6rem) !important;
+  line-height: 0.98;
+  letter-spacing: -0.05em;
+  margin: 0 0 28px !important;
+  text-align: center;
+}
+html .sh-theme .au-page-hero h1 .grad { display: inline-block; margin-top: 6px; }
+html .sh-theme .au-page-hero .section-subheading { max-width: 640px; margin: 0 auto !important; font-size: 18px; line-height: 1.45; color: var(--au-silver); text-align: center; }
+
+/* two-column split: heading left, copy right */
+html .sh-theme .au-split {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  column-gap: 72px;
+  align-items: start;
+  padding: 72px 0;
+  border-top: 1px solid var(--au-line);
+}
+html .sh-theme .au-split > .section-heading { font-size: clamp(2.2rem, 4.4vw, 4rem); line-height: 1; letter-spacing: -0.045em; margin: 0 !important; text-align: left; position: sticky; top: 120px; }
+html .sh-theme .au-split-copy { display: grid; gap: 22px; }
+html .sh-theme .au-split-copy p { margin: 0; font-size: 19px; line-height: 1.45; color: var(--au-silver); }
+html .sh-theme .au-split-copy .au-statement { color: #ffffff; font-size: clamp(1.6rem, 2.6vw, 2.3rem); line-height: 1.08; letter-spacing: -0.035em; font-weight: 500; margin-top: 10px; }
+
+/* features: heading, then a 2 x 2 grid of rows with the corner icon button */
+html .sh-theme .au-features { padding: 72px 0; border-top: 1px solid var(--au-line); }
+html .sh-theme .au-features > .section-heading { font-size: clamp(2.2rem, 4.4vw, 4rem); line-height: 1; letter-spacing: -0.045em; margin: 0 0 48px !important; text-align: left; }
+html .sh-theme .au-features .feature-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; }
+html .sh-theme .au-features .feature-card {
+  position: relative;
+  display: block;
+  text-align: left;
+  min-height: 250px;
+  padding: 40px 96px 40px 36px;
+  background: var(--au-kelp);
+}
+html .sh-theme .au-features .feature-card h3 { font-size: clamp(1.5rem, 2.4vw, 2.2rem); line-height: 1.02; letter-spacing: -0.035em; margin: 0 0 16px; }
+html .sh-theme .au-features .feature-card p { margin: 0; font-size: 16px; line-height: 1.5; }
+html .sh-theme .au-features .feature-icon { position: absolute; top: 34px; right: 34px; width: 36px; height: 36px; margin: 0; padding: 8px; background: rgba(3, 81, 75, 0.55); }
+
+/* CTA band: the recessed well */
+html .sh-theme .au-cta-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 40px;
+  padding: 64px 56px;
+  border-radius: 20px;
+  background: var(--au-deep);
+}
+html .sh-theme .au-cta-band .section-heading { font-size: clamp(2rem, 3.6vw, 3.2rem); line-height: 1; letter-spacing: -0.045em; margin: 0 0 14px !important; text-align: left; }
+html .sh-theme .au-cta-band p { margin: 0; max-width: 480px; font-size: 17px; color: var(--au-silver); }
+html .sh-theme .au-cta {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 54px;
+  padding: 0 28px;
+  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-decoration: none;
+}
+
+/* numbered steps (What is HuntsWorld) */
+html .sh-theme .au-steps { max-width: 1040px; margin: 0 auto; border-top: 1px solid var(--au-line); }
+html .sh-theme .au-step {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  column-gap: 32px;
+  align-items: start;
+  padding: 56px 0;
+  border-bottom: 1px solid var(--au-line);
+}
+html .sh-theme .au-step-number { font-family: var(--font-display); font-size: clamp(3.4rem, 7vw, 6rem); font-weight: 500; line-height: 0.9; letter-spacing: -0.05em; color: var(--au-lavender); }
+html .sh-theme .au-step-body h2 { font-size: clamp(1.7rem, 3vw, 2.6rem); line-height: 1.02; letter-spacing: -0.04em; margin: 0 0 18px; text-align: left; }
+html .sh-theme .au-step-body p { margin: 0 0 26px; max-width: 640px; font-size: 18px; line-height: 1.5; color: var(--au-silver); }
+html .sh-theme .au-step-body p:last-child { margin-bottom: 0; }
+html .sh-theme .au-step-body .au-cta { margin-top: 0; }
+
+@media (max-width: 900px) {
+  html .sh-theme .au-page-hero { margin-bottom: 72px; padding-top: 24px; }
+  html .sh-theme .au-split { grid-template-columns: 1fr; row-gap: 28px; padding: 48px 0; }
+  html .sh-theme .au-split > .section-heading { position: static; }
+  html .sh-theme .au-features .feature-grid { grid-template-columns: 1fr; }
+  html .sh-theme .au-features .feature-card { min-height: 0; padding: 32px 76px 32px 26px; }
+  html .sh-theme .au-cta-band { flex-direction: column; align-items: flex-start; padding: 40px 26px; }
+  html .sh-theme .au-step { grid-template-columns: 90px minmax(0, 1fr); column-gap: 18px; padding: 40px 0; }
+}
+
+/* =====================================================================
+   FAQ + CONTACT -- two-column pages: intro on the left (sticky), content on the right
+   ===================================================================== */
+html .sh-theme .au-faq,
+html .sh-theme .au-contact {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  column-gap: 88px;
+  align-items: start;
+  padding-top: 56px;
+}
+html .sh-theme .au-faq-intro,
+html .sh-theme .au-contact-intro { position: sticky; top: 120px; }
+html .sh-theme .au-faq-intro h1,
+html .sh-theme .au-contact-intro h1 {
+  font-size: clamp(2.8rem, 5.4vw, 4.8rem) !important;
+  line-height: 0.98;
+  letter-spacing: -0.05em;
+  margin: 0 0 24px !important;
+  text-align: left;
+}
+html .sh-theme .au-faq-intro .section-subheading,
+html .sh-theme .au-contact-intro .section-subheading { max-width: 420px; margin: 0 0 36px !important; font-size: 18px; line-height: 1.45; text-align: left; color: var(--au-silver); }
+
+/* ---------- FAQ accordion ---------- */
+html .sh-theme .au-faq-list { border-top: 1px solid var(--au-line); }
+html body.public-site-active .sh-theme .au-faq-item,
+html .sh-theme .au-faq-item {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--au-line) !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  transition: background 0.3s;
+}
+html .sh-theme .au-faq-item.is-open { background: linear-gradient(180deg, rgba(3, 81, 75, 0.28), transparent) !important; }
+html body.public-site-active .sh-theme .au-faq-item .faq-question:not(#_a):not(#_b) {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 30px 8px;
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  text-align: left;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  font-size: clamp(1.25rem, 2vw, 1.7rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  text-transform: none;
+  animation: none;
+}
+html .sh-theme .au-faq-number { font-size: 12px; letter-spacing: 0.14em; color: var(--au-silver); font-weight: 500; }
+html .sh-theme .au-faq-item.is-open .au-faq-number { color: #cbfffc; }
+html .sh-theme .au-faq-item .faq-chevron {
+  justify-self: end;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(3, 81, 75, 0.5);
+  color: #ffffff;
+  font-size: 22px;
+  line-height: 1;
+  transform: none !important;
+  transition: background 0.2s;
+}
+html .sh-theme .au-faq-item .faq-question:hover .faq-chevron,
+html .sh-theme .au-faq-item.is-open .faq-chevron { background: var(--au-aurora); color: #222222; }
+html .sh-theme .au-faq-item .faq-answer {
+  margin: 0;
+  padding: 0 56px 34px 64px;
+  max-width: 760px;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--au-silver);
+  animation: au-faq-in 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes au-faq-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Contact ---------- */
+html body.public-site-active .sh-theme .au-contact .contact-info-row { margin: 0; }
+html body.public-site-active .sh-theme .au-contact .contact-info-item {
+  text-align: left;
+  padding: 26px 30px;
+  display: inline-block;
+  min-width: 260px;
+}
+html .sh-theme .au-contact-panel { max-width: none !important; width: 100%; margin: 0 !important; padding: 44px !important; background: var(--au-kelp) !important; }
+html .sh-theme .au-contact-form {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 26px 24px;
+}
+html .sh-theme .au-contact-form > .field { margin: 0 !important; }
+/* Name + Phone share the first row; Email, Message, errors and the button run full width */
+html .sh-theme .au-contact-form > .field:nth-of-type(n+3),
+html .sh-theme .au-contact-form > .error-banner,
+html .sh-theme .au-contact-form > button[type="submit"] { grid-column: 1 / -1; }
+html .sh-theme .au-contact-form .field label { margin-bottom: 10px; }
+html .sh-theme .au-contact-form textarea {
+  min-height: 160px;
+  background: var(--au-deep) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border-radius: 6px !important;
+  color: #ffffff !important;
+  padding: 14px 16px !important;
+  font-size: 16px !important;
+}
+html .sh-theme .au-contact-form > button[type="submit"] { height: 56px; margin-top: 4px; }
+html .sh-theme .au-contact-panel > .card { background: transparent !important; padding: 0 !important; box-shadow: none !important; }
+html .sh-theme .au-contact-panel > .card:not(.au-contact-form) { padding: 24px 0 !important; text-align: left !important; }
+html .sh-theme .au-contact-panel > .card:not(.au-contact-form) p:first-child { font-size: 1.8rem !important; letter-spacing: -0.035em; color: #ffffff !important; font-weight: 500 !important; }
+
+@media (max-width: 960px) {
+  html .sh-theme .au-faq,
+  html .sh-theme .au-contact { grid-template-columns: 1fr; row-gap: 40px; padding-top: 24px; }
+  html .sh-theme .au-faq-intro,
+  html .sh-theme .au-contact-intro { position: static; }
+  html .sh-theme .au-contact-panel { padding: 28px 20px !important; }
+  html .sh-theme .au-contact-form { grid-template-columns: 1fr; }
+  html body.public-site-active .sh-theme .au-faq-item .faq-question:not(#_a) { grid-template-columns: 40px minmax(0, 1fr) 36px; padding: 22px 0; }
+  html .sh-theme .au-faq-item .faq-answer { padding: 0 8px 26px 44px; font-size: 16px; }
+}
+
+/* FAQ open icon + answer alignment; contact address block aligned left */
+html body.public-site-active .sh-theme .au-faq-item .faq-chevron:not(#_a):not(#_b) { color: #ffffff !important; -webkit-text-fill-color: #ffffff; }
+html body.public-site-active .sh-theme .au-faq-item.is-open .faq-chevron:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .au-faq-item .faq-question:hover .faq-chevron:not(#_a):not(#_b) {
+  background: linear-gradient(90deg, #cbfffc, #fde9ff) !important;
+  color: #222222 !important;
+  -webkit-text-fill-color: #222222;
+}
+html .sh-theme .au-faq-item .faq-answer { padding-left: 72px; }
+html body.public-site-active .sh-theme .au-contact .contact-info-row { display: flex; justify-content: flex-start; padding: 0; }
+
+/* =====================================================================
+   CATALOG -- each tier is a two-column product section: details on the left, photos on the
+   right inside a deep panel; then a clip gallery
+   ===================================================================== */
+html .sh-theme .au-catalog .au-page-hero { margin-bottom: 72px; }
+html .sh-theme .au-tiers { display: grid; gap: 24px; }
+
+html .sh-theme .au-tier {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 0;
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--au-kelp);
+}
+html .sh-theme .au-tier-info { padding: 56px 56px 52px; }
+html .sh-theme .au-tier-media {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  padding: 40px;
+  background: var(--au-deep);
+}
+html .sh-theme .au-tier-media-row { flex-direction: row; align-items: center; gap: 16px; }
+html .sh-theme .au-tier-media > * { width: 100%; max-width: 100%; }
+html .sh-theme .au-tier-media-row > * { flex: 1; width: auto; }
+html .sh-theme .au-tier-photo { overflow: hidden; border-radius: 12px; background: #000; }
+html .sh-theme .au-tier-nophoto { display: grid; place-items: center; color: var(--au-silver); font-size: 14px; border: 1px dashed var(--au-line); background: transparent; }
+/* the hover-to-play label on the front photo */
+html .sh-theme .au-tier-media span[style*="absolute"] { border-radius: 6px !important; background: rgba(1, 29, 28, 0.7) !important; letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px !important; font-weight: 500 !important; }
+
+html .sh-theme .au-tier-name { font-family: var(--font-display); font-size: clamp(2.2rem, 4vw, 3.6rem) !important; font-weight: 500; line-height: 0.98; letter-spacing: -0.045em; margin: 0 0 18px !important; color: #fff; }
+html .sh-theme .au-tier-price { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 36px !important; }
+html .sh-theme .au-tier-amount { font-size: clamp(2rem, 3.4vw, 3rem); font-weight: 500; letter-spacing: -0.045em; line-height: 1; color: var(--au-lavender); }
+html .sh-theme .au-tier-note { font-size: 14px; color: var(--au-silver); font-weight: 400; }
+
+html .sh-theme .au-tier-label { font-size: 11px !important; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--au-silver) !important; margin: 0 0 14px !important; }
+html .sh-theme .au-tier-specs { margin: 0 0 36px; border-top: 1px solid var(--au-line); }
+html .sh-theme .au-tier-specs > div { display: flex; justify-content: space-between; gap: 20px; padding: 13px 0; border-bottom: 1px solid var(--au-line); font-size: 15px; }
+html .sh-theme .au-tier-specs dt { color: var(--au-silver); }
+html .sh-theme .au-tier-specs dd { margin: 0; color: #fff; text-align: right; text-transform: capitalize; }
+html .sh-theme .au-tier-features { list-style: none; margin: 0 0 40px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+html .sh-theme .au-tier-features li { padding: 8px 14px; border-radius: 6px; background: rgba(3, 81, 75, 0.6); color: #cbfffc; font-size: 13px; letter-spacing: 0.04em; }
+
+/* clips */
+html .sh-theme .au-motion { padding: 120px 0 0; }
+html .sh-theme .au-motion-head { max-width: 760px; margin: 0 auto 56px; text-align: center; }
+html .sh-theme .au-motion-head .hero-eyebrow { display: inline-block; margin-bottom: 22px; }
+html .sh-theme .au-motion-head .hero-eyebrow::before { display: none; }
+html .sh-theme .au-motion-head h2 { font-size: clamp(2.2rem, 4.6vw, 4rem) !important; line-height: 1; letter-spacing: -0.045em; margin: 0 0 20px !important; text-align: center; }
+html .sh-theme .au-motion-head .section-subheading { text-align: center; max-width: 520px; margin: 0 auto !important; font-size: 17px; }
+html .sh-theme .au-clips { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+html .sh-theme .au-clip { overflow: hidden; border-radius: 16px; background: var(--au-kelp); }
+html .sh-theme .au-clip-title { padding: 18px 20px 22px; font-size: 1.15rem; font-weight: 500; letter-spacing: -0.02em; color: #fff; }
+html body.public-site-active .sh-theme .au-motion-empty { max-width: 420px; margin: 0 auto; padding: 36px; text-align: center; background: var(--au-kelp) !important; color: #cbfffc; }
+html .sh-theme .au-motion-empty p { margin: 12px 0 0; color: var(--au-silver); }
+html .sh-theme .au-motion > .muted, html .sh-theme .au-motion > .error { text-align: center; }
+
+@media (max-width: 960px) {
+  html .sh-theme .au-tier { grid-template-columns: 1fr; }
+  html .sh-theme .au-tier-info { padding: 36px 24px; }
+  html .sh-theme .au-tier-media { padding: 24px; }
+  html .sh-theme .au-motion { padding-top: 72px; }
+}
+
+/* =====================================================================
+   CHAT SUPPORT -- intro left, the conversation panel right
+   ===================================================================== */
+html .sh-theme .au-chat { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); column-gap: 88px; align-items: start; padding-top: 56px; }
+html .sh-theme .au-chat-intro { position: sticky; top: 120px; }
+html .sh-theme .au-chat-intro .back-link { display: inline-block; margin-bottom: 32px; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; }
+html .sh-theme .au-chat-intro h1 { font-size: clamp(2.8rem, 5.4vw, 4.8rem) !important; line-height: 0.98; letter-spacing: -0.05em; margin: 0 0 24px !important; text-align: left; }
+html .sh-theme .au-chat-intro .section-subheading { max-width: 400px; margin: 0 !important; font-size: 18px; line-height: 1.45; text-align: left; color: var(--au-silver); }
+html .sh-theme .au-chat-panel { max-width: none !important; width: 100%; margin: 0 !important; padding: 12px !important; background: var(--au-kelp) !important; }
+html .sh-theme .au-chat-panel > .card { background: var(--au-deep) !important; border-radius: 14px; box-shadow: none !important; }
+html body.public-site-active .sh-theme .chat-card { height: 560px; padding: 20px; }
+html .sh-theme .chat-messages { display: flex; flex-direction: column; gap: 10px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.2) transparent; }
+html .sh-theme .chat-bubble {
+  max-width: 78%;
+  padding: 12px 16px;
+  border-radius: 14px 14px 14px 4px;
+  background: var(--au-kelp);
+  border: 0;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.4;
+}
+html .sh-theme .chat-bubble.mine { background: var(--au-aurora) !important; color: #222222 !important; border-radius: 14px 14px 4px 14px; }
+html .sh-theme .chat-bubble-time { display: block; margin-top: 6px; font-size: 11px; letter-spacing: 0.06em; color: var(--au-silver); opacity: 0.85; }
+html .sh-theme .chat-bubble.mine .chat-bubble-time { color: #4a4a4a; }
+html .sh-theme .chat-input-row { gap: 10px; padding-top: 16px; border-top: 1px solid var(--au-line); }
+html .sh-theme .chat-input-row input { height: 52px; background: var(--au-kelp) !important; }
+html .sh-theme .chat-input-row button { height: 52px; padding: 0 26px; text-transform: uppercase; font-size: 12px; letter-spacing: 0.12em; }
+html body.public-site-active .sh-theme .au-chat-gate { padding: 48px !important; text-align: left; }
+html .sh-theme .au-chat-gate .card { background: transparent !important; padding: 0 !important; }
+html .sh-theme .au-chat-gate p { font-size: 1.7rem; font-weight: 500; letter-spacing: -0.035em; line-height: 1.1; color: #fff; margin: 0 0 24px; }
+html .sh-theme .au-chat-gate button { height: 54px; padding: 0 32px; width: auto; text-transform: uppercase; font-size: 13px; letter-spacing: 0.12em; }
+
+@media (max-width: 960px) {
+  html .sh-theme .au-chat { grid-template-columns: 1fr; row-gap: 36px; padding-top: 24px; }
+  html .sh-theme .au-chat-intro { position: static; }
+  html body.public-site-active .sh-theme .chat-card { height: 480px; padding: 14px; }
+}
