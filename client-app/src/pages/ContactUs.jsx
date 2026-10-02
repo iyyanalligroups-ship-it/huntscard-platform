@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IlloMail } from '../components/Illustrations.jsx';
 import { api, isLoggedIn } from '../api.js';
 
 export default function ContactUs() {
@@ -135,6 +136,7 @@ export default function ContactUs() {
             Iyyanalli Groups
           </div>
         </div>
+        <div className="av-side-art"><IlloMail /></div>
       </div>
 
       <div className="checkout-panel au-contact-panel">

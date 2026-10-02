@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
+import { IlloQuestion } from '../components/Illustrations.jsx';
 
 function FaqItem({ index, question, answer, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -35,6 +36,7 @@ export default function Faq() {
         <h1 className="section-heading">Frequently asked questions</h1>
         <p className="section-subheading">Everything about your card, in one place.</p>
         <Link to="/contact" className="btn-secondary au-cta">Contact us →</Link>
+        <div className="av-side-art"><IlloQuestion /></div>
       </aside>
 
       <div className="au-faq-list">

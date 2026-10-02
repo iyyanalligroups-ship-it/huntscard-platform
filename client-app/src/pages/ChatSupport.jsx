@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, isLoggedIn } from '../api.js';
+import { IlloChat } from '../components/Illustrations.jsx';
 
 const POLL_MS = 5000;
 
@@ -69,6 +70,7 @@ export default function ChatSupport() {
           <Link to="/dashboard" className="back-link">‹ Back to Dashboard</Link>
           <h1 className="section-heading">Chat Support</h1>
           <p className="section-subheading">Message our team directly and get a reply here.</p>
+          <div className="av-side-art"><IlloChat /></div>
         </div>
         <div className="checkout-panel au-chat-panel au-chat-gate">
           <div className="card">
@@ -86,6 +88,7 @@ export default function ChatSupport() {
         <Link to="/dashboard" className="back-link">‹ Back to Dashboard</Link>
         <h1 className="section-heading">Chat Support</h1>
         <p className="section-subheading">Message our team directly and get a reply here.</p>
+          <div className="av-side-art"><IlloChat /></div>
       </div>
 
       <div className="checkout-panel chat-panel au-chat-panel">

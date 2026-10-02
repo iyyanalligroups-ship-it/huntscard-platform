@@ -5,6 +5,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { api, isLoggedIn } from '../api.js';
 import WhyChooseHuntsworld from '../components/WhyChooseHuntsworld.jsx';
 import TechGlobe from '../components/TechGlobe.jsx';
+import { HeroScene, IlloChooseCard, IlloProfile, IlloTap, IlloUpdate, IlloLock, IlloDesign } from '../components/Illustrations.jsx';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -13,6 +14,7 @@ const SAMPLE_CARD_ROLE = 'Founder, Studio Nine';
 
 const FEATURES = [
   {
+    art: IlloTap,
     title: 'Tap to share instantly',
     desc: 'One tap on any phone opens your profile — no app required for the person receiving it. Save Contact works everywhere, natively.',
     // Same signal-arc + dot motif as the holo card mockup above -- this
@@ -26,6 +28,7 @@ const FEATURES = [
     ),
   },
   {
+    art: IlloUpdate,
     title: 'Update anytime, card never changes',
     desc: 'Your physical card only stores a link. Change your phone number or add a new social link from your dashboard — it reflects immediately, no reprinting.',
     icon: (
@@ -36,6 +39,7 @@ const FEATURES = [
     ),
   },
   {
+    art: IlloLock,
     title: 'Locked against tampering',
     desc: 'Every card is password-protected at the chip level the moment it\'s made. Nobody can overwrite your card\'s link but us.',
     icon: (
@@ -46,6 +50,7 @@ const FEATURES = [
     ),
   },
   {
+    art: IlloDesign,
     title: 'Your page, your design',
     desc: 'Pick a banner design, add your photo and bio, and link out to Instagram, Twitter, your portfolio, and more.',
     icon: (
@@ -59,9 +64,9 @@ const FEATURES = [
 ];
 
 const STEPS = [
-  { title: 'Choose your card', desc: 'Pick a tier that fits — Basic to Apex.' },
-  { title: 'Set up your profile', desc: 'Add your photo, links, and details in minutes.' },
-  { title: 'Tap to connect', desc: 'Hand someone your card, they tap, done.' },
+  { art: IlloChooseCard, title: 'Choose your card', desc: 'Pick a tier that fits — Basic to Apex.' },
+  { art: IlloProfile, title: 'Set up your profile', desc: 'Add your photo, links, and details in minutes.' },
+  { art: IlloTap, title: 'Tap to connect', desc: 'Hand someone your card, they tap, done.' },
 ];
 
 function CountUp({ target, suffix = '' }) {
@@ -379,6 +384,8 @@ export default function Home() {
           </div>
         </div>
 
+        <div className="av-hero-art"><HeroScene /></div>
+
       </div>
 
       <section className="au-stats" aria-label="HuntsTAG at a glance">
@@ -394,6 +401,7 @@ export default function Home() {
           <div className="feature-grid">
             {FEATURES.map((f) => (
               <div className="feature-card" key={f.title}>
+                <div className="av-card-art"><f.art /></div>
                 <div className="feature-icon">{f.icon}</div>
                 <h3>{f.title}</h3>
                 <p>{f.desc}</p>
@@ -443,6 +451,7 @@ export default function Home() {
         <div className="steps-row">
           {STEPS.map((s, i) => (
             <div className="step-item" key={s.title}>
+              <div className="av-step-art"><s.art /></div>
               <div className="step-number">{i + 1}</div>
               <h4>{s.title}</h4>
               <p>{s.desc}</p>
