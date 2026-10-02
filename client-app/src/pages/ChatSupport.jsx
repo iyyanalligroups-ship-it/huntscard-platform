@@ -64,15 +64,13 @@ export default function ChatSupport() {
 
   if (!loggedIn) {
     return (
-      <div className="au-page au-chat">
-        <div className="au-chat-intro">
-          <Link to="/dashboard" className="back-link">‹ Back to Dashboard</Link>
-          <h1 className="section-heading">Chat Support</h1>
-          <p className="section-subheading">Message our team directly and get a reply here.</p>
-        </div>
-        <div className="checkout-panel au-chat-panel au-chat-gate">
-          <div className="card">
-            <p>Log in to start a conversation with support.</p>
+      <div>
+        <Link to="/dashboard" className="back-link">‹ Back to Dashboard</Link>
+        <h1 className="section-heading" style={{ marginTop: 0 }}>Chat Support</h1>
+        <p className="section-subheading">Message our team directly and get a reply here.</p>
+        <div className="checkout-panel" style={{ maxWidth: 440 }}>
+          <div className="card" style={{ textAlign: 'center' }}>
+            <p style={{ margin: '0 0 14px' }}>Log in to start a conversation with support.</p>
             <Link to="/login"><button type="button">Log in</button></Link>
           </div>
         </div>
@@ -81,14 +79,12 @@ export default function ChatSupport() {
   }
 
   return (
-    <div className="au-page au-chat">
-      <div className="au-chat-intro">
-        <Link to="/dashboard" className="back-link">‹ Back to Dashboard</Link>
-        <h1 className="section-heading">Chat Support</h1>
-        <p className="section-subheading">Message our team directly and get a reply here.</p>
-      </div>
+    <div>
+      <Link to="/dashboard" className="back-link">‹ Back to Dashboard</Link>
+      <h1 className="section-heading" style={{ marginTop: 0 }}>Chat Support</h1>
+      <p className="section-subheading">Message our team directly and get a reply here.</p>
 
-      <div className="checkout-panel chat-panel au-chat-panel">
+      <div className="checkout-panel chat-panel">
         <div className="card chat-card">
           {error && <div className="error-banner">{error}</div>}
           <div className="chat-messages" ref={listRef}>

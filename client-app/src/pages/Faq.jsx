@@ -1,15 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 
-function FaqItem({ index, question, answer, defaultOpen = false }) {
-  const [open, setOpen] = useState(defaultOpen);
+function FaqItem({ question, answer }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div className={`faq-item au-faq-item${open ? ' is-open' : ''}`}>
+    <div className="card faq-item">
       <button type="button" className="faq-question" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        <span className="au-faq-number">{String(index + 1).padStart(2, '0')}</span>
-        <span className="au-faq-text">{question}</span>
-        <span className={`faq-chevron${open ? ' open' : ''}`} aria-hidden="true">{open ? '–' : '+'}</span>
+        <span>{question}</span>
+        <span className={`faq-chevron${open ? ' open' : ''}`}>›</span>
       </button>
       {open && <p className="faq-answer">{answer}</p>}
     </div>
@@ -30,19 +28,17 @@ export default function Faq() {
   }, []);
 
   return (
-    <div className="au-page au-faq">
-      <aside className="au-faq-intro">
-        <h1 className="section-heading">Frequently asked questions</h1>
-        <p className="section-subheading">Everything about your card, in one place.</p>
-        <Link to="/contact" className="btn-secondary au-cta">Contact us →</Link>
-      </aside>
+    <div>
+      <h1 className="section-heading" style={{ marginTop: 0 }}>Frequently asked questions</h1>
+      <p className="section-subheading">Everything about your card, in one place.</p>
 
-      <div className="au-faq-list">
-        {error && <div className="error-banner">{error}</div>}
+      {error && <div className="error-banner">{error}</div>}
+
+      <div className="checkout-panel" style={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 12 }}>
         {faqs === null && !error && <p className="subtitle">Loading…</p>}
         {faqs?.length === 0 && <p className="subtitle">No questions posted yet.</p>}
-        {faqs?.map((item, i) => (
-          <FaqItem key={item._id} index={i} question={item.question} answer={item.answer} defaultOpen={i === 0} />
+        {faqs?.map((item) => (
+          <FaqItem key={item._id} question={item.question} answer={item.answer} />
         ))}
       </div>
     </div>

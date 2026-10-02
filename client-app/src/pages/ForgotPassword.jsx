@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { api } from '../api.js';
 import WaveBackdrop from '../components/WaveBackdrop.jsx';
-import ParticleWaves from '../components/ParticleWaves.jsx';
 
 // Matches the backend's RESET_OTP_RESEND_COOLDOWN_MS. The server still
 // enforces the real cooldown; this timer only communicates it in the UI.
@@ -149,7 +148,6 @@ export default function ForgotPassword() {
 
   return (
     <div className="login-page recovery-page">
-      <ParticleWaves />
       <div className="login-page__glow login-page__glow--one" />
       <div className="login-page__glow login-page__glow--two" />
       <div className="wave-backdrop"><WaveBackdrop /></div>

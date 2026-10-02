@@ -248,8 +248,8 @@ export default function MagicPosterCart() {
 
   if (!loggedIn) {
     return (
-      <div className="card cart-gate">
-        <h1>Log in to view your cart</h1>
+      <div className="card" style={{ maxWidth: 420, margin: '60px auto', textAlign: 'center' }}>
+        <h1 style={{ fontSize: 20 }}>Log in to view your cart</h1>
         <p className="subtitle">Your Magic Poster cart and delivery details are saved to your account.</p>
         <button onClick={() => openLogin('/magic-poster-cart')}>Log in</button>
       </div>
@@ -258,8 +258,8 @@ export default function MagicPosterCart() {
 
   if (placed) {
     return (
-      <div className="card cart-gate">
-        <h1>Order placed 🎉</h1>
+      <div className="card" style={{ maxWidth: 480, margin: '40px auto', textAlign: 'center' }}>
+        <h1 style={{ fontSize: 22 }}>Order placed 🎉</h1>
         <p className="subtitle">
           Thanks! Your payment of ₹{placed.amount} went through and your order is now <b>Pending</b>. We'll get it
           on its way soon.
@@ -271,62 +271,82 @@ export default function MagicPosterCart() {
   }
 
   return (
-    <div className="cart-page">
+    <div style={{ maxWidth: 640, margin: '0 auto' }}>
       <h1 className="section-heading" style={{ marginTop: 0 }}>Your cart</h1>
 
       {error && <div className="error-banner">{error}</div>}
 
       {cart.items.length === 0 ? (
-        <div className="card cart-empty" style={{ textAlign: 'center' }}>
+        <div className="card" style={{ textAlign: 'center' }}>
           <p className="subtitle" style={{ margin: 0 }}>Your cart is empty.</p>
         </div>
       ) : (
-        <div className="cart-layout">
-          <div className="cart-main">
-          <div className="card cart-items">
+        <>
+          <div className="card" style={{ marginBottom: 16 }}>
             {cart.items.map((item) => (
-              <div key={item.magicArtId} className="cart-item">
+              <div
+                key={item.magicArtId}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' }}
+              >
                 {item.imageUrl && (
-                  <img className="cart-item-img" src={item.imageUrl} alt={item.name} />
+                  <img src={item.imageUrl} alt={item.name} style={{ width: 48, height: 60, objectFit: 'cover', borderRadius: 6 }} />
                 )}
-                <div className="cart-item-info">
-                  <div className="cart-item-name">{item.name}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600 }}>{item.name}</div>
                   <div className="hint">₹{item.unitPrice} each</div>
                 </div>
-                <div className="cart-qty">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <button
                     type="button"
-                    className="secondary cart-qty-btn"
+                    className="secondary"
                     style={{ width: 28, height: 28, padding: 0 }}
                     onClick={() => cart.updateQuantity(item.magicArtId, item.quantity - 1)}
                   >
                     −
                   </button>
-                  <span className="cart-qty-value">{item.quantity}</span>
+                  <span style={{ minWidth: 18, textAlign: 'center' }}>{item.quantity}</span>
                   <button
                     type="button"
-                    className="secondary cart-qty-btn"
+                    className="secondary"
                     style={{ width: 28, height: 28, padding: 0 }}
                     onClick={() => cart.updateQuantity(item.magicArtId, item.quantity + 1)}
                   >
                     +
                   </button>
                 </div>
-                <div className="cart-item-total">₹{item.unitPrice * item.quantity}</div>
+                <div style={{ minWidth: 70, textAlign: 'right', fontWeight: 600 }}>₹{item.unitPrice * item.quantity}</div>
                 <button
                   type="button"
-                  className="secondary cart-remove"
-                  style={{ width: 'auto', padding: '4px 10px' }}
+                  className="secondary"
+                  style={{ width: 'auto', padding: '4px 10px', color: 'var(--danger)' }}
                   onClick={() => cart.removeItem(item.magicArtId)}
                 >
                   Remove
                 </button>
               </div>
             ))}
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, display: 'grid', gap: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Subtotal</span>
+                <span>₹{subtotal}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Delivery</span>
+                <span>₹{deliveryFee}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>GST ({gstPercent}%)</span>
+                <span>₹{gstAmount}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 16 }}>
+                <span>Total</span>
+                <span>₹{total}</span>
+              </div>
+            </div>
           </div>
 
-          <div className="card cart-address">
-            <h2>Deliver to</h2>
+          <div className="card" style={{ marginBottom: 16 }}>
+            <h2 style={{ fontSize: 16, marginTop: 0 }}>Deliver to</h2>
 
             {addresses === null ? (
               <p className="subtitle">Loading your addresses…</p>
@@ -454,18 +474,10 @@ export default function MagicPosterCart() {
             )}
           </div>
 
-          </div>
-
-          <aside className="card cart-summary">
-            <div className="cart-summary-row"><span>Subtotal</span><span>₹{subtotal}</span></div>
-            <div className="cart-summary-row"><span>Delivery</span><span>₹{deliveryFee}</span></div>
-            <div className="cart-summary-row"><span>GST ({gstPercent}%)</span><span>₹{gstAmount}</span></div>
-            <div className="cart-summary-row cart-summary-total"><span>Total</span><span>₹{total}</span></div>
-            <button type="button" className="cart-pay" disabled={submitting || !selectedAddressId} onClick={handlePay}>
-              {submitting ? 'Processing…' : `Pay ₹${total}`}
-            </button>
-          </aside>
-        </div>
+          <button type="button" disabled={submitting || !selectedAddressId} onClick={handlePay}>
+            {submitting ? 'Processing…' : `Pay ₹${total}`}
+          </button>
+        </>
       )}
     </div>
   );

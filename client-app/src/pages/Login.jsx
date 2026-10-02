@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { api, setSession } from '../api.js';
 import WaveBackdrop from '../components/WaveBackdrop.jsx';
-import ParticleWaves from '../components/ParticleWaves.jsx';
 
 export default function Login() {
   const [mode, setMode] = useState('password'); // 'password' | 'otp'
@@ -86,7 +85,6 @@ export default function Login() {
 
   return (
     <div className="login-page">
-      <ParticleWaves />
       <div className="login-page__glow login-page__glow--one" />
       <div className="login-page__glow login-page__glow--two" />
       <div className="wave-backdrop">

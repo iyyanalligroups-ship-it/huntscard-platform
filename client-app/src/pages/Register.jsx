@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { api, setSession } from '../api.js';
 import WaveBackdrop from '../components/WaveBackdrop.jsx';
-import ParticleWaves from '../components/ParticleWaves.jsx';
 import ThemedSelect from '../components/ThemedSelect.jsx';
 import ThemeDatePicker from '../components/ThemeDatePicker.jsx';
 
@@ -42,7 +41,6 @@ export default function Register() {
 
   return (
     <div className="login-page">
-      <ParticleWaves />
       <div className="wave-backdrop">
         <WaveBackdrop />
       </div>

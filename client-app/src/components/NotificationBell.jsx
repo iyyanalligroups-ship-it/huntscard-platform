@@ -218,7 +218,7 @@ export default function NotificationBell() {
       {panelPos &&
         (showPushPrompt || open) &&
         createPortal(
-          <div ref={panelRef} className="au-portal">
+          <div ref={panelRef}>
             {showPushPrompt && (
               <div
                 style={{
