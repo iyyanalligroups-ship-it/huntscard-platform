@@ -1,9 +1,7 @@
 import { Link } from 'react-router-dom';
-import { IlloTap, IlloSync, IlloAR, IlloQR, IlloDesign, TapRings } from '../components/Illustrations.jsx';
 
 const FEATURES = [
   {
-    art: IlloTap,
     title: 'NFC Tap Technology',
     desc: 'Just tap your HuntsTAG on any NFC enabled smartphone and your complete profile transfers instantly. No app required. No WiFi needed. Just tap and connect.',
     icon: (
@@ -15,7 +13,6 @@ const FEATURES = [
     ),
   },
   {
-    art: IlloSync,
     title: 'Phone to Phone Sync',
     desc: 'Share your information directly from phone to phone in seconds. Fast, smooth and completely wireless -- networking has never been this effortless.',
     icon: (
@@ -28,7 +25,6 @@ const FEATURES = [
     ),
   },
   {
-    art: IlloAR,
     title: 'Augmented Reality',
     desc: 'Experience networking like never before. HuntsTAG brings your profile to life through stunning Augmented Reality -- making you unforgettable in every meeting and event.',
     icon: (
@@ -40,7 +36,6 @@ const FEATURES = [
     ),
   },
   {
-    art: IlloQR,
     title: 'QR Scanner',
     desc: 'Not every phone supports NFC? No problem. Every HuntsTAG comes with a built-in QR code -- scan and connect in an instant from any smartphone.',
     icon: (
@@ -58,8 +53,6 @@ export default function AboutUs() {
   return (
     <div className="au-page">
       <header className="au-page-hero">
-        <TapRings className="av-rings av-rings-a" />
-        <TapRings className="av-rings av-rings-b" tone="#5FA2C9" />
         <span className="hero-eyebrow">HuntsTAG</span>
         <h1 className="section-heading">
           The Future of Networking is Here.
@@ -73,10 +66,7 @@ export default function AboutUs() {
       </header>
 
       <section className="au-split">
-        <div className="au-split-lead">
-          <h2 className="section-heading">What is HuntsTAG</h2>
-          <div className="av-side-art"><IlloDesign /></div>
-        </div>
+        <h2 className="section-heading">What is HuntsTAG</h2>
         <div className="au-split-copy">
           <p>
             In a world that moves at the speed of technology, your business card should too. HuntsTAG is a
@@ -98,7 +88,6 @@ export default function AboutUs() {
         <div className="feature-grid">
           {FEATURES.map((f) => (
             <div className="feature-card" key={f.title}>
-              <div className="av-card-art"><f.art /></div>
               <div className="feature-icon">{f.icon}</div>
               <h3>{f.title}</h3>
               <p>{f.desc}</p>

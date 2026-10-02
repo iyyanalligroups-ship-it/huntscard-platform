@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { IlloCardEmpty } from '../components/Illustrations.jsx';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 
@@ -259,7 +258,7 @@ function EntryRowStacked({ entry }) {
             )}
           </>
         ) : (
-          <div className="au-tier-photo au-tier-nophoto" style={{ aspectRatio: '8 / 5' }}><IlloCardEmpty /><span>No photo yet</span></div>
+          <div className="au-tier-photo au-tier-nophoto" style={{ aspectRatio: '8 / 5' }}>No photo yet</div>
         )}
       </div>
     </section>
@@ -293,7 +292,7 @@ function EntryRowSideBySide({ entry }) {
             )}
           </>
         ) : (
-          <div className="au-tier-photo au-tier-nophoto" style={{ width: '100%', aspectRatio: '4 / 3' }}><IlloCardEmpty /><span>No photo yet</span></div>
+          <div className="au-tier-photo au-tier-nophoto" style={{ width: '100%', aspectRatio: '4 / 3' }}>No photo yet</div>
         )}
       </div>
     </section>

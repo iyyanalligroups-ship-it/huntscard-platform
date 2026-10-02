@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { IlloListing, IlloProfile, IlloMail } from '../components/Illustrations.jsx';
 
 // Starter copy -- kept deliberately general since this describes an
 // external platform (HuntsWorld), not something built in this repo.
@@ -8,7 +7,6 @@ import { IlloListing, IlloProfile, IlloMail } from '../components/Illustrations.
 // claiming anything about HuntsWorld itself beyond that.
 const POINTS = [
   {
-    art: IlloListing,
     title: 'How it connects to your card',
     body: `HuntsWorld is a business listing platform, separate from HuntsTAG itself. If your
             business has a listing there, you can add that link to your profile — it then shows up
@@ -16,13 +14,11 @@ const POINTS = [
             AR features) as its own block in the AR layout too.`,
   },
   {
-    art: IlloProfile,
     title: 'Adding your listing',
     body: `Add your HuntsWorld listing URL from your dashboard's Profile Settings. Once it's set,
             anyone who taps or scans your card can jump straight to your listing in one tap.`,
   },
   {
-    art: IlloMail,
     title: "Don't have a listing yet?",
     body: `That's fine — this section simply won't show on your card until you add one.
             Questions about getting listed on HuntsWorld itself? Reach out and we'll point you in
@@ -43,7 +39,6 @@ export default function WhatIsHuntsworld() {
         {POINTS.map((point, i) => (
           <section className="au-step" key={point.title}>
             <span className="au-step-number">{String(i + 1).padStart(2, '0')}</span>
-            <div className="av-step-side"><point.art /></div>
             <div className="au-step-body">
               <h2>{point.title}</h2>
               <p>{point.body.replace(/\s+/g, ' ')}</p>
