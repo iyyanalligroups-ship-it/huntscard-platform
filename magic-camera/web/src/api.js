@@ -14,5 +14,8 @@ async function request(path) {
 
 export const api = {
   getPublicMagicArt: () => request('/api/public/magic-art'),
+  getPublicMagicCards: () => request('/api/public/magic-cards'),
+  getPublicMagicCard: (clientId, cardNumber) => request(`/api/public/magic-card/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`),
+  getPublicStreetArt: () => request('/api/public/street-art'),
   getPublicProfile: (clientId, cardNumber) => request(`/api/public/profile/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`),
 };

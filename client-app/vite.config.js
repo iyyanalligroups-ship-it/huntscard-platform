@@ -66,6 +66,7 @@ export default defineConfig({
     include: ['@tensorflow/tfjs', '@msgpack/msgpack', 'mathjs', 'ml-matrix', 'svd-js', 'tinyqueue', 'long', 'seedrandom'],
   },
   server: {
+    allowedHosts: true, // let the dev server be opened through an HTTPS tunnel
     port: 5173,
     // Without this, Vite binds IPv6 loopback ([::1]) only on this
     // machine -- fine for a plain browser (curl/Chrome resolve

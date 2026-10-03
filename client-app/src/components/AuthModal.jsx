@@ -15,6 +15,10 @@ function todayDateValue() {
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 }
 
+// Set right before a successful login/register closes the modal, so the page
+// lands at the top instead of restoring the scroll position it had before.
+let goToTopOnClose = false;
+
 export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
   const [loginMethod, setLoginMethod] = useState('password'); // 'password' | 'otp'
@@ -76,7 +80,8 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
       body.style.position = prev.position;
       body.style.top = prev.top;
       body.style.width = prev.width;
-      window.scrollTo(0, scrollY);
+      window.scrollTo({ top: goToTopOnClose ? 0 : scrollY, left: 0, behavior: 'instant' });
+      goToTopOnClose = false;
     };
   }, []);
 
@@ -97,6 +102,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
 
   function onSession(res) {
     setSession({ token: res.token, clientId: res.clientId });
+    goToTopOnClose = true;
     onClose();
     navigate(res.mustChangePassword ? '/change-password' : redirectTo || '/');
   }
@@ -174,6 +180,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
         designation: regDesignation || undefined,
       });
       setSession({ token: res.token, clientId: res.clientId });
+      goToTopOnClose = true;
       onClose();
       navigate(redirectTo || '/dashboard');
     } catch (err) {

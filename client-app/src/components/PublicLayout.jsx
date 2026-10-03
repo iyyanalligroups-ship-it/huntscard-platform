@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, LogIn, LogOut, Menu, ShoppingCart, UserPlus, X } from 'lucide-react';
 import { api, clearSession, isLoggedIn } from '../api.js';
 import { useCart } from '../cart.jsx';
@@ -108,10 +108,10 @@ export default function PublicLayout() {
         <div className="top-nav-corner tl" aria-hidden="true" />
         <div className="top-nav-corner br" aria-hidden="true" />
         <div className="top-nav-row">
-          <div className="brand">
+          <Link to="/" className="brand" aria-label="HuntsTAG home" onClick={() => { setMenuOpen(false); if (location.pathname === "/") window.scrollTo({ top: 0, left: 0, behavior: "smooth" }); }}>
             <div className="brand-mark" />
             <span className="brand-name">HuntsTAG</span>
-          </div>
+          </Link>
 
           <div className={`nav-menu${menuOpen ? ' open' : ''}`}>
             <nav className="nav-links">

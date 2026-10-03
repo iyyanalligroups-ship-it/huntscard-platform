@@ -33,6 +33,8 @@
   --holo-gradient: linear-gradient(120deg, var(--holo-cyan), var(--holo-violet), var(--holo-magenta));
   --glow-cyan: 0 0 40px rgba(94, 234, 212, 0.25);
   --glow-violet: 0 0 50px rgba(167, 139, 250, 0.22);
+  --radius: 14px;
+}
 
 html, body, #root { margin: 0; height: 100%; background: var(--space); color: var(--text); font-family: var(--font-ui); }
 .subtitle { color: var(--text-dim); }

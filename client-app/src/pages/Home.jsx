@@ -70,26 +70,36 @@ const STEPS = [
   { art: IlloTap, title: 'Tap to connect', desc: 'Hand someone your card, they tap, done.' },
 ];
 
-function CountUp({ target, suffix = '' }) {
+// Counts up when it scrolls into view (and again each time it re-enters), so
+// the numbers visibly "run" in real time instead of sitting static.
+// `from` > `target` makes it count down (used for "Zero" battery).
+function CountUp({ target, suffix = '', from = 0, finalText }) {
   const ref = useRef(null);
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el) return undefined;
     const isDecimal = target % 1 !== 0;
-    const duration = 1400;
-    const start = performance.now();
+    const duration = 1800;
     let raf;
-    function tick(now) {
-      const progress = Math.min((now - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      const value = target * eased;
-      el.textContent = (isDecimal ? value.toFixed(2) : Math.round(value)) + suffix;
-      if (progress < 1) raf = requestAnimationFrame(tick);
+    function run() {
+      cancelAnimationFrame(raf);
+      const start = performance.now();
+      function tick(now) {
+        const progress = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const value = from + (target - from) * eased;
+        if (progress >= 1 && finalText) el.textContent = finalText;
+        else el.textContent = (isDecimal ? value.toFixed(2) : Math.round(value)) + suffix;
+        if (progress < 1) raf = requestAnimationFrame(tick);
+      }
+      raf = requestAnimationFrame(tick);
     }
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target, suffix]);
-  return <span ref={ref}>0{suffix}</span>;
+    run();
+    const io = new IntersectionObserver((entries) => entries.forEach((e) => e.isIntersecting && run()), { threshold: 0.6 });
+    io.observe(el);
+    return () => { cancelAnimationFrame(raf); io.disconnect(); };
+  }, [target, suffix, from, finalText]);
+  return <span ref={ref}>{from}{suffix}</span>;
 }
 
 const BENEFITS = [
@@ -155,6 +165,10 @@ const PLAN_FALLBACK_IMAGES = ['/assets/photos/card-black.jpg', '/assets/photos/c
 export default function Home() {
   const [faqs, setFaqs] = useState(null);
   const [plans, setPlans] = useState(null);
+  const [posters, setPosters] = useState([]);
+  useEffect(() => {
+    api.getPublicMagicArt().then((list) => setPosters(Array.isArray(list) ? list.filter((p) => p.imageUrl) : [])).catch(() => setPosters([]));
+  }, []);
   useEffect(() => {
     api.listPlans().then((list) => setPlans(Array.isArray(list) ? list.slice(0, 4) : [])).catch(() => setPlans([]));
   }, []);
@@ -481,16 +495,25 @@ export default function Home() {
               </div>
             </div>
           </div>
+          <div className="hero-live-stats" aria-label="HuntsTAG at a glance">
+            <span className="hero-live-badge"><i /> LIVE SPECS</span>
+            <div className="hero-live-row">
+              <div><b><CountUp target={13.56} suffix=" MHz" /></b><span>NFC frequency</span></div>
+              <div><b><CountUp target={888} suffix=" bytes" /></b><span>NDEF capacity</span></div>
+              <div><b><CountUp target={0} from={99} finalText="Zero" /></b><span>Battery required</span></div>
+            </div>
+          </div>
         </div>
 
       </div>
 
-      <section className="au-stats" aria-label="HuntsTAG at a glance">
-        <div className="hero-spec-row">
-          <div><b><CountUp target={13.56} suffix=" MHz" /></b><span>NFC frequency</span></div>
-          <div><b><CountUp target={888} suffix=" bytes" /></b><span>NDEF capacity</span></div>
-          <div><b>Zero</b><span>battery required</span></div>
-        </div>
+      <section className="home-poster" aria-label="NFC smart business card">
+        <img
+          src="/assets/photos/nfc-smart-business-card-poster.png"
+          alt="NFC Smart Business Card — Tap. Connect. Grow. NFC tap, save contact, social links and website."
+          loading="lazy"
+          decoding="async"
+        />
       </section>
 
       <section className="pro-flow" aria-label="How a tap works">
@@ -562,28 +585,58 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="home-features-section au-explore" ref={featuresRef} aria-label="HuntsTAG features">
-        <div className="au-explore-list">
-          <div className="feature-grid">
-            {FEATURES.map((f) => (
-              <div className="feature-card" key={f.title}>
-                <div className="av-card-art"><f.art /></div>
-                <div className="feature-icon">{f.icon}</div>
-                <h3>{f.title}</h3>
-                <p>{f.desc}</p>
+      <section className="home-features-section home-magic" ref={featuresRef} aria-label="Magic Poster">
+        <div className="home-magic-panel">
+          <div className="home-magic-copy">
+            <span className="home-magic-eyebrow">Magic Poster</span>
+            <h2>Posters that<br />play video when<br />you scan them.</h2>
+            <p>
+              Alongside smart cards, HuntsTAG makes Magic Posters — printed artwork that turns into a video the moment
+              someone points their phone at it. No app to install, no login, just open Magic Camera and watch the print
+              come alive.
+            </p>
+            <ol className="home-magic-steps">
+              <li><span>1</span><div><b>Pick a poster</b><small>Browse the gallery and order the ones you love.</small></div></li>
+              <li><span>2</span><div><b>Point Magic Camera at it</b><small>Works on any phone, straight from the browser.</small></div></li>
+              <li><span>3</span><div><b>Watch it come alive</b><small>The video plays right on top of the artwork.</small></div></li>
+            </ol>
+            <div className="home-magic-cta">
+              <Link to="/magic-art" className="home-magic-btn primary">Shop Magic Posters →</Link>
+              <Link to="/magic-camera" className="home-magic-btn ghost">Try Magic Camera</Link>
+            </div>
+          </div>
+
+          <div className="home-magic-visual" aria-hidden={posters.length === 0 ? 'true' : undefined}>
+            {(posters.length ? posters.slice(0, 3) : [null, null, null]).map((poster, i) => (
+              <div className={`home-magic-poster p${i}`} key={poster?._id || i}>
+                {poster ? <img src={poster.imageUrl} alt={poster.name || 'Magic Poster'} loading="lazy" /> : <div className="home-magic-poster-empty" />}
+                {i === 0 && (
+                  <span className="home-magic-play">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l12-7.5-12-7.5Z" /></svg>
+                    Plays a video
+                  </span>
+                )}
               </div>
             ))}
           </div>
         </div>
-      </section>
 
-      <section className="home-poster" aria-label="NFC smart business card">
-        <img
-          src="/assets/photos/nfc-smart-business-card-poster.png"
-          alt="NFC Smart Business Card — Tap. Connect. Grow. NFC tap, save contact, social links and website."
-          loading="lazy"
-          decoding="async"
-        />
+        <div className="home-magic-links">
+          <Link to="/magic-art" className="home-magic-link">
+            <span className="home-magic-link-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></svg>
+            </span>
+            <span><b>Magic Posters</b><small>See every poster and add them to your cart</small></span>
+            <i>→</i>
+          </Link>
+          <Link to="/shop" className="home-magic-link">
+            <span className="home-magic-link-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2.5" /><path d="M2 10h20" /></svg>
+            </span>
+            <span><b>Smart cards</b><small>Pick your NFC card plan in the shop</small></span>
+            <i>→</i>
+          </Link>
+        </div>
       </section>
 
       <div ref={howItWorksRef}>
@@ -636,11 +689,16 @@ export default function Home() {
       )}
 
       <section className="pro-final">
-        <h2 className="section-heading">Ready for a card that says more?</h2>
-        <p>Pick your card, set up your profile in minutes and start sharing with a single tap.</p>
+        <h2 className="section-heading">Need something custom for your business?</h2>
+        <p>Bulk cards for your team, your own card artwork, branded Magic Posters or a special order — tell us what you need and we will shape it with you.</p>
+        <div className="pro-final-chips">
+          <span>Bulk &amp; team orders</span>
+          <span>Custom card design</span>
+          <span>Branded Magic Posters</span>
+        </div>
         <div className="hero-cta-row">
-          <Link to="/shop" className="btn-primary">Shop cards</Link>
-          <Link to="/catalog" className="btn-secondary">Browse the catalog</Link>
+          <Link to="/contact" className="btn-primary">Contact us</Link>
+          <Link to="/chat" className="btn-secondary">Chat with support</Link>
         </div>
       </section>
     </div>

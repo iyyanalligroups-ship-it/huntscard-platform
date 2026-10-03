@@ -96,18 +96,22 @@ export default function MagicArt({ embedded = false }) {
                 />
               </div>
 
-              <h3 className="magic-art-card-title">{piece.name || `Art ${i + 1}`}</h3>
+              <div className="magic-art-title-wrap">
+                <h3 className="magic-art-card-title" title={piece.name || `Art ${i + 1}`}>{piece.name || `Art ${i + 1}`}</h3>
+              </div>
 
-              <button
-                type="button"
-                className="magic-art-card-camera-link"
-                style={{ width: 'auto', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
-                onClick={() => setQrTarget(piece)}
-              >
-                Open Magic Camera →
-              </button>
+              <div className="magic-art-meta-row">
+                <button
+                  type="button"
+                  className="magic-art-card-camera-link"
+                  style={{ width: 'auto', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+                  onClick={() => setQrTarget(piece)}
+                >
+                  Open Magic Camera →
+                </button>
 
-              {piece.description && <p className="magic-art-card-description">{piece.description}</p>}
+                {piece.description && <p className="magic-art-card-description" title={piece.description}>{piece.description}</p>}
+              </div>
 
               {piece.chargeAmount ? (
                 <div className="magic-art-buy" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '10px 0' }}>

@@ -313,7 +313,11 @@ export default function MagicCamera() {
   function ensureCameraStarted() {
     if (!cameraPromiseRef.current) {
       const attempt = (async () => {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'environment' } });
+        // Low-end phones (e.g. 4GB-class devices) stall when the tracker is fed full-HD frames,
+        // so ask for a small frame: 640x480 normally, 480x360 on low-memory devices.
+        const lowEnd = (navigator.deviceMemory && navigator.deviceMemory <= 4) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+        const frameSize = lowEnd ? { width: { ideal: 480, max: 640 }, height: { ideal: 360, max: 480 } } : { width: { ideal: 640, max: 960 }, height: { ideal: 480, max: 720 } };
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'environment', ...frameSize, frameRate: { ideal: 24, max: 30 } } });
         if (cameraAbortedRef.current) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -584,8 +588,10 @@ export default function MagicCamera() {
       const canvas = canvasRef.current;
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-      renderer.setPixelRatio(window.devicePixelRatio);
+      // No antialiasing and 1:1 pixel ratio: the canvas already matches the camera frame, and
+      // phone screens at 2-3x pixel ratio multiplied the GPU work for no visible gain.
+      const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false, powerPreference: 'high-performance' });
+      renderer.setPixelRatio(1);
       renderer.setSize(canvas.width, canvas.height, false);
 
       const scene = new THREE.Scene();
@@ -891,6 +897,9 @@ export default function MagicCamera() {
               // consistently muted toward gray/olive compared to the same
               // file played in a plain <video> tag.
               texture.colorSpace = THREE.SRGBColorSpace;
+              texture.generateMipmaps = false;
+              texture.minFilter = THREE.LinearFilter;
+              texture.magFilter = THREE.LinearFilter;
               // Display-only crop, chosen in the admin's crop tool (see
               // MagicArt.jsx / StreetArt.jsx) -- a plain UV offset/repeat
               // on the texture, the video FILE itself is untouched.
@@ -919,6 +928,7 @@ export default function MagicCamera() {
       const ndcHelper = new THREE.Vector3();
       const worldHelper = new THREE.Vector3();
       const centerHelper = new THREE.Vector3();
+      let drewLastFrame = false;
       function renderLoop() {
         // 60fps lerp: glide every visible anchor's display matrix toward
         // the latest raw tracker pose stored by onUpdate. Running here
@@ -957,7 +967,11 @@ export default function MagicCamera() {
             }
           }
         });
-        renderer.render(scene, camera);
+        // Skip the GPU draw while nothing is tracked (one clearing frame when the last
+        // target disappears) -- the tracker keeps the GPU busy enough on its own.
+        const anyVisible = targetEntries.some((e) => e.anchorGroup.visible);
+        if (anyVisible || drewLastFrame) renderer.render(scene, camera);
+        drewLastFrame = anyVisible;
         const entry = targetEntries[0];
         if (clientId && entry?.anchorGroup.visible && pillLayoutRef.current.length) {
           const cw = window.innerWidth;

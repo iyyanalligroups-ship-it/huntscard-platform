@@ -7259,7 +7259,7 @@ body.client-dashboard-active .theme-select-panel button.selected {
 /* Home page poster banner (below the features) */
 .home-poster {
   max-width: 1200px;
-  margin: 8px auto 56px;
+  margin: 56px auto 24px;
   padding: 0 16px;
 }
 .home-poster img {
@@ -7349,4 +7349,11 @@ html body.public-site-active .sh-theme .magic-qr-modal .magic-qr-open {
 @media (max-width: 560px) {
   html body.public-site-active .sh-theme .magic-qr-modal { padding: 28px 18px 22px; }
   .magic-qr-body { grid-template-columns: 1fr; gap: 16px; }
+}
+
+/* Smooth scrolling for anchor links, scrollTo(), keyboard and in-page jumps.
+   Route changes and refreshes still jump instantly (see ScrollToTop in App.jsx). */
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
 }

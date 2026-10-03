@@ -112,8 +112,24 @@ function RequireAuth({ children }) {
 function ScrollToTop() {
   const { pathname } = useLocation();
 
+  // Browsers restore the previous scroll position on a page refresh (and on
+  // back/forward). Turn that off so every reload starts at the top.
   useLayoutEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    // Layout can still be growing (images, lazy sections) when the browser
+    // applies its own restore, so re-assert the top once the page has loaded.
+    const toTop = () => window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    window.addEventListener('load', toTop);
+    const timer = setTimeout(toTop, 150);
+    return () => {
+      window.removeEventListener('load', toTop);
+      clearTimeout(timer);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [pathname]);
 
   return null;
