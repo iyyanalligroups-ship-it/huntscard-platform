@@ -295,3 +295,43 @@ html .sh-theme .hero-card-stage .holo-card {
   html .sh-theme .hero-card-stage .hero-visual { min-height: 320px; height: 320px; }
   html .sh-theme .hero-card-stage .holo-card { width: min(78vw, 310px); height: min(49vw, 195px); }
 }
+
+/* ---------- mobile header: visible menu toggle + blue dropdown menu ----------
+   The toggle used to render white-on-white and the opened menu was a white
+   panel with white links, so neither could be seen. */
+html .sh-theme .nav-menu-btn {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border: 1px solid rgba(255, 255, 255, 0.45) !important;
+  border-radius: 12px !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  box-shadow: none !important;
+}
+html .sh-theme .nav-menu-btn svg { color: #ffffff !important; stroke: #ffffff !important; }
+html .sh-theme .nav-menu-btn:hover,
+html .sh-theme .nav-menu-btn[aria-expanded="true"] { background: rgba(255, 255, 255, 0.28) !important; }
+
+@media (max-width: 860px) {
+  html .sh-theme .nav-menu.open {
+    background: linear-gradient(160deg, #0d47a1 0%, #1565c0 60%, #2196f3 100%) !important;
+    border: 0 !important;
+    border-radius: 0 0 22px 22px;
+    box-shadow: 0 22px 40px rgba(13, 71, 161, 0.4);
+    z-index: 60;
+  }
+  html .sh-theme .nav-menu.open .nav-link { color: #ffffff !important; -webkit-text-fill-color: #ffffff; font-size: 16px; font-weight: 600; }
+  html .sh-theme .nav-menu.open .nav-link.active { color: #ffffff !important; }
+  html .sh-theme .nav-menu.open .nav-link::after { background: #ffffff !important; }
+  html .sh-theme .nav-menu.open .public-nav-icon-button,
+  html .sh-theme .nav-menu.open .public-nav-icon-button svg { color: #ffffff !important; }
+  html .sh-theme .nav-menu.open .public-online-status,
+  html .sh-theme .nav-menu.open .public-online-status span { color: #ffffff !important; }
+  /* notification bell: translucent white chip instead of a black square */
+  html .sh-theme .nav-menu.open .nav-actions button[aria-label="Notifications"] {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: 1px solid rgba(255, 255, 255, 0.5) !important;
+    color: #ffffff !important;
+  }
+  html body.public-site-active .sh-theme .nav-menu.open .public-account-actions .pill-outline:not(:last-child):not(#_a):not(#_b),
+  html body.public-site-active .sh-theme .nav-menu.open .public-account-actions .public-dashboard-action:not(#_a):not(#_b) { color: #ffffff !important; -webkit-text-fill-color: #ffffff; }
+}

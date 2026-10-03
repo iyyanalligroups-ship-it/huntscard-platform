@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { api, API_URL } from '../api.js';
 import { useCart } from '../cart.jsx';
@@ -161,34 +162,33 @@ export default function MagicArt({ embedded = false }) {
         </div>
       )}
 
-      {qrTarget && (
-        <div className="auth-modal-backdrop" onClick={(e) => e.target === e.currentTarget && setQrTarget(null)}>
-          <div className="auth-modal-card" style={{ textAlign: 'center' }}>
-            <button className="auth-modal-close" onClick={() => setQrTarget(null)} aria-label="Close">
-              ×
-            </button>
-            <h1 style={{ fontSize: 18, marginTop: 0 }}>Scan the image with Magic Camera</h1>
+      {qrTarget &&
+        createPortal(
+          <div className="sh-theme">
+            <div className="auth-modal-backdrop magic-qr-backdrop" onClick={(e) => e.target === e.currentTarget && setQrTarget(null)}>
+              <div className="auth-modal-card magic-qr-modal" role="dialog" aria-modal="true" aria-label="Scan the image with Magic Camera">
+                <button className="auth-modal-close" onClick={() => setQrTarget(null)} aria-label="Close">
+                  ×
+                </button>
+                <span className="magic-qr-eyebrow">✨ Magic Camera</span>
+                <h2 className="magic-qr-title">Scan the image with Magic Camera</h2>
+                <div className="magic-qr-body">
+                  <img className="magic-qr-art" src={qrTarget.imageUrl} alt={qrTarget.name || 'Magic Art'} />
+                  <div className="magic-qr-scan">
+                    <img className="magic-qr-code" src={MAGIC_CAMERA_QR_URL} alt="QR code to open Magic Camera" />
+                    <p className="magic-qr-hint">Scan this with your phone's camera to open Magic Camera.</p>
+                    <p className="magic-qr-hint">No app to install -- it opens straight in your phone's browser.</p>
+                  </div>
+                </div>
+                <Link to="/magic-camera" className="magic-qr-open">
+                  Already on your phone? Open Magic Camera directly →
+                </Link>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
-            <img
-              src={qrTarget.imageUrl}
-              alt={qrTarget.name || 'Magic Art'}
-              style={{ width: '100%', maxWidth: 220, borderRadius: 10, margin: '12px auto', display: 'block' }}
-            />
-
-            <img
-              src={MAGIC_CAMERA_QR_URL}
-              alt="QR code to open Magic Camera"
-              style={{ width: 140, height: 140, margin: '16px auto 8px', display: 'block', borderRadius: 8, background: '#fff', padding: 8 }}
-            />
-            <p className="hint" style={{ margin: '0 0 4px' }}>Scan this with your phone's camera to open Magic Camera.</p>
-            <p className="hint" style={{ margin: '0 0 16px' }}>No app to install -- it opens straight in your phone's browser.</p>
-
-            <Link to="/magic-camera" className="auth-modal-link">
-              Already on your phone? Open Magic Camera directly →
-            </Link>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

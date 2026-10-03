@@ -7273,3 +7273,80 @@ body.client-dashboard-active .theme-select-panel button.selected {
   .home-poster { margin-bottom: 36px; padding: 0 10px; }
   .home-poster img { border-radius: 12px; }
 }
+
+/* Magic Poster -> "Scan with Magic Camera" popup. Rendered in a portal so it
+   always sits above the sticky site header, and sized to fit any viewport. */
+.sh-theme .magic-qr-backdrop {
+  z-index: 1000;
+  align-items: center;
+  overflow-y: auto;
+  padding: 16px;
+}
+html body.public-site-active .sh-theme .magic-qr-modal {
+  max-width: 560px;
+  max-height: calc(100vh - 32px);
+  padding: 34px 32px 28px;
+  text-align: center;
+  background: #ffffff;
+  color: var(--au-text, #111);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+}
+.magic-qr-eyebrow {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(var(--brand-accent-rgb, 13, 147, 148), 0.12);
+  color: var(--brand-accent, #0d9394);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+html body.public-site-active .sh-theme .magic-qr-modal .magic-qr-title {
+  margin: 0 0 20px;
+  font-size: clamp(1.4rem, 3.2vw, 1.9rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-weight: 600;
+}
+.magic-qr-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+  align-items: center;
+  text-align: center;
+}
+.magic-qr-art {
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  border-radius: 10px;
+  margin: 0 auto;
+  display: block;
+}
+.magic-qr-scan { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.magic-qr-code {
+  width: 140px;
+  height: 140px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid rgba(17, 17, 17, 0.12);
+}
+.magic-qr-hint { margin: 0; font-size: 13px; line-height: 1.4; color: #4d4d4d; }
+html body.public-site-active .sh-theme .magic-qr-modal .magic-qr-open {
+  display: block;
+  margin-top: 22px;
+  padding: 13px 18px !important;
+  width: 100% !important;
+  border-radius: 999px !important;
+  background: var(--brand-accent, #0d9394) !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}
+@media (max-width: 560px) {
+  html body.public-site-active .sh-theme .magic-qr-modal { padding: 28px 18px 22px; }
+  .magic-qr-body { grid-template-columns: 1fr; gap: 16px; }
+}
