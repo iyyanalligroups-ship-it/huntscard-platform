@@ -577,6 +577,15 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="home-poster" aria-label="NFC smart business card">
+        <img
+          src="/assets/photos/nfc-smart-business-card-poster.png"
+          alt="NFC Smart Business Card — Tap. Connect. Grow. NFC tap, save contact, social links and website."
+          loading="lazy"
+          decoding="async"
+        />
+      </section>
+
       <div ref={howItWorksRef}>
         <h2 className="section-heading">How it works</h2>
         <p className="section-subheading">From order to first tap in three steps.</p>

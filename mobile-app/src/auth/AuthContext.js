@@ -36,6 +36,8 @@ export function AuthProvider({ children }) {
     restoring,
     signIn: async (identifier, password) => acceptAuthResponse(await api.login(identifier, password)),
     signInWithOtp: async (phone, otp) => acceptAuthResponse(await api.verifyLoginOtp(phone, otp)),
+    // Admin 'view as this client' hand-off (the website's /impersonate route).
+    signInWithToken: async (token, clientId) => acceptAuthResponse({ token, clientId, mustChangePassword: false }),
     register: async (payload) => acceptAuthResponse(await api.register(payload)),
     completePasswordChange: async () => {
       await markPasswordChanged();

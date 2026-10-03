@@ -1,0 +1,127 @@
+:root {
+  /* Holographic security-foil theme -- the iridescent cyan/violet/magenta
+     shimmer is the same finish real NFC/tap cards use on their anti-
+     counterfeit foil. That's the tie to the subject, not decoration.
+     Client surface leans cyan-forward; admin app leans magenta-forward
+     (see admin-app/src/styles.css) -- same family, distinguishable at a
+     glance. */
+  --space: #0a0b10;
+  --panel: rgba(18, 20, 27, 0.8);
+  --panel-raised: rgba(24, 27, 36, 0.9);
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --text: #edeff3;
+  --text-dim: #8b93a3;
+  --holo-cyan: #5eead4;
+  --holo-violet: #a78bfa;
+  --holo-magenta: #f472b6;
+  --danger: #f4746a;
+  --warning: #e8b559;
+
+  /* User-selected brand accent. Set on <html> before React renders so it
+     persists across dashboard, public pages and portaled UI. */
+  --brand-accent: #0d9394;
+  --brand-accent-2: #13aaa5;
+  --brand-accent-rgb: 13, 147, 148;
+  --brand-accent-soft: rgba(13, 147, 148, 0.09);
+  --brand-accent-border: rgba(13, 147, 148, 0.22);
+  --brand-accent-shadow: rgba(13, 147, 148, 0.22);
+
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Space Grotesk", var(--font-ui);
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", "Cascadia Code", monospace;
+
+  --holo-gradient: linear-gradient(120deg, var(--holo-cyan), var(--holo-violet), var(--holo-magenta));
+  --glow-cyan: 0 0 40px rgba(94, 234, 212, 0.25);
+  --glow-violet: 0 0 50px rgba(167, 139, 250, 0.22);
+
+html, body, #root { margin: 0; height: 100%; background: var(--space); color: var(--text); font-family: var(--font-ui); }
+.subtitle { color: var(--text-dim); }
+/* Magic Camera's full-screen loading spinner (see MagicCamera.jsx) --
+   shown while compiling tracking data / starting the camera, gone once
+   scanning actually begins. */
+.magic-camera-spinner {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #fff;
+  animation: magicCameraSpin 0.9s linear infinite;
+}
+@keyframes magicCameraSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .magic-camera-spinner { animation: none; }
+}
+
+/* The "Start Magic Camera" CTA (see MagicCamera.jsx) -- a round icon-only
+   button (a caption above does the explaining, see .magic-camera-start-note
+   below) so it reads as a single tappable "shutter" floating over the dark
+   camera feed, wand-sparkles icon nodding at what's about to happen. The
+   pulsing glow ring is what makes it actually register as "tap me". */
+.magic-camera-start-note {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  max-width: 280px;
+}
+.magic-camera-start-btn {
+  width: 84px;
+  height: 84px;
+  padding: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: magicStartPulse 2.4s ease-in-out infinite;
+}
+.magic-camera-start-btn svg { animation: magicStartIcon 2.4s ease-in-out infinite; }
+@keyframes magicStartPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.55), 0 8px 22px rgba(0, 0, 0, 0.35); }
+  50% { box-shadow: 0 0 0 18px rgba(167, 139, 250, 0), 0 8px 22px rgba(0, 0, 0, 0.35); }
+}
+@keyframes magicStartIcon {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(-12deg) scale(1.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .magic-camera-start-btn,
+  .magic-camera-start-btn svg { animation: none; }
+}
+
+.magic-pill-btn {
+  --rot: 0deg;
+  --z-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-radius: 999px;
+  white-space: nowrap;
+  box-shadow: var(--z-shadow);
+  border: none;
+  text-decoration: none;
+  cursor: pointer;
+  transform: rotate(var(--rot)) scale(1) translateY(0);
+  transition: transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.16s ease, background 0.16s ease;
+}
+.magic-pill-btn svg { flex: none; width: 15px; height: 15px; }
+.magic-pill-btn:hover {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  box-shadow: var(--z-shadow), 0 8px 20px rgba(37, 99, 235, 0.55);
+  transform: rotate(var(--rot)) scale(1.08) translateY(-4px);
+}
+.magic-pill-btn:active {
+  transform: rotate(var(--rot)) scale(0.9) translateY(0);
+  box-shadow: var(--z-shadow), 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition-duration: 0.08s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .magic-pill-btn { transition: none; }
+}
+

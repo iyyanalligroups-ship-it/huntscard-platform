@@ -1,0 +1,16 @@
+{
+  "name": "magic-camera-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },
+  "dependencies": {
+    "mind-ar": "^1.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0",
+    "three": "^0.183.2"
+  },
+  "overrides": { "canvas": "npm:noop2@^2.0.0" },
+  "devDependencies": { "@vitejs/plugin-react": "^4.3.1", "vite": "^5.4.0" }
+}

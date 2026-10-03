@@ -89,14 +89,41 @@ async function request(path, { method = 'GET', body, auth = true, form = false }
   return data;
 }
 
-function upload(path, asset, fieldName = 'photo') {
-  const form = new FormData();
-  form.append(fieldName, {
+function filePart(asset, fieldName) {
+  return {
     uri: asset.uri,
-    name: asset.fileName || `${fieldName}.jpg`,
+    name: asset.fileName || asset.name || `${fieldName}.${(asset.mimeType || '').split('/')[1] || 'jpg'}`,
     type: asset.mimeType || 'image/jpeg',
+  };
+}
+
+function upload(path, asset, fieldName = 'photo', fields = {}, auth = true) {
+  const form = new FormData();
+  Object.entries(fields).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) form.append(key, String(value));
   });
-  return request(path, { method: 'POST', body: form, form: true });
+  form.append(fieldName, filePart(asset, fieldName));
+  return request(path, { method: 'POST', body: form, form: true, auth });
+}
+
+const qs = (params) => {
+  const query = Object.entries(params)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join('&');
+  return query ? `?${query}` : '';
+};
+
+// Authenticated binary download (invoices, vCard export) -- returns the
+// Authorization header + absolute URL so the caller can hand it to
+// expo-file-system's downloadAsync.
+export async function authedDownloadTarget(path) {
+  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  return { url: `${API_URL}${path}`, headers: token ? { Authorization: `Bearer ${token}` } : {} };
+}
+
+export function publicUrl(path) {
+  return `${API_URL}${path}`;
 }
 
 export const api = {
@@ -129,4 +156,77 @@ export const api = {
   deleteAppointment: (id) => request(`/api/profile/appointments/${id}`, { method: 'DELETE' }),
   getChat: () => request('/api/profile/chat'),
   sendChatMessage: (message) => request('/api/profile/chat', { method: 'POST', body: { text: message } }),
+
+  // ---- public (no login) ----
+  getPublicProfile: (clientId, cardNumber) => request(`/api/public/profile/${clientId}${qs({ card: cardNumber })}`, { auth: false }),
+  getPublicMagicArt: () => request('/api/public/magic-art', { auth: false }),
+  getSiteSettings: () => request('/api/public/site-settings', { auth: false }),
+  getPublicFaq: () => request('/api/public/faq', { auth: false }),
+  getAttributeDefinitions: () => request('/api/public/attributes', { auth: false }),
+  getCatalog: () => request('/api/public/catalog', { auth: false }),
+  getCatalogEntries: () => request('/api/public/catalog-entries', { auth: false }),
+  submitContactForm: (payload) => request('/api/public/contact', { method: 'POST', body: payload, auth: false }),
+  submitLead: (clientId, payload, cardNumber) => request(`/api/public/leads/${clientId}${qs({ card: cardNumber })}`, { method: 'POST', body: payload, auth: false }),
+  submitCardTicket: (clientId, payload, cardNumber) => request(`/api/public/card-tickets/${clientId}${qs({ card: cardNumber })}`, { method: 'POST', body: payload, auth: false }),
+  getCountries: () => request('/api/public/geo/countries', { auth: false }),
+  getStates: (country) => request(`/api/public/geo/states${qs({ country })}`, { auth: false }),
+  getCities: (country, state) => request(`/api/public/geo/cities${qs({ country, state })}`, { auth: false }),
+  uploadDesign: (asset) => upload('/api/public/design-upload', asset, 'design', {}, false),
+
+  // ---- profile media ----
+  uploadBanner: (asset) => upload('/api/profile/banner', asset, 'banner'),
+  removeBanner: () => request('/api/profile/banner', { method: 'DELETE' }),
+  uploadLogo: (asset) => upload('/api/profile/logo', asset, 'logo'),
+  removeLogo: () => request('/api/profile/logo', { method: 'DELETE' }),
+  uploadArBanner: (asset) => upload('/api/profile/ar-banner', asset, 'banner'),
+  removeArBanner: () => request('/api/profile/ar-banner', { method: 'DELETE' }),
+  uploadArModel: (asset) => upload('/api/profile/ar-model', asset, 'model'),
+  removeArModel: () => request('/api/profile/ar-model', { method: 'DELETE' }),
+
+  // ---- notifications ----
+  getNotifications: () => request('/api/profile/notifications'),
+  markNotificationRead: (id) => request(`/api/profile/notifications/${id}/read`, { method: 'POST' }),
+
+  // ---- AR layout + Magic Business Card ----
+  getMyArLayout: (cardNumber) => request(`/api/profile/ar-layout${qs({ card: cardNumber })}`),
+  saveMyArLayout: (updates, cardNumber) => request('/api/profile/ar-layout', { method: 'PUT', body: { ...updates, cardNumber } }),
+  getMyMagicCard: (cardNumber) => request(`/api/profile/magic-card${qs({ card: cardNumber })}`),
+  saveMyMagicCardQrPosition: (x, y, cardNumber) => request('/api/profile/magic-card/qr-position', { method: 'POST', body: { x, y, cardNumber } }),
+  saveMyMagicCardComponentPosition: (key, x, y, z, rotation, cardNumber) =>
+    request('/api/profile/magic-card/component-position', { method: 'POST', body: { key, x, y, z, rotation, cardNumber } }),
+  activateMyMagicCard: (cardNumber) => request('/api/profile/magic-card/activate', { method: 'POST', body: { cardNumber } }),
+  deactivateMyMagicCard: (cardNumber) => request('/api/profile/magic-card/deactivate', { method: 'POST', body: { cardNumber } }),
+  uploadMyMagicCardVideo: (asset, crop, cardNumber) =>
+    upload('/api/profile/magic-card/video', asset, 'video', { cropX: crop.x, cropY: crop.y, cropWidth: crop.width, cropHeight: crop.height, cardNumber }),
+  removeMyMagicCardVideo: (cardNumber) => request(`/api/profile/magic-card/video${qs({ card: cardNumber })}`, { method: 'DELETE' }),
+  uploadMyMagicCardModel: (asset, cardNumber) => upload('/api/profile/magic-card/model', asset, 'model', { cardNumber }),
+  removeMyMagicCardModel: (cardNumber) => request(`/api/profile/magic-card/model${qs({ card: cardNumber })}`, { method: 'DELETE' }),
+  uploadMyMagicCardImage: (asset, width, height, cardNumber) => upload('/api/profile/magic-card/image', asset, 'image', { width, height, cardNumber }),
+  removeMyMagicCardImage: (cardNumber) => request(`/api/profile/magic-card/image${qs({ card: cardNumber })}`, { method: 'DELETE' }),
+
+  // ---- shop / checkout ----
+  submitRequest: (payload) => request('/api/profile/requests', { method: 'POST', body: payload }),
+  getCardCheckoutPricing: (state) => request('/api/profile/card-checkout/pricing', { method: 'POST', body: { state } }),
+  createUpgradeOrder: (requestedPlan, quantity, variants, deliveryAddressId) =>
+    request('/api/profile/upgrade-order', { method: 'POST', body: { requestedPlan, quantity, variants, deliveryAddressId } }),
+  confirmUpgradePayment: (payload) => request('/api/profile/upgrade-confirm', { method: 'POST', body: payload }),
+  previewCoupon: (code) => request('/api/profile/coupon/preview', { method: 'POST', body: { code } }),
+  claimCoupon: (payload) => request('/api/profile/coupon/claim', { method: 'POST', body: payload }),
+  createNewCardOrder: (payload) => request('/api/profile/new-card-order', { method: 'POST', body: payload }),
+  confirmNewCardPayment: (payload) => request('/api/profile/new-card-confirm', { method: 'POST', body: payload }),
+  createMagicPosterOrder: (items, delivery) => request('/api/profile/magic-poster/order', { method: 'POST', body: { items, delivery } }),
+  confirmMagicPosterPayment: (payload) => request('/api/profile/magic-poster/confirm', { method: 'POST', body: payload }),
+  getMagicPosterPricing: (items, state) => request('/api/profile/magic-poster/pricing', { method: 'POST', body: { items, state } }),
+  listMyMagicPosterOrdersPage: ({ q, skip, limit } = {}) => request(`/api/profile/magic-poster/orders${qs({ q, skip, limit })}`),
+  listAddresses: () => request('/api/profile/addresses'),
+  createAddress: (payload) => request('/api/profile/addresses', { method: 'POST', body: payload }),
+  updateAddress: (id, payload) => request(`/api/profile/addresses/${id}`, { method: 'PATCH', body: payload }),
+  deleteAddress: (id) => request(`/api/profile/addresses/${id}`, { method: 'DELETE' }),
+
+  // ---- contacts + appointments (extras) ----
+  importContacts: (contacts) => request('/api/profile/contacts/import', { method: 'POST', body: { contacts } }),
+  uploadContactPhoto: (id, asset) => upload(`/api/profile/contacts/${id}/photo`, asset, 'photo'),
+  removeContactPhoto: (id) => request(`/api/profile/contacts/${id}/photo`, { method: 'DELETE' }),
+  sendAppointmentRequest: (contactId, note, proposedAt) => request('/api/profile/appointments', { method: 'POST', body: { contactId, note, proposedAt } }),
+  getAppointmentBusyTimes: (phone) => request(`/api/profile/appointments/busy${qs({ phone })}`),
 };

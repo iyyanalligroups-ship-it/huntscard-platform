@@ -6,6 +6,30 @@
     "extra": {
       "apiUrl": "",
       "webUrl": ""
+    },
+    "plugins": [
+      "expo-sharing",
+      "expo-video",
+      "@react-native-community/datetimepicker",
+      "expo-camera",
+      "expo-contacts",
+      "expo-image-picker",
+      "expo-document-picker"
+    ],
+    "scheme": "huntstag",
+    "ios": {
+      "infoPlist": {
+        "NSCameraUsageDescription": "huntsTAG uses the camera for Magic Camera, AR and QR scanning.",
+        "NSContactsUsageDescription": "huntsTAG imports and saves contacts.",
+        "NSPhotoLibraryUsageDescription": "huntsTAG uploads your photos, banners and card artwork."
+      }
+    },
+    "android": {
+      "permissions": [
+        "CAMERA",
+        "READ_CONTACTS",
+        "WRITE_CONTACTS"
+      ]
     }
   }
 }

@@ -338,6 +338,15 @@ export default function HomeD1() {
         </div>
       </div>
 
+      <section className="home-poster" aria-label="NFC smart business card">
+        <img
+          src="/assets/photos/nfc-smart-business-card-poster.png"
+          alt="NFC Smart Business Card — Tap. Connect. Grow. NFC tap, save contact, social links and website."
+          loading="lazy"
+          decoding="async"
+        />
+      </section>
+
       <div className="d1-steps-section">
         <div className="d1-eyebrow-row">Getting started</div>
         <h2 className="d1-section-headline">

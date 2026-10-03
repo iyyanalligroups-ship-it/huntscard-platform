@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Magic Camera",
+    "slug": "magic-camera",
+    "version": "0.1.0",
+    "scheme": "magiccamera",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "plugins": [
+      ["expo-camera", { "cameraPermission": "Magic Camera needs the camera to see the poster or card you point it at." }]
+    ],
+    "ios": { "bundleIdentifier": "com.huntstag.magiccamera", "supportsTablet": true },
+    "android": { "package": "com.huntstag.magiccamera", "permissions": ["CAMERA"] }
+  }
+}

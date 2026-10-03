@@ -3,26 +3,17 @@
 Expo / React Native client for the existing `../backend` API. It uses the
 same client accounts and data as `../client-app`.
 
-## Included flows
+## Included flows (parity with client-app)
 
-- Email/phone + password login
-- Phone OTP login
-- Registration, forgot password, and forced password change
-- Secure JWT storage with `expo-secure-store`
-- Dashboard, card preview, profile completeness, and native share (Zing)
-- Profile editing and profile-photo upload
-- Live card plan catalog (checkout hands off to the existing Razorpay web flow)
-- Card and Magic Poster order tracking
-- Contacts CRUD
-- Received/sent appointments with accept, decline, and remove actions
-- Polling support chat
-- Account, password, public-profile pause, and per-card pause controls
-- Android Device Protection Check in a development/native build
+**Public (no login):** Home, Shop (plans, variants, coupons), Catalog, Magic Poster gallery + cart, Contact Us, About, What is HuntsWorld, FAQ, Chat Support gate, Open a Card (QR scan / link), public card page (tabs, exchange contact, save, share, QR, deactivated-card ticket), Magic Camera / 3D / AR via the website's own pages in a camera WebView.
 
-Browser-only AR target tracking, 3D editing, Web Push, invoice download, and
-Razorpay checkout are not copied into Expo yet. The shop opens the existing
-web checkout so payments continue using the production-tested verification
-flow.
+**Auth:** password + phone-OTP login, registration (gender/DOB/designation), 3-step forgot password with resend cooldown, forced password change, admin impersonation deep link (huntstag://impersonate?token=&clientId=).
+
+**Dashboard:** overview (KPIs with live tap count, completeness donut, order progress, Zing, card picker, QR overlay, device protection), Appointment Requests (calendar, week grid, filters, preview), Profile preview, Profile Settings (banner, logo, AR banner, 3D model, AR links, identity, private details, tabs, highlights), Contacts (phone import, vCard/Excel import-export, template, photos, appointment requests), AR Layout (drag editor + controls), Magic Business Card (image/video/3D upload, go-live, QR colours, component positions, download with QR), Track Orders, Settings (password, card pause, per-card pause), Notifications, Device Protection Check.
+
+**Payments:** Razorpay checkout runs in a WebView; orders are created and verified by the same backend endpoints as the website. Invoices download and open in the share sheet.
+
+Not ported: Web Push (browser-only; the bell polls instead) and the experimental HuntsEngine Test page.
 
 ## Requirements
 

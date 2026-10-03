@@ -5,6 +5,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AppNavigator from './src/navigation/AppNavigator.js';
 import { colors } from './src/theme/colors.js';
 import { AuthProvider } from './src/auth/AuthContext.js';
+import { CartProvider } from './src/cart/CartContext.js';
+import { PaymentProvider } from './src/payments/PaymentProvider.js';
 
 export default function App() {
   return (
@@ -12,7 +14,11 @@ export default function App() {
       <SafeAreaProvider>
         <StatusBar style="light" backgroundColor={colors.space} />
         <AuthProvider>
-          <AppNavigator />
+          <CartProvider>
+            <PaymentProvider>
+              <AppNavigator />
+            </PaymentProvider>
+          </CartProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

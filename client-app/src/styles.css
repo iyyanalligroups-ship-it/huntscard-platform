@@ -7255,3 +7255,21 @@ body.client-dashboard-active .theme-select-panel button.selected {
 /* Shop page: top-level Card Shop / Magic Poster Shop tabs */
 .shop-main-tabs { margin: 0 0 20px; }
 .shop-main-tabs .history-tab svg { flex: none; }
+
+/* Home page poster banner (below the features) */
+.home-poster {
+  max-width: 1200px;
+  margin: 8px auto 56px;
+  padding: 0 16px;
+}
+.home-poster img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 18px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+}
+@media (max-width: 640px) {
+  .home-poster { margin-bottom: 36px; padding: 0 10px; }
+  .home-poster img { border-radius: 12px; }
+}

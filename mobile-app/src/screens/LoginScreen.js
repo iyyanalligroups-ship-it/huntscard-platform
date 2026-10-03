@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../auth/AuthContext.js';
 import { api } from '../api/client.js';
-import { Button, Card, Field, Message, Screen, Title, ui } from '../components/ui.js';
+import { Button, Card, Field, Message, PasswordField, Screen, Title, ui } from '../components/ui.js';
 import { colors } from '../theme/colors.js';
 
 export default function LoginScreen({ navigation }) {
@@ -48,7 +48,7 @@ export default function LoginScreen({ navigation }) {
           </View>
           {mode === 'password' ? <>
             <Field label="Email or phone" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" keyboardType="email-address" />
-            <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
+            <PasswordField label="Password" value={password} onChangeText={setPassword} />
             <Button title={busy ? 'Signing in…' : 'Sign in'} disabled={busy || !identifier.trim() || !password} onPress={submitPassword} />
           </> : <>
             <Field label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
@@ -58,6 +58,7 @@ export default function LoginScreen({ navigation }) {
           <Message>{error}</Message><Message tone="success">{message}</Message>
           <Button title="Create an account" kind="secondary" onPress={() => navigation.navigate('Register')} />
           <Button title="Forgot password?" kind="secondary" onPress={() => navigation.navigate('ForgotPassword')} />
+          <Button title="Browse without an account" kind="ghost" onPress={() => navigation.navigate('Public')} />
         </Card>
       </Screen>
     </KeyboardAvoidingView>
