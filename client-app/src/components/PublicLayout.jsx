@@ -6,6 +6,8 @@ import { useCart } from '../cart.jsx';
 import AuthModal from './AuthModal.jsx';
 import NotificationBell from './NotificationBell.jsx';
 import Footer from './Footer.jsx';
+import ParticleWaves from './ParticleWaves.jsx';
+import PublicMotion from './PublicMotion.jsx';
 
 export default function PublicLayout() {
   const loggedIn = isLoggedIn();
@@ -91,7 +93,9 @@ export default function PublicLayout() {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell sh-theme">
+      <ParticleWaves />
+      <PublicMotion />
       <header
         className={`top-nav${homeTheme === 'orange' ? ' theme-orange' : homeTheme === 'cyber' ? ' theme-cyber' : ''}`}
         ref={navRef}

@@ -5,6 +5,8 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { api, isLoggedIn } from '../api.js';
 import WhyChooseHuntsworld from '../components/WhyChooseHuntsworld.jsx';
 import TechGlobe from '../components/TechGlobe.jsx';
+import { Nfc, UserRound, BookUser, QrCode, Lock, RefreshCw, Smartphone, Sparkles, ShieldCheck, Palette, Check } from 'lucide-react';
+import { IlloChooseCard, IlloProfile, IlloTap, IlloUpdate, IlloLock, IlloDesign } from '../components/Illustrations.jsx';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -13,6 +15,7 @@ const SAMPLE_CARD_ROLE = 'Founder, Studio Nine';
 
 const FEATURES = [
   {
+    art: IlloTap,
     title: 'Tap to share instantly',
     desc: 'One tap on any phone opens your profile — no app required for the person receiving it. Save Contact works everywhere, natively.',
     // Same signal-arc + dot motif as the holo card mockup above -- this
@@ -26,6 +29,7 @@ const FEATURES = [
     ),
   },
   {
+    art: IlloUpdate,
     title: 'Update anytime, card never changes',
     desc: 'Your physical card only stores a link. Change your phone number or add a new social link from your dashboard — it reflects immediately, no reprinting.',
     icon: (
@@ -36,6 +40,7 @@ const FEATURES = [
     ),
   },
   {
+    art: IlloLock,
     title: 'Locked against tampering',
     desc: 'Every card is password-protected at the chip level the moment it\'s made. Nobody can overwrite your card\'s link but us.',
     icon: (
@@ -46,6 +51,7 @@ const FEATURES = [
     ),
   },
   {
+    art: IlloDesign,
     title: 'Your page, your design',
     desc: 'Pick a banner design, add your photo and bio, and link out to Instagram, Twitter, your portfolio, and more.',
     icon: (
@@ -59,9 +65,9 @@ const FEATURES = [
 ];
 
 const STEPS = [
-  { title: 'Choose your card', desc: 'Pick a tier that fits — Basic to Apex.' },
-  { title: 'Set up your profile', desc: 'Add your photo, links, and details in minutes.' },
-  { title: 'Tap to connect', desc: 'Hand someone your card, they tap, done.' },
+  { art: IlloChooseCard, title: 'Choose your card', desc: 'Pick a tier that fits — Basic to Apex.' },
+  { art: IlloProfile, title: 'Set up your profile', desc: 'Add your photo, links, and details in minutes.' },
+  { art: IlloTap, title: 'Tap to connect', desc: 'Hand someone your card, they tap, done.' },
 ];
 
 function CountUp({ target, suffix = '' }) {
@@ -86,7 +92,75 @@ function CountUp({ target, suffix = '' }) {
   return <span ref={ref}>0{suffix}</span>;
 }
 
+const BENEFITS = [
+  { Icon: Nfc, title: 'Tap to share', text: 'One tap opens your full profile on any phone.' },
+  { Icon: QrCode, title: 'QR code backup', text: 'Every card also carries a QR code that opens the same page.' },
+  { Icon: RefreshCw, title: 'Update anytime', text: 'Change your details online; the card never needs reprinting.' },
+  { Icon: Lock, title: 'Password-locked chip', text: 'Nobody can overwrite your card link but us.' },
+  { Icon: Smartphone, title: 'No app needed', text: 'The person you meet installs nothing.' },
+  { Icon: Palette, title: 'Your own design', text: 'Pick a banner, add your photo, bio and social links.' },
+];
+
+const FLOW_CHECKS = ['Tap the card on any phone', 'Your profile opens instantly', 'They save your contact in one tap'];
+
+function TapFlow() {
+  return (
+    <svg className="pro-flow-svg" viewBox="0 0 640 360" fill="none" aria-hidden="true" focusable="false">
+      <rect x="20" y="40" width="280" height="280" rx="40" fill="#e3f2fd" />
+      <g className="tf-card">
+        <rect x="60" y="150" width="190" height="120" rx="16" fill="#0d47a1" />
+        <rect x="80" y="170" width="38" height="30" rx="7" fill="#90caf9" />
+        <rect x="80" y="230" width="90" height="9" rx="4.5" fill="#fff" opacity=".85" />
+        <rect x="80" y="246" width="56" height="7" rx="3.5" fill="#fff" opacity=".45" />
+        <path d="M205 176a22 22 0 0 1 32 0M212 188a12 12 0 0 1 18 0" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
+        <circle cx="221" cy="199" r="3" fill="#fff" />
+      </g>
+      <g className="tf-waves" stroke="#2196f3" strokeWidth="4" strokeLinecap="round">
+        <path d="M318 150c20 12 20 48 0 60" /><path d="M338 130c32 22 32 78 0 100" opacity=".6" /><path d="M358 110c44 32 44 108 0 140" opacity=".3" />
+      </g>
+      <g className="tf-phone">
+        <rect x="400" y="30" width="190" height="300" rx="34" fill="#0a2540" />
+        <rect x="410" y="40" width="170" height="280" rx="26" fill="#fff" />
+        <rect x="465" y="48" width="60" height="9" rx="4.5" fill="#0a2540" />
+        <circle cx="495" cy="112" r="30" fill="#90caf9" /><circle cx="495" cy="104" r="10" fill="#0d47a1" /><path d="M478 124a17 13 0 0 1 34 0" fill="#0d47a1" />
+        <rect x="448" y="158" width="94" height="11" rx="5.5" fill="#0a2540" /><rect x="462" y="176" width="66" height="8" rx="4" fill="#0a2540" opacity=".35" />
+        <rect x="430" y="204" width="130" height="38" rx="12" fill="#2196f3" /><rect x="430" y="252" width="130" height="38" rx="12" fill="#e3f2fd" stroke="#90caf9" strokeWidth="2" />
+        <path d="M473 223l8 8 17-17" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="tf-check" />
+      </g>
+      <circle cx="590" cy="60" r="7" fill="#2196f3" className="tf-dot" /><circle cx="40" cy="40" r="5" fill="#90caf9" className="tf-dot" />
+    </svg>
+  );
+}
+
+const CAPABILITIES = [
+  'Tap to share', 'QR code backup', 'Augmented reality', 'Update anytime', 'Password-locked chip',
+  'No app needed', 'Save contact', 'Magic Poster', 'Public profile page', 'Order tracking',
+];
+
+function HomeFaqItem({ question, answer, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={`pro-faq-item${open ? ' is-open' : ''}`}>
+      <button type="button" className="pro-faq-q" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <span>{question}</span>
+        <span className="pro-faq-icon" aria-hidden="true">{open ? '–' : '+'}</span>
+      </button>
+      {open && <p className="pro-faq-a">{answer}</p>}
+    </div>
+  );
+}
+
+const PLAN_FALLBACK_IMAGES = ['/assets/photos/card-black.jpg', '/assets/photos/card-art.jpg', '/assets/photos/card-orange.jpg', '/assets/photos/card-teal.jpg'];
+
 export default function Home() {
+  const [faqs, setFaqs] = useState(null);
+  const [plans, setPlans] = useState(null);
+  useEffect(() => {
+    api.listPlans().then((list) => setPlans(Array.isArray(list) ? list.slice(0, 4) : [])).catch(() => setPlans([]));
+  }, []);
+  useEffect(() => {
+    api.getPublicFaq().then((list) => setFaqs(Array.isArray(list) ? list.slice(0, 6) : [])).catch(() => setFaqs([]));
+  }, []);
   // The hero card shows whoever is actually logged in -- makes the
   // signature visual feel like your own card, not a stock demo, the
   // moment you're signed in. Logged-out visitors see a sample name.
@@ -279,7 +353,7 @@ export default function Home() {
 
     const ctx = gsap.context(() => {
       const heroText = gsap.utils.toArray('.hero-col-text > *');
-      const heroVisual = heroRef.current?.querySelector('.hero-visual');
+      const heroVisual = root.querySelector('.hero-visual');
       const rings = heroRef.current?.querySelectorAll('.bg-ring');
 
       gsap.set(heroText, { opacity: 0, y: 30 });
@@ -369,64 +443,137 @@ export default function Home() {
             battery, no signal drop. Update your details anytime; every card in the world reflects it
             instantly, without a reprint.
           </p>
-          <div className="hero-cta-row" style={{ justifyContent: 'flex-start' }}>
-            <Link to="/shop" className="btn-primary" style={{ background: 'var(--holo-gradient)', color: '#06120f' }}>
+          <div className="hero-cta-row">
+            <Link to="/shop" className="btn-primary">
               Shop Cards
             </Link>
-            <Link to="/contact" className="btn-secondary" style={{ background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--panel-border)' }}>
+            <Link to="/contact" className="btn-secondary">
               Contact Us
             </Link>
           </div>
-          <div className="hero-spec-row" style={{ justifyContent: 'flex-start' }}>
-            <div><b><CountUp target={13.56} suffix=" MHz" /></b><span>NFC frequency</span></div>
-            <div><b><CountUp target={888} suffix=" bytes" /></b><span>NDEF capacity</span></div>
-            <div><b>Zero</b><span>battery required</span></div>
-          </div>
         </div>
 
-        {/* Signature visual: the tap card itself, mid-tap -- a real
-            holographic-foil surface that shifts color with the cursor
-            (same principle as tilting a real security hologram), with
-            energy motes orbiting it and induction rings representing
-            the NFC handshake. Shows whoever's actually signed in. */}
-        <div className="hero-visual" ref={stageRef} aria-hidden="true">
-          <div className="bg-ring bg-ring-a" />
-          <div className="bg-ring bg-ring-b" />
-          <div className="tap-ring r1" />
-          <div className="tap-ring r2" />
-          <div className="tap-ring r3" />
-          <div className="orbit-particle-layer" ref={orbitContainerRef} />
-          <div className="holo-card" ref={cardRef}>
-            <div className="holo-layer" />
-            <div className="holo-grating" />
-            <div className="holo-specular" />
-            <div className="holo-card-content">
-              <div className="holo-card-top">
-                <span className="holo-chip" />
-                <svg className="holo-card-wave" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round">
-                  <path d="M6 14a8 8 0 0 1 12 0" opacity="0.9" />
-                  <path d="M8.5 17a4.5 4.5 0 0 1 7 0" />
-                  <circle cx="12" cy="20" r="1.2" fill="#fff" stroke="none" />
-                </svg>
-              </div>
-              <div>
-                <div className="holo-card-name">{cardName}</div>
-                <div className="holo-card-role">{cardRole}</div>
+        <div className="hero-card-stage" aria-label="Interactive HuntsTAG card preview">
+          <div className="hero-visual" ref={stageRef}>
+            <div className="bg-ring bg-ring-a" />
+            <div className="bg-ring bg-ring-b" />
+            <div className="tap-ring r1" />
+            <div className="tap-ring r2" />
+            <div className="tap-ring r3" />
+            <div className="orbit-particle-layer" ref={orbitContainerRef} />
+            <div className="holo-card" ref={cardRef}>
+              <div className="holo-layer" />
+              <div className="holo-grating" />
+              <div className="holo-specular" />
+              <div className="holo-card-content">
+                <div className="holo-card-top">
+                  <span className="holo-chip" />
+                  <svg className="holo-card-wave" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round">
+                    <path d="M6 14a8 8 0 0 1 12 0" opacity="0.9" />
+                    <path d="M8.5 17a4.5 4.5 0 0 1 7 0" />
+                    <circle cx="12" cy="20" r="1.2" fill="#fff" stroke="none" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="holo-card-name">{cardName}</div>
+                  <div className="holo-card-role">{cardRole}</div>
+                </div>
               </div>
             </div>
           </div>
         </div>
+
       </div>
 
-      <section className="home-features-section" ref={featuresRef} aria-label="HuntsTAG features">
-        <div className="feature-grid">
-        {FEATURES.map((f) => (
-          <div className="feature-card" key={f.title}>
-            <div className="feature-icon">{f.icon}</div>
-            <h3>{f.title}</h3>
-            <p>{f.desc}</p>
+      <section className="au-stats" aria-label="HuntsTAG at a glance">
+        <div className="hero-spec-row">
+          <div><b><CountUp target={13.56} suffix=" MHz" /></b><span>NFC frequency</span></div>
+          <div><b><CountUp target={888} suffix=" bytes" /></b><span>NDEF capacity</span></div>
+          <div><b>Zero</b><span>battery required</span></div>
+        </div>
+      </section>
+
+      <section className="pro-flow" aria-label="How a tap works">
+        <div className="pro-flow-text">
+          <h2 className="section-heading">One tap. Everything shared.</h2>
+          <ul className="pro-checks">
+            {FLOW_CHECKS.map((t) => (<li key={t}><span className="pro-check"><Check size={16} strokeWidth={3} /></span>{t}</li>))}
+          </ul>
+          <Link to="/shop" className="btn-primary">Get your card</Link>
+        </div>
+        <TapFlow />
+      </section>
+
+      <section className="pro-marquee" aria-label="What is included">
+        <div className="pro-marquee-track">
+          {[...CAPABILITIES, ...CAPABILITIES].map((c, i) => (
+            <span className="pro-chip" key={c + i} aria-hidden={i >= CAPABILITIES.length ? 'true' : undefined}>{c}</span>
+          ))}
+        </div>
+      </section>
+
+      {plans && plans.length > 0 && (
+        <section className="pro-plans" aria-label="Our cards">
+          <div className="pro-plans-head">
+            <h2 className="section-heading">Pick the card that fits you</h2>
+            <p className="section-subheading">Every card comes with your own profile page, QR backup and lifetime updates.</p>
           </div>
-        ))}
+          <div className="pro-plans-grid">
+            {plans.map((p, i) => {
+              const v = p.variants && p.variants[0];
+              const img = (v && v.frontImageUrl) || (p.images && p.images[0]) || PLAN_FALLBACK_IMAGES[i % PLAN_FALLBACK_IMAGES.length];
+              return (
+                <Link to={`/shop?plan=${p.key}`} className={`pro-plan pro-plan-${i % 4}`} key={p._id || p.key}>
+                  <div className="pro-plan-media"><img src={img} alt={p.name} loading="lazy" onError={(e) => { e.currentTarget.src = PLAN_FALLBACK_IMAGES[i % PLAN_FALLBACK_IMAGES.length]; }} /></div>
+                  <div className="pro-plan-body">
+                    <h3>{p.name}</h3>
+                    {(p.priceAmount || p.price) ? <span className="pro-plan-price">₹{p.priceAmount || p.price}</span> : null}
+                    <span className="pro-plan-cta">View card →</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      <section className="pro-video" aria-label="See it in action">
+        <div className="pro-video-text">
+          <span className="hero-eyebrow">See it in motion</span>
+          <h2 className="section-heading">A card actually being tapped</h2>
+          <p>Watch how a HuntsTAG card opens a full profile in a second, with nothing to install.</p>
+          <Link to="/catalog" className="pro-link">Browse the catalog →</Link>
+        </div>
+        <div className="pro-video-frame">
+          <video src="/assets/photos/tap-demo.mp4" autoPlay muted loop playsInline preload="metadata" poster="/assets/photos/card-teal.jpg" />
+        </div>
+      </section>
+
+      <section className="pro-benefits" aria-label="Why HuntsTAG">
+        <h2 className="section-heading">Everything your card does</h2>
+        <div className="pro-benefit-grid">
+          {BENEFITS.map(({ Icon, title, text }) => (
+            <div className="pro-benefit" key={title}>
+              <span className="pro-benefit-icon"><Icon size={26} strokeWidth={1.8} /></span>
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="home-features-section au-explore" ref={featuresRef} aria-label="HuntsTAG features">
+        <div className="au-explore-list">
+          <div className="feature-grid">
+            {FEATURES.map((f) => (
+              <div className="feature-card" key={f.title}>
+                <div className="av-card-art"><f.art /></div>
+                <div className="feature-icon">{f.icon}</div>
+                <h3>{f.title}</h3>
+                <p>{f.desc}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -436,6 +583,7 @@ export default function Home() {
         <div className="steps-row">
           {STEPS.map((s, i) => (
             <div className="step-item" key={s.title}>
+              <div className="av-step-art"><s.art /></div>
               <div className="step-number">{i + 1}</div>
               <h4>{s.title}</h4>
               <p>{s.desc}</p>
@@ -462,6 +610,30 @@ export default function Home() {
       </div>
 
       <WhyChooseHuntsworld animateWithGsap sectionRef={whyRef} />
+
+      {faqs && faqs.length > 0 && (
+        <section className="pro-faq" aria-label="Frequently asked questions">
+          <div className="pro-faq-head">
+            <h2 className="section-heading">Frequently asked questions</h2>
+            <p className="section-subheading">Everything about your card, in one place.</p>
+            <Link to="/faq" className="pro-link">See all questions →</Link>
+          </div>
+          <div className="pro-faq-list">
+            {faqs.map((item, i) => (
+              <HomeFaqItem key={item._id || i} question={item.question} answer={item.answer} defaultOpen={i === 0} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="pro-final">
+        <h2 className="section-heading">Ready for a card that says more?</h2>
+        <p>Pick your card, set up your profile in minutes and start sharing with a single tap.</p>
+        <div className="hero-cta-row">
+          <Link to="/shop" className="btn-primary">Shop cards</Link>
+          <Link to="/catalog" className="btn-secondary">Browse the catalog</Link>
+        </div>
+      </section>
     </div>
   );
 }

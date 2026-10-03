@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IlloMail } from '../components/Illustrations.jsx';
 import { api, isLoggedIn } from '../api.js';
 
 export default function ContactUs() {
@@ -124,18 +125,21 @@ export default function ContactUs() {
   }
 
   return (
-    <div>
-      <h1 className="section-heading" style={{ marginTop: 0 }}>Get in touch</h1>
-      <p className="section-subheading">Questions about a plan, an order, or anything else — we'll get back to you.</p>
+    <div className="au-page au-contact">
+      <div className="au-contact-intro">
+        <h1 className="section-heading">Get in touch</h1>
+        <p className="section-subheading">Questions about a plan, an order, or anything else — we'll get back to you.</p>
 
-      <div className="contact-info-row">
-        <div className="contact-info-item">
-          <b>Puducherry, India</b>
-          Iyyanalli Groups
+        <div className="contact-info-row">
+          <div className="contact-info-item">
+            <b>Puducherry, India</b>
+            Iyyanalli Groups
+          </div>
         </div>
+        <div className="av-side-art"><IlloMail /></div>
       </div>
 
-      <div className="checkout-panel">
+      <div className="checkout-panel au-contact-panel">
         {sent ? (
           <div className="card" style={{ textAlign: 'center', padding: '32px 16px' }}>
             <p style={{ margin: 0, color: 'var(--holo-cyan)', fontWeight: 600, fontSize: 18 }}>Message sent — thanks!</p>
@@ -150,7 +154,7 @@ export default function ContactUs() {
             </button>
           </div>
         ) : (
-          <form className="card" onSubmit={handleSubmit} noValidate>
+          <form className="card au-contact-form" onSubmit={handleSubmit} noValidate>
             {error && <div className="error-banner">{error}</div>}
 
             <div className="field">

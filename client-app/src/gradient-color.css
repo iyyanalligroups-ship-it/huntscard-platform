@@ -1,0 +1,192 @@
+/* =====================================================================
+   GRADIENT COLOUR LAYER -- loaded last. Brings colour back to the site using the same
+   green -> teal -> blue -> violet sweep as the holographic card in the hero, so the card and
+   the page share one palette. Photos are shown in full colour again.
+   ===================================================================== */
+html .sh-theme {
+  --g1: #22a447;
+  --g2: #0e9aa7;
+  --g3: #1c3fc6;
+  --g4: #5b2bd1;
+  --grad: linear-gradient(110deg, #22a447 0%, #0e9aa7 30%, #1c3fc6 66%, #5b2bd1 100%);
+  --grad-soft: linear-gradient(135deg, #eaf7ee 0%, #e8f5f7 32%, #e9edfc 68%, #f0eafb 100%);
+  --grad-deep: linear-gradient(120deg, #0d5f33 0%, #0b5f6c 32%, #12308f 68%, #3d1a9c 100%);
+  --pro-accent: #1c3fc6;
+  --pro-ink: #0d1030;
+  --pro-line: #dbe0ee;
+}
+
+/* ---------- gradient text helpers ---------- */
+html .sh-theme .hero-section h1 .grad,
+html .sh-theme .au-page-hero h1 .grad {
+  background: var(--grad) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  color: transparent !important;
+  font-style: normal;
+  padding-bottom: 0.08em;
+}
+html .sh-theme .au-stats .hero-spec-row b,
+html .sh-theme .au-stats .hero-spec-row b *,
+html .sh-theme .au-stats .hero-spec-row > div > b > span:last-child {
+  background: var(--grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent !important;
+  color: transparent !important;
+}
+html .sh-theme .au-step-number { background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent !important; color: transparent !important; }
+html .sh-theme .pro-link { color: var(--g3); border-color: var(--g3); }
+html .sh-theme .pro-link:hover { color: var(--g4); border-color: var(--g4); }
+
+/* ---------- buttons ---------- */
+html body.public-site-active .sh-theme .btn-primary:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .au-cta:not(.btn-secondary):not(#_a):not(#_b),
+html body.public-site-active .sh-theme .how-it-works-cta a:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .public-account-action.pill-outline:last-child:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .public-account-actions .public-logout-action:last-child:not(#_a):not(#_b) {
+  background: var(--grad) !important;
+  background-size: 160% 100% !important;
+  background-position: 0 50% !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  border: 0 !important;
+  box-shadow: 0 10px 24px rgba(28, 63, 198, 0.28) !important;
+  transition: background-position 0.5s ease, box-shadow 0.3s, transform 0.2s;
+}
+html body.public-site-active .sh-theme .btn-primary:hover:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .au-cta:not(.btn-secondary):hover:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .how-it-works-cta a:hover:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .public-account-action.pill-outline:last-child:hover:not(#_a):not(#_b) {
+  background: var(--grad) !important;
+  background-size: 160% 100% !important;
+  background-position: 100% 50% !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  box-shadow: 0 14px 30px rgba(91, 43, 209, 0.32) !important;
+}
+html body.public-site-active .sh-theme .btn-secondary:not(#_a):not(#_b) {
+  background: #ffffff !important;
+  color: var(--g3) !important;
+  -webkit-text-fill-color: var(--g3);
+  border: 1.5px solid var(--g3) !important;
+}
+html body.public-site-active .sh-theme .btn-secondary:hover:not(#_a):not(#_b) { background: var(--g3) !important; color: #ffffff !important; -webkit-text-fill-color: #ffffff; }
+
+/* ---------- header + nav ---------- */
+html .sh-theme .nav-link::after { background: var(--grad) !important; height: 3px; border-radius: 3px; }
+html .sh-theme .nav-link.active, html .sh-theme .nav-link:hover { color: var(--g3); }
+html .sh-theme .status-dot { background: var(--g1) !important; box-shadow: 0 0 0 4px rgba(34, 164, 71, 0.18) !important; }
+html .sh-theme .top-nav { border-bottom: 0 !important; box-shadow: 0 1px 0 var(--pro-line), 0 8px 30px rgba(28, 63, 198, 0.05); }
+
+/* ---------- hero ---------- */
+html .sh-theme .hero-section.hero-section-split {
+  background:
+    radial-gradient(46% 55% at 10% 12%, rgba(34, 164, 71, 0.16), transparent 70%),
+    radial-gradient(46% 60% at 92% 8%, rgba(91, 43, 209, 0.16), transparent 70%),
+    radial-gradient(50% 60% at 50% 100%, rgba(28, 63, 198, 0.10), transparent 70%),
+    #ffffff !important;
+}
+html .sh-theme .hero-eyebrow { border-color: transparent !important; background: var(--grad-soft) !important; color: var(--g3) !important; }
+
+/* photos: full colour with a soft brand wash */
+html .sh-theme .av-photo img,
+html .sh-theme .au-tier-media img,
+html .sh-theme .magic-art-card-media img,
+html .sh-theme .purchase-detail-card-face img,
+html .sh-theme .plan-variant-card img,
+html .sh-theme .cart-item-img,
+html .sh-theme .av-cardfan img { filter: none !important; }
+html .sh-theme .av-photo::after { content: ""; position: absolute; inset: 0; background: var(--grad); mix-blend-mode: soft-light; opacity: 0.55; pointer-events: none; }
+html .sh-theme .av-cardshot::after { opacity: 0; }
+html .sh-theme .av-cardshot, html .sh-theme .av-cardfan { background: var(--grad-soft) !important; }
+html .sh-theme .av-cardshot img { box-shadow: 0 28px 50px rgba(28, 63, 198, 0.28), 0 4px 10px rgba(0, 0, 0, 0.16) !important; }
+html .sh-theme .av-cardfan img { box-shadow: 0 22px 40px rgba(28, 63, 198, 0.3) !important; }
+html .sh-theme .av-photo { background: #e8ecfa; }
+
+/* ---------- panels and tiles ---------- */
+html .sh-theme .au-explore .feature-card,
+html .sh-theme .au-features .feature-card,
+html .sh-theme .steps-row .step-item,
+html .sh-theme .why-huntsworld { background: var(--grad-soft) !important; }
+html .sh-theme .au-explore .feature-card:hover { background: #e7edfd !important; }
+html .sh-theme .why-huntsworld .feature-card { background: #ffffff !important; }
+html body.public-site-active .sh-theme .steps-row .step-number:not(#_a):not(#_b) { background: var(--grad) !important; box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.9), 0 8px 18px rgba(28, 63, 198, 0.3); }
+html .sh-theme .feature-icon { background: var(--grad) !important; color: #fff !important; }
+html .sh-theme .pro-chip { border-color: transparent; background: var(--grad-soft); color: var(--pro-ink); }
+html .sh-theme .pro-marquee { border-bottom-color: var(--pro-line); }
+html .sh-theme .au-stats { border-color: var(--pro-line); }
+html .sh-theme .au-cta-band { background: var(--grad-deep) !important; }
+
+/* ---------- the holographic card gets its own stage again ---------- */
+html .sh-theme .au-explore { display: grid; grid-template-columns: 1fr !important; gap: 24px; }
+html .sh-theme .au-explore-visual {
+  display: flex !important;
+  order: -1;
+  position: relative;
+  overflow: hidden;
+  min-height: 560px;
+  margin-bottom: 40px;
+  border-radius: 36px;
+  background:
+    radial-gradient(60% 70% at 18% 20%, rgba(34, 164, 71, 0.35), transparent 70%),
+    radial-gradient(60% 80% at 88% 18%, rgba(91, 43, 209, 0.40), transparent 70%),
+    radial-gradient(70% 70% at 55% 100%, rgba(28, 63, 198, 0.35), transparent 70%),
+    #f4f7ff;
+  transform: none !important;
+}
+html .sh-theme .au-explore-visual .hero-visual { width: 100%; height: 560px; overflow: visible; }
+html .sh-theme .au-explore-visual .holo-card { box-shadow: 0 40px 80px rgba(28, 63, 198, 0.35); }
+html .sh-theme .au-explore-visual .bg-ring, html .sh-theme .au-explore-visual .tap-ring, html .sh-theme .au-explore-visual .orbit-particle-layer { display: block !important; }
+html .sh-theme .au-explore-visual::before { content: "Tap. Share. Done."; position: absolute; left: 40px; top: 36px; font-size: clamp(1.4rem, 2.2vw, 2rem); font-weight: 300; letter-spacing: -0.03em; color: var(--pro-ink); z-index: 2; }
+
+/* ---------- FAQ ---------- */
+html body.public-site-active .sh-theme .pro-faq-item.is-open .pro-faq-icon:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .au-faq-item.is-open .faq-chevron:not(#_a):not(#_b) { background: var(--grad) !important; border-color: transparent; color: #fff !important; -webkit-text-fill-color: #fff !important; }
+html .sh-theme .pro-faq-item.is-open .pro-faq-q { color: var(--g3) !important; -webkit-text-fill-color: var(--g3) !important; }
+
+/* ---------- closing band + footer ---------- */
+html .sh-theme .pro-final { background: var(--grad-deep) !important; }
+html .sh-theme .pro-final::before { background: linear-gradient(90deg, rgba(8, 20, 70, 0.85) 20%, rgba(8, 20, 70, 0.15)), url("/assets/photos/wolf.jpg") 70% 40% / cover !important; filter: none !important; mix-blend-mode: normal; opacity: 0.9; }
+html body.public-site-active .sh-theme .pro-final .btn-primary:not(#_a):not(#_b) { background: #ffffff !important; box-shadow: none !important; color: var(--g3) !important; -webkit-text-fill-color: var(--g3); }
+html .sh-theme .site-footer { background: #0a0e2a !important; }
+html .sh-theme .site-footer-watermark { -webkit-text-stroke: 1.5px rgba(150, 170, 255, 0.35) !important; }
+html .sh-theme .site-footer-col a:hover { color: #9fb4ff; }
+html .sh-theme .site-footer-heading { color: rgba(170, 185, 255, 0.7) !important; }
+
+/* ---------- inner pages: tabs, forms, badges ---------- */
+html body.public-site-active .sh-theme .history-tab.active:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .plan-switch-pill.active:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .history-tabs .history-tab.active:not(#_a):not(#_b) { background: var(--grad) !important; background-color: transparent !important; border-color: transparent !important; color: #fff !important; -webkit-text-fill-color: #fff; }
+html .sh-theme .plan-switch-pill .current-badge:not(#_a):not(#_b) { background: var(--grad-soft) !important; color: var(--g3) !important; -webkit-text-fill-color: var(--g3); }
+html .sh-theme input:focus, html .sh-theme select:focus, html .sh-theme textarea:focus { border-color: var(--g3) !important; box-shadow: 0 0 0 3px rgba(28, 63, 198, 0.15) !important; }
+html .sh-theme .au-contact-panel, html .sh-theme .checkout-panel { background: var(--grad-soft) !important; }
+html .sh-theme .chat-bubble.mine { background: var(--grad) !important; }
+html .sh-theme .au-tier-features li { background: var(--grad-soft); color: var(--g3); }
+html .sh-theme .au-tier-amount, html .sh-theme .total, html .sh-theme .plan-price { background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+html .sh-theme .au-page-hero > .av-rings { opacity: 0.9; }
+html .sh-theme .au-page-hero > .av-rings circle { stroke: #1c3fc6; }
+html .sh-theme .au-page-hero > .av-rings circle[fill="#111"] { fill: #1c3fc6; }
+
+/* anchors with .btn-primary have higher specificity in the earlier layers: match them */
+html body.public-site-active .sh-theme a.btn-primary:not(#_a):not(#_b),
+html body.public-site-active .sh-theme a.au-cta:not(.btn-secondary):not(#_a):not(#_b) {
+  background: var(--grad) !important;
+  background-size: 160% 100% !important;
+  background-position: 0 50% !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  box-shadow: 0 10px 24px rgba(28, 63, 198, 0.28) !important;
+  transition: background-position 0.5s ease, box-shadow 0.3s;
+}
+html body.public-site-active .sh-theme a.btn-primary:hover:not(#_a):not(#_b),
+html body.public-site-active .sh-theme a.au-cta:not(.btn-secondary):hover:not(#_a):not(#_b) { background-position: 100% 50% !important; color: #fff !important; -webkit-text-fill-color: #fff; box-shadow: 0 14px 30px rgba(91, 43, 209, 0.32) !important; }
+html body.public-site-active .sh-theme .pro-final a.btn-primary:not(#_a):not(#_b) { background: #ffffff !important; color: var(--g3) !important; -webkit-text-fill-color: var(--g3); box-shadow: none !important; }
+html body.public-site-active .sh-theme a.btn-secondary:not(#_a):not(#_b) { background: #ffffff !important; color: var(--g3) !important; -webkit-text-fill-color: var(--g3); border: 1.5px solid var(--g3) !important; }
+html body.public-site-active .sh-theme .pro-final a.btn-secondary:not(#_a):not(#_b) { background: transparent !important; color: #fff !important; -webkit-text-fill-color: #fff; border-color: rgba(255, 255, 255, 0.7) !important; }
+
+/* gentler wash on photos so they stay clear */
+html .sh-theme .av-photo::after { opacity: 0.28; }
+html .sh-theme .av-hero-photo::after { opacity: 0.22; }
+html .sh-theme .pro-final .hero-cta-row { justify-content: flex-start !important; }

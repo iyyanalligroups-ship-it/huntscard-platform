@@ -1,0 +1,215 @@
+/* =====================================================================
+   PRO THEME -- own design, informed by an analysis of squarespace.com (not a copy):
+   - light-weight, very large, tightly tracked headlines on a pure white page
+   - one confident black pill button, quiet text links with arrows
+   - generous white space, soft off-white panels, hairline #dedede dividers
+   - a scrolling "capability" strip, an illustrated feature grid, a real FAQ accordion
+   - near-black footer; a single deep-green accent used only for small details
+   Loaded AFTER av-theme.css (layout) and overrides its type, colours and radii.
+   ===================================================================== */
+
+html .sh-theme {
+  --pro-ink: #0f0f10;
+  --pro-body: #505050;
+  --pro-line: #dedede;
+  --pro-soft: #f5f5f5;
+  --pro-warm: #f0f0f0;
+  --pro-accent: #111111;
+  --pro-accent-soft: #ececec;
+  --au-text: #0f0f10;
+  --au-silver: #505050;
+  --au-line: #dedede;
+  --au-cta: #0f0f10;
+  --au-kelp: #f5f5f5;
+  --au-kelp-hi: #f0f0f0;
+  --text: #0f0f10;
+  --text-dim: #505050;
+  --panel-border: #dedede;
+  --font-ui: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
+  font-feature-settings: "ss01", "cv11";
+}
+html .sh-theme .particle-waves { display: none !important; }
+
+/* ---------- type: light, large, tight ---------- */
+html .sh-theme h1,
+html .sh-theme h2,
+html .sh-theme .section-heading,
+html .sh-theme .au-tier-name {
+  font-family: var(--font-display);
+  font-weight: 300 !important;
+  letter-spacing: -0.045em !important;
+  line-height: 1.04 !important;
+  color: var(--pro-ink);
+}
+html .sh-theme h3, html .sh-theme .feature-card h3, html .sh-theme .step-item h4, html .sh-theme .au-step-body h2 { font-weight: 500 !important; letter-spacing: -0.025em !important; }
+html .sh-theme .hero-section h1 { font-size: clamp(3rem, 7.2vw, 6.4rem) !important; line-height: 1 !important; }
+html .sh-theme .au-page-hero h1 { font-size: clamp(2.8rem, 6vw, 5.4rem) !important; }
+html .sh-theme .section-heading { font-size: clamp(2.2rem, 4.4vw, 3.8rem); }
+html .sh-theme .hero-section h1 .grad { -webkit-text-fill-color: var(--pro-ink); color: var(--pro-ink); font-style: normal; font-weight: 300; }
+html .sh-theme p, html .sh-theme .section-subheading { color: var(--pro-body); }
+html .sh-theme .hero-col-text > p { font-size: clamp(1.05rem, 1.5vw, 1.25rem); line-height: 1.55; max-width: 620px; }
+html .sh-theme .hero-eyebrow { background: transparent; border: 1px solid var(--pro-line); color: var(--pro-ink); font-weight: 600; letter-spacing: 0.1em; font-size: 11px; padding: 7px 14px; border-radius: 999px; }
+html .sh-theme .au-stats .hero-spec-row b, html .sh-theme .au-stats .hero-spec-row b *, html .sh-theme .au-stats .hero-spec-row > div > b > span:last-child { font-weight: 300 !important; letter-spacing: -0.05em !important; font-size: clamp(2.6rem, 6vw, 5rem) !important; }
+html .sh-theme .au-step-number, html .sh-theme .steps-row .step-number { font-weight: 300; }
+
+/* ---------- header: slim white bar, one black pill ---------- */
+html .sh-theme .top-nav { background: rgba(255, 255, 255, 0.9) !important; border-bottom: 1px solid var(--pro-line) !important; }
+html .sh-theme .top-nav-row { padding: 18px 0; }
+html .sh-theme .nav-link { font-size: 13px; font-weight: 600; letter-spacing: 0.02em; text-transform: none; color: var(--pro-ink); }
+html .sh-theme .nav-link::after { height: 2px; background: var(--pro-ink) !important; }
+html .sh-theme .brand-name { font-weight: 800; letter-spacing: -0.03em; font-size: 20px; }
+
+/* ---------- buttons: pill, black / outlined / text link ---------- */
+html body.public-site-active .sh-theme .btn-primary:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .public-account-action.pill-outline:last-child:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .au-cta:not(.btn-secondary):not(#_a):not(#_b) {
+  border-radius: 999px !important;
+  padding-left: 30px !important;
+  padding-right: 30px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+  text-transform: none !important;
+}
+html body.public-site-active .sh-theme .btn-secondary:not(#_a):not(#_b) {
+  border-radius: 999px !important;
+  border: 1px solid var(--pro-ink) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+  text-transform: none !important;
+}
+html .sh-theme .hero-cta-row .btn-primary, html .sh-theme .hero-cta-row .btn-secondary { padding: 17px 32px; font-size: 15px; }
+html .sh-theme .pro-link { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 15px; color: var(--pro-ink); text-decoration: none; border-bottom: 1px solid var(--pro-ink); padding-bottom: 3px; }
+html .sh-theme .pro-link:hover { color: var(--pro-accent); border-color: var(--pro-accent); }
+
+/* ---------- hero ---------- */
+html .sh-theme .hero-section.hero-section-split {
+  background: #ffffff !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  padding: 120px 0 0 !important;
+}
+html .sh-theme .hero-col-text { max-width: 980px; }
+html .sh-theme .av-hero-art { margin-top: 72px; width: min(1180px, 100%); }
+html .sh-theme .av-hero-art .av-illo { filter: none; }
+
+/* ---------- stats band ---------- */
+html .sh-theme .au-stats { border-top: 1px solid var(--pro-line); border-bottom: 1px solid var(--pro-line); padding: 64px 0; margin-top: 96px; }
+html .sh-theme .au-stats .hero-spec-row > div { align-items: flex-start; }
+html .sh-theme .au-stats .hero-spec-row span:last-child, html .sh-theme .au-stats .hero-spec-row > div > span { font-size: 13px; font-weight: 600; letter-spacing: 0.06em; color: var(--pro-body); }
+
+/* ---------- capability marquee ---------- */
+html .sh-theme .pro-marquee { overflow: hidden; margin: 0 -40px; padding: 28px 0; border-bottom: 1px solid var(--pro-line); -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
+html .sh-theme .pro-marquee-track { display: flex; gap: 14px; width: max-content; animation: pro-marquee 38s linear infinite; }
+html .sh-theme .pro-marquee:hover .pro-marquee-track { animation-play-state: paused; }
+html .sh-theme .pro-chip { flex: none; padding: 12px 22px; border: 1px solid var(--pro-line); border-radius: 999px; font-size: 15px; font-weight: 500; color: var(--pro-ink); background: #fff; white-space: nowrap; }
+@keyframes pro-marquee { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { html .sh-theme .pro-marquee-track { animation: none; } }
+
+/* ---------- feature grid: illustrated tiles ---------- */
+html .sh-theme .au-explore { padding-top: 112px !important; }
+html .sh-theme .au-explore .feature-card,
+html .sh-theme .au-features .feature-card { background: var(--pro-soft) !important; border-radius: 28px !important; }
+html .sh-theme .au-explore .feature-card:hover { background: var(--pro-warm) !important; }
+html .sh-theme .au-explore .feature-card h3 { font-size: clamp(1.4rem, 2vw, 1.8rem); font-weight: 500 !important; }
+html .sh-theme .au-explore .feature-card p { color: var(--pro-body); font-size: 16px; line-height: 1.55; }
+
+/* ---------- how it works ---------- */
+html .sh-theme .home-motion > div:has(.steps-row) { padding-top: 112px; }
+html .sh-theme .home-motion > div:has(.steps-row) > .section-heading { font-size: clamp(2.4rem, 5vw, 4.4rem); }
+html .sh-theme .steps-row .step-item { background: var(--pro-soft) !important; border-radius: 28px !important; }
+html body.public-site-active .sh-theme .steps-row .step-number:not(#_a):not(#_b) { background: var(--pro-ink) !important; border-radius: 999px; width: 36px; height: 36px; font-weight: 600; }
+
+/* ---------- HuntsWorld block ---------- */
+html .sh-theme .why-huntsworld { background: var(--pro-soft) !important; border-radius: 32px !important; padding: 112px 64px !important; margin-top: 40px; }
+html .sh-theme .why-huntsworld .feature-card { background: #ffffff !important; border-radius: 24px !important; }
+
+/* ---------- FAQ on Home ---------- */
+html .sh-theme .pro-faq { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 88px; padding: 128px 0 40px; align-items: start; }
+html .sh-theme .pro-faq-head { position: sticky; top: 120px; }
+html .sh-theme .pro-faq-head .section-heading { margin: 0 0 18px !important; text-align: left; }
+html .sh-theme .pro-faq-head .section-subheading { margin: 0 0 28px !important; text-align: left; max-width: 360px; font-size: 17px; }
+html .sh-theme .pro-faq-list { border-top: 1px solid var(--pro-line); }
+html .sh-theme .pro-faq-item { border-bottom: 1px solid var(--pro-line); }
+html body.public-site-active .sh-theme .pro-faq-q:not(#_a):not(#_b) {
+  display: flex; justify-content: space-between; align-items: center; gap: 24px; width: 100%;
+  padding: 28px 0; background: transparent !important; background-image: none !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+  color: var(--pro-ink) !important; -webkit-text-fill-color: var(--pro-ink); text-align: left; font-size: clamp(1.1rem, 1.6vw, 1.4rem); font-weight: 500; letter-spacing: -0.02em; text-transform: none; animation: none;
+}
+html .sh-theme .pro-faq-icon { flex: none; width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--pro-line); display: grid; place-items: center; font-size: 20px; line-height: 1; }
+html .sh-theme .pro-faq-item.is-open .pro-faq-icon { background: var(--pro-ink); color: #fff; border-color: var(--pro-ink); }
+html .sh-theme .pro-faq-a { margin: 0; padding: 0 56px 30px 0; font-size: 17px; line-height: 1.6; color: var(--pro-body); }
+
+/* ---------- closing band ---------- */
+html .sh-theme .pro-final { text-align: center; margin: 96px 0 0; padding: 120px 24px; border-radius: 36px; background: var(--pro-ink); color: #fff; }
+html .sh-theme .pro-final .section-heading { color: #fff; font-size: clamp(2.4rem, 5vw, 4.4rem); margin: 0 0 18px !important; }
+html .sh-theme .pro-final p { color: rgba(255, 255, 255, 0.72); max-width: 520px; margin: 0 auto 36px; font-size: 18px; }
+html .sh-theme .pro-final .hero-cta-row { display: flex; justify-content: center; gap: 12px; }
+html body.public-site-active .sh-theme .pro-final .btn-primary:not(#_a):not(#_b) { background: #ffffff !important; color: var(--pro-ink) !important; -webkit-text-fill-color: var(--pro-ink); }
+html body.public-site-active .sh-theme .pro-final .btn-secondary:not(#_a):not(#_b) { border-color: rgba(255, 255, 255, 0.5) !important; color: #fff !important; -webkit-text-fill-color: #fff; background: transparent !important; }
+
+/* ---------- footer ---------- */
+html .sh-theme .site-footer { background: #151515 !important; border-radius: 36px 36px 0 0 !important; margin: 96px 0 0 !important; }
+html .sh-theme .site-footer-heading { font-weight: 600 !important; font-size: 13px !important; letter-spacing: 0.08em !important; text-transform: uppercase !important; color: rgba(255, 255, 255, 0.55) !important; }
+html .sh-theme .site-footer-col a { font-size: 17px; color: #fff; }
+html .sh-theme .site-footer-tagline { font-weight: 300 !important; font-size: clamp(1.8rem, 3vw, 2.6rem) !important; letter-spacing: -0.04em !important; line-height: 1.1 !important; }
+html .sh-theme .site-footer-watermark { -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.22) !important; font-weight: 300 !important; }
+
+/* ---------- inner pages inherit the lighter, larger type ---------- */
+html .sh-theme .au-faq-intro h1, html .sh-theme .au-contact-intro h1, html .sh-theme .au-chat-intro h1 { font-size: clamp(2.6rem, 5vw, 4.4rem) !important; }
+html .sh-theme .au-features .feature-card h3, html .sh-theme .au-tier-label { font-weight: 500 !important; }
+html .sh-theme .au-cta-band { border-radius: 36px; background: var(--pro-ink) !important; }
+
+@media (max-width: 960px) {
+  html .sh-theme .pro-faq { grid-template-columns: 1fr; gap: 36px; padding-top: 80px; }
+  html .sh-theme .pro-faq-head { position: static; }
+  html .sh-theme .pro-marquee { margin: 0 -20px; }
+  html .sh-theme .why-huntsworld { padding: 64px 24px !important; }
+  html .sh-theme .hero-section.hero-section-split { padding-top: 64px !important; }
+}
+
+/* header account actions: "Log in" is a plain text link, Register the black pill */
+html body.public-site-active .sh-theme .public-account-actions .pill-outline:not(:last-child):not(#_a):not(#_b),
+html body.public-site-active .sh-theme .public-account-actions .public-logout-action:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .public-account-actions .public-dashboard-action:not(#_a):not(#_b) {
+  border: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  color: #0f0f10 !important;
+  -webkit-text-fill-color: #0f0f10;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  padding: 10px 6px !important;
+}
+html body.public-site-active .sh-theme .public-account-actions .pill-outline:not(:last-child):hover { text-decoration: underline; text-underline-offset: 5px; }
+html body.public-site-active .sh-theme .public-account-actions .public-logout-action:last-child { background: #0f0f10 !important; color: #fff !important; -webkit-text-fill-color: #fff; border-radius: 999px !important; padding: 12px 24px !important; }
+html .sh-theme .public-account-action svg { display: none; }
+
+/* number badges, FAQ icon and the "Browse card plans" button: explicit colours */
+html body.public-site-active .sh-theme .steps-row .step-number:not(#_a):not(#_b) { color: #ffffff !important; -webkit-text-fill-color: #ffffff; font-size: 15px; }
+html body.public-site-active .sh-theme .pro-faq-item.is-open .pro-faq-icon:not(#_a):not(#_b) { background: #0f0f10; color: #ffffff !important; -webkit-text-fill-color: #ffffff; }
+html body.public-site-active .sh-theme .how-it-works-cta a:not(#_a):not(#_b) {
+  display: inline-block;
+  background: #0f0f10 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  border-radius: 999px !important;
+  padding: 17px 34px !important;
+  font-size: 15px;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+  text-transform: none !important;
+  opacity: 1 !important;
+}
+html body.public-site-active .sh-theme .steps-row .step-number:not(#_a):not(#_b),
+html body.public-site-active .sh-theme .steps-row .step-item .step-number:not(#_a):not(#_b) { -webkit-text-fill-color: #ffffff !important; color: #ffffff !important; }
+html body.public-site-active .sh-theme .pro-faq-item.is-open .pro-faq-icon:not(#_a):not(#_b) { -webkit-text-fill-color: #ffffff !important; }
+
+/* About hero: keep the soft rings in the corners, clear of the headline */
+html .sh-theme .au-page-hero > .av-rings { opacity: 0.55; }
+html .sh-theme .av-rings-a { left: -260px !important; top: -90px !important; width: 300px !important; }
+html .sh-theme .av-rings-b { right: -240px !important; bottom: -40px !important; width: 260px !important; }
+@media (max-width: 1500px) { html .sh-theme .au-page-hero > .av-rings { display: none; } }

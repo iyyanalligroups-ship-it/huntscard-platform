@@ -62,7 +62,7 @@ export default function DeviceSafetyCheckScreen() {
     >
       <View style={styles.headerRow}>
         <ShieldIcon color={colors.holoCyan} size={26} />
-        <View style={{ flex: 1, marginLeft: 10 }}>
+        <View style={styles.headerText}>
           <Text style={styles.title}>Device Protection Check</Text>
           <Text style={styles.subtitle}>
             A quick look at a few phone settings -- nothing is scanned, nothing leaves this device.
@@ -124,7 +124,7 @@ function CheckRow({ item }) {
   return (
     <View style={[styles.row, isDanger && styles.rowDanger]}>
       <StateIcon color={iconColor} size={22} />
-      <View style={{ flex: 1, marginLeft: 12 }}>
+      <View style={styles.rowText}>
         <Text style={styles.rowLabel}>{item.label}</Text>
         <Text style={styles.rowDetail}>{item.detail}</Text>
         {item.explain && <Text style={styles.rowExplain}>{item.explain}</Text>}
@@ -152,6 +152,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 18,
+  },
+  headerText: {
+    flex: 1,
+    marginLeft: 10,
   },
   title: {
     color: colors.text,
@@ -226,6 +230,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.panelBorder,
     padding: 14,
+  },
+  rowText: {
+    flex: 1,
+    marginLeft: 12,
   },
   rowDanger: {
     borderColor: colors.danger,

@@ -109,8 +109,8 @@ export default function MagicArt({ embedded = false }) {
               {piece.description && <p className="magic-art-card-description">{piece.description}</p>}
 
               {piece.chargeAmount ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '10px 0' }}>
-                  <span style={{ fontWeight: 700 }}>
+                <div className="magic-art-buy" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '10px 0' }}>
+                  <span className="magic-art-price" style={{ fontWeight: 700 }}>
                     ₹{piece.chargeAmount}
                     {piece.discountPriceAmount > 0 && piece.priceAmount > piece.discountPriceAmount && (
                       <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--text-dim)', textDecoration: 'line-through' }}>
@@ -118,10 +118,10 @@ export default function MagicArt({ embedded = false }) {
                       </span>
                     )}
                   </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div className="magic-art-qty" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <button
                       type="button"
-                      className="secondary"
+                      className="secondary magic-art-qty-btn"
                       style={{ width: 28, height: 28, padding: 0 }}
                       onClick={() => setQty((q) => ({ ...q, [piece._id]: Math.max(1, getQty(piece._id) - 1) }))}
                     >
@@ -130,7 +130,7 @@ export default function MagicArt({ embedded = false }) {
                     <span style={{ minWidth: 18, textAlign: 'center' }}>{getQty(piece._id)}</span>
                     <button
                       type="button"
-                      className="secondary"
+                      className="secondary magic-art-qty-btn"
                       style={{ width: 28, height: 28, padding: 0 }}
                       onClick={() => setQty((q) => ({ ...q, [piece._id]: getQty(piece._id) + 1 }))}
                     >
@@ -139,7 +139,7 @@ export default function MagicArt({ embedded = false }) {
                   </div>
                   <button
                     type="button"
-                    className="secondary"
+                    className="secondary magic-art-add"
                     style={{ width: 'auto', padding: '6px 14px' }}
                     onClick={() => handleAddToCart(piece)}
                   >

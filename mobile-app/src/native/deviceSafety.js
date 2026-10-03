@@ -8,17 +8,20 @@ const { DeviceSafety } = NativeModules;
 // means and its honesty caveats (Play Protect status is best-effort, Wi-Fi
 // security is only readable on Android 13+).
 export function getDeviceSafetyStatus() {
+  if (!DeviceSafety) {
+    return Promise.reject(new Error('Device Protection Check needs an Android development build; it is not available in Expo Go.'));
+  }
   return DeviceSafety.getStatus();
 }
 
 export function openWifiSettings() {
-  DeviceSafety.openWifiSettings();
+  DeviceSafety?.openWifiSettings();
 }
 
 export function openPlayProtectSettings() {
-  DeviceSafety.openPlayProtectSettings();
+  DeviceSafety?.openPlayProtectSettings();
 }
 
 export function openAppInfo(packageName) {
-  DeviceSafety.openAppInfo(packageName);
+  DeviceSafety?.openAppInfo(packageName);
 }

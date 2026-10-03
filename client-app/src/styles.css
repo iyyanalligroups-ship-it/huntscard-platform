@@ -479,12 +479,15 @@ input[type='checkbox'] {
 .geo-select-option {
   padding: 9px 13px;
   font-size: 13px;
-  color: var(--text);
+  /* The menu is portaled directly under <body>, outside .sh-theme.
+     Theme variables there resolve to the public page's dark text colour,
+     which made State/City names disappear on this solid dark panel. */
+  color: #f7f8fc;
   cursor: pointer;
 }
-.geo-select-option:hover { background: rgba(255, 255, 255, 0.06); }
-.geo-select-option.selected { background: rgba(139, 92, 246, 0.18); font-weight: 600; }
-.geo-select-empty { padding: 9px 13px; font-size: 13px; color: var(--text-dim); }
+.geo-select-option:hover { color: #ffffff; background: rgba(255, 255, 255, 0.1); }
+.geo-select-option.selected { color: #ffffff; background: rgba(33, 150, 243, 0.3); font-weight: 600; }
+.geo-select-empty { padding: 9px 13px; font-size: 13px; color: rgba(247, 248, 252, 0.68); }
 /* A <select>'s OPEN dropdown list is rendered by the OS/browser, not by
    the CSS above -- Chrome/Edge on Windows popped it with a plain white
    background while still inheriting this dark theme's white `color`,

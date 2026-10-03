@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import WaveBackdrop from '../components/WaveBackdrop.jsx';
+import ParticleWaves from '../components/ParticleWaves.jsx';
 
 // Reached via the link emailed by POST /forgot-password
 // (?token=<rawToken>). See routes/auth.js POST /reset-password.
@@ -35,6 +36,7 @@ export default function ResetPassword() {
 
   return (
     <div className="login-page">
+      <ParticleWaves />
       <div className="wave-backdrop">
         <WaveBackdrop />
       </div>

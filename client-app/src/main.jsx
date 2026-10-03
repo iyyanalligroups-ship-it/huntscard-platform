@@ -4,6 +4,12 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import { CartProvider } from './cart.jsx';
 import './styles.css';
+import './av-theme.css';
+import './pro-theme.css';
+import './bw-photos.css';
+import './gradient-color.css';
+import './tapmo-color.css';
+import './blue-full.css';
 
 const savedAccent = window.localStorage.getItem('huntstag-dashboard-accent');
 if (['teal', 'violet', 'amber'].includes(savedAccent)) {

@@ -1,4 +1,11 @@
 {
-  "name": "MobileApp",
-  "displayName": "huntsTAG"
+  "expo": {
+    "name": "huntsTAG",
+    "slug": "huntstag-client",
+    "version": "0.1.0",
+    "extra": {
+      "apiUrl": "",
+      "webUrl": ""
+    }
+  }
 }

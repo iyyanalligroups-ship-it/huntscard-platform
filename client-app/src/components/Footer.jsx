@@ -49,9 +49,6 @@ export default function Footer({ homeTheme }) {
 
   return (
     <footer ref={footerRef} className={`site-footer${homeTheme === 'orange' ? ' theme-orange' : homeTheme === 'cyber' ? ' theme-cyber' : ''}`}>
-      <div className="site-footer-watermark-wrap" aria-hidden="true">
-        <span className="site-footer-watermark">HuntsTAG</span>
-      </div>
       <div className="site-footer-grid">
         <div className="site-footer-brand">
           <div className="brand" style={{ marginBottom: 10 }}>
@@ -65,8 +62,13 @@ export default function Footer({ homeTheme }) {
           <div className="site-footer-heading">Company</div>
           <Link to="/about">About Us</Link>
           <Link to="/huntsworld">What is HuntsWorld?</Link>
-          <Link to="/catalog">Catalog</Link>
+        </div>
+
+        <div className="site-footer-col">
+          <div className="site-footer-heading">Explore</div>
           <Link to="/shop">Shop</Link>
+          <Link to="/catalog">Catalog</Link>
+          <Link to="/magic-art">Magic Poster</Link>
         </div>
 
         <div className="site-footer-col">
@@ -78,8 +80,13 @@ export default function Footer({ homeTheme }) {
         </div>
       </div>
 
+      <div className="site-footer-watermark-wrap" aria-hidden="true">
+        <span className="site-footer-watermark">HuntsTAG</span>
+      </div>
+
       <div className="site-footer-bottom">
         <span>© {new Date().getFullYear()} HuntsTAG. All rights reserved.</span>
+        <a href={`mailto:${SUPPORT_EMAIL}`}>Email us</a>
       </div>
     </footer>
   );

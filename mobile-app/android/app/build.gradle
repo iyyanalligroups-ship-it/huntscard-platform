@@ -63,6 +63,12 @@ react {
 
     /* Autolinking */
     autolinkLibrariesWithApp()
+
+    // Bundle through Expo CLI so Expo modules and app.json configuration
+    // are resolved consistently for release builds.
+    entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", rootDir.getAbsoluteFile().getParentFile().getAbsolutePath(), "android", "absolute"].execute(null, rootDir).text.trim())
+    cliFile = new File(["node", "--print", "require.resolve('@expo/cli')"].execute(null, rootDir).text.trim())
+    bundleCommand = "export:embed"
 }
 
 /**
