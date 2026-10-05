@@ -29,7 +29,7 @@ function Handle({ item, canvasW, canvasH, onMove, onGrant, onRelease }) {
   const top = ((item.pos.y - POSITION_MIN) / RANGE) * canvasH;
   return (
     <View {...responder.panHandlers} style={[styles.handle, { left: left - 28, top: top - 14 }, item.fixed && styles.handleFixed]}>
-      <Text style={[styles.handleText, item.fixed && { color: '#06120f' }]} numberOfLines={1}>{item.label}</Text>
+      <Text style={[styles.handleText, item.fixed && { color: '#ffffff' }]} numberOfLines={1}>{item.label}</Text>
     </View>
   );
 }
@@ -61,7 +61,7 @@ export default function ArLayoutCanvas({ cardUri, aspect, items, onDragPosition,
 const styles = StyleSheet.create({
   canvas: { width: '100%', backgroundColor: '#0c0f16', borderRadius: 14, borderWidth: 1, borderColor: colors.panelBorder, overflow: 'hidden' },
   card: { position: 'absolute', borderRadius: 8, overflow: 'hidden', backgroundColor: colors.panelRaised, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  handle: { position: 'absolute', minWidth: 56, height: 28, paddingHorizontal: 8, borderRadius: 14, backgroundColor: 'rgba(94,234,212,0.22)', borderWidth: 1, borderColor: colors.holoCyan, alignItems: 'center', justifyContent: 'center' },
+  handle: { position: 'absolute', minWidth: 56, height: 28, paddingHorizontal: 8, borderRadius: 14, backgroundColor: 'rgba(21,101,255,0.22)', borderWidth: 1, borderColor: colors.holoCyan, alignItems: 'center', justifyContent: 'center' },
   handleFixed: { backgroundColor: colors.holoCyan },
   handleText: { color: colors.holoCyan, fontSize: 11, fontWeight: '800' },
 });

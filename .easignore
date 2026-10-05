@@ -1,0 +1,12 @@
+backend/
+client-app/
+encode-tool/
+magic-camera/
+out/
+**/node_modules/
+mobile-app/node_modules/
+mobile-app/.expo/
+mobile-app/android/build/
+mobile-app/android/app/build/
+mobile-app/android/.gradle/
+mobile-app/android/app/.cxx/

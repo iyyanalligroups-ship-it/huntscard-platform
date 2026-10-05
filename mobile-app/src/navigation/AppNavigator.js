@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -42,8 +42,8 @@ const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
 
 const navTheme = {
-  ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: colors.space, card: colors.panel, text: colors.text, border: colors.panelBorder, primary: colors.holoCyan },
+  ...DefaultTheme,
+  colors: { ...DefaultTheme.colors, background: colors.space, card: colors.panel, text: colors.text, border: colors.panelBorder, primary: colors.holoCyan },
 };
 
 const headerStyle = { headerStyle: { backgroundColor: colors.panel }, headerTintColor: colors.text, headerTitleStyle: { fontWeight: '800' }, contentStyle: { backgroundColor: colors.space } };
@@ -103,7 +103,7 @@ function DrawerContent({ navigation, state, member, groups }) {
           const expanded = open[group.id];
           const groupActive = group.items.some((item) => item.name === activeName);
           return <View key={group.id}>
-            <Pressable style={[styles.parent, groupActive && { backgroundColor: 'rgba(94,234,212,0.06)' }]} onPress={() => setOpen((o) => ({ ...o, [group.id]: !o[group.id] }))}>
+            <Pressable style={[styles.parent, groupActive && { backgroundColor: 'rgba(21,101,255,0.06)' }]} onPress={() => setOpen((o) => ({ ...o, [group.id]: !o[group.id] }))}>
               <Glyph name={group.icon} size={18} color={groupActive ? colors.holoCyan : colors.text} />
               <Text style={styles.parentText}>{group.label}</Text>
               <Glyph name={expanded ? 'chevronUp' : 'chevronDown'} size={15} color={colors.textDim} />

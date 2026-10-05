@@ -166,6 +166,6 @@ export default function ProfileSettingsScreen({ navigation }) {
 const styles = StyleSheet.create({
   text: { color: colors.text, fontSize: 14 }, hint: { color: colors.textDim, fontSize: 12, lineHeight: 17 }, cardTitle: { color: colors.text, fontWeight: '800', fontSize: 15 },
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: 16 }, private: { color: colors.textDim, fontWeight: '700', fontSize: 12, marginTop: 4 },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, tag: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: 'rgba(94,234,212,0.12)' }, tagText: { color: colors.holoCyan, fontWeight: '700', fontSize: 12 },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, tag: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: 'rgba(21,101,255,0.12)' }, tagText: { color: colors.holoCyan, fontWeight: '700', fontSize: 12 },
   modelBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 },
 });

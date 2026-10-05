@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   },
   rowDanger: {
     borderColor: colors.danger,
-    backgroundColor: 'rgba(244, 116, 106, 0.08)',
+    backgroundColor: 'rgba(220,38,38,0.08)',
   },
   rowLabel: {
     color: colors.text,

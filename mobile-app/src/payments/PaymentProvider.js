@@ -15,7 +15,7 @@ const safeJson = (value) => JSON.stringify(value).split(String.fromCharCode(60))
 
 function buildHtml(options) {
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<style>html,body{margin:0;height:100%;background:#0a0b10;color:#8b93a3;font-family:sans-serif;display:flex;align-items:center;justify-content:center}</style></head>
+<style>html,body{margin:0;height:100%;background:#f4f7fd;color:#55627a;font-family:sans-serif;display:flex;align-items:center;justify-content:center}</style></head>
 <body><p id="msg">Opening secure payment…</p>
 <script>
   function post(m){ window.ReactNativeWebView.postMessage(JSON.stringify(m)); }

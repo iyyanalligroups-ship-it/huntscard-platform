@@ -41,7 +41,7 @@ function Steps({ steps }) {
       return <View key={step.title} style={styles.step}>
         <View style={{ alignItems: 'center' }}>
           <View style={[styles.dot, step.done && styles.dotDone, isCurrent && styles.dotCurrent]}>
-            {step.done ? <Glyph name="check" size={14} color="#06120f" strokeWidth={3} /> : <Text style={[styles.dotText, isCurrent && { color: colors.holoCyan }]}>{index + 1}</Text>}
+            {step.done ? <Glyph name="check" size={14} color="#ffffff" strokeWidth={3} /> : <Text style={[styles.dotText, isCurrent && { color: colors.holoCyan }]}>{index + 1}</Text>}
           </View>
           {index < steps.length - 1 ? <View style={[styles.line, step.done && { backgroundColor: colors.holoCyan }]} /> : null}
         </View>

@@ -1,21 +1,19 @@
-// Same "holographic security-foil" palette as client-app/src/styles.css
-// (:root) -- kept in sync by hand since this is a separate RN project, not
-// a shared package. Update both places if the web palette changes.
+// Same palette as the website's public theme (client-app/src/site-theme.css and the HomeV3 pages):
+// cool white surfaces, deep navy text, one blue accent. The names holoCyan/holoViolet/holoMagenta are
+// kept so every screen keeps working; they now carry the website's blue / violet / orange.
 export const colors = {
-  space: '#0a0b10',
-  panel: '#12141b',
-  panelRaised: '#181b24',
-  panelBorder: 'rgba(255, 255, 255, 0.08)',
-  text: '#edeff3',
-  textDim: '#8b93a3',
-  holoCyan: '#5eead4',
-  holoViolet: '#a78bfa',
-  holoMagenta: '#f472b6',
-  danger: '#f4746a',
-  // Not in the web palette (that CSS has no warning color yet) -- a muted
-  // amber picked to sit calmly between holoCyan (pass) and danger (fail)
-  // without reading as an alarm color itself.
-  warning: '#e8b559',
+  space: '#f4f7fd',
+  panel: '#ffffff',
+  panelRaised: '#eef3fc',
+  panelBorder: '#dbe5f7',
+  text: '#0b1630',
+  textDim: '#55627a',
+  holoCyan: '#1565ff',
+  holoViolet: '#7c3aed',
+  holoMagenta: '#ea6a12',
+  danger: '#dc2626',
+  warning: '#d97706',
+  navy: '#07142b',
 };
 
-export const radius = 14;
+export const radius = 16;

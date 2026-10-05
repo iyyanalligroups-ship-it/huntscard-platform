@@ -72,3 +72,19 @@ npm test -- --runInBand
 npx expo install --check
 npx expo export --platform android
 ```
+
+## Building the installable apps
+
+The cloud build needs a free Expo account (`npx eas-cli login`). No Android Studio or Mac is required.
+
+```powershell
+npm install
+npx eas-cli build --platform android --profile preview     # produces an installable .apk
+npx eas-cli build --platform ios --profile production      # produces an .ipa (needs an Apple Developer account, $99/yr)
+```
+
+`eas.json` points both profiles at `https://api.huntstag.com`; change `EXPO_PUBLIC_API_URL` / `EXPO_PUBLIC_WEB_URL` there
+if your API lives elsewhere. Upload the finished `.apk` / `.ipa` (or paste your Play Store / App Store link) in the
+admin panel under **App Downloads**, and it appears in the website footer.
+
+Note: the Android project in `android/` also builds locally with JDK 17 + Android SDK (`cd android; .\gradlew assembleRelease`).

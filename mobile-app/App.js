@@ -12,7 +12,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <StatusBar style="light" backgroundColor={colors.space} />
+        <StatusBar style="dark" backgroundColor={colors.panel} />
         <AuthProvider>
           <CartProvider>
             <PaymentProvider>

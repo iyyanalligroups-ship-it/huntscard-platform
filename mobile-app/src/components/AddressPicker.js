@@ -83,7 +83,7 @@ export default function AddressPicker({ profile, selectedId, onSelect, onAddress
         const selected = selectedId === address._id;
         return (
           <Pressable key={address._id} onPress={() => { onSelect(address._id, address); setShowForm(false); }} style={[styles.address, selected && styles.addressSelected]}>
-            <View style={[styles.radio, selected && styles.radioOn]}>{selected ? <Glyph name="check" size={12} color="#06120f" strokeWidth={3} /> : null}</View>
+            <View style={[styles.radio, selected && styles.radioOn]}>{selected ? <Glyph name="check" size={12} color="#ffffff" strokeWidth={3} /> : null}</View>
             <View style={{ flex: 1, gap: 3 }}>
               <Text style={styles.addressName}>{address.label ? `${address.label} — ` : ''}{address.name} · {address.phone}</Text>
               <Text style={styles.addressLine}>{address.line1}{address.line2 ? `, ${address.line2}` : ''}, {address.city}, {address.state}, {address.country} - {address.pincode}</Text>

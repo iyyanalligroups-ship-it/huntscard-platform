@@ -66,7 +66,7 @@ export default function ChatScreen({ navigation }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.space }, header: { padding: 18, paddingBottom: 8, gap: 8 }, list: { flex: 1 }, content: { padding: 18, gap: 9 },
   bubble: { maxWidth: '82%', borderRadius: 14, padding: 12, gap: 5 },
-  mine: { alignSelf: 'flex-end', backgroundColor: 'rgba(94,234,212,0.16)', borderBottomRightRadius: 3 }, theirs: { alignSelf: 'flex-start', backgroundColor: colors.panel, borderBottomLeftRadius: 3 },
+  mine: { alignSelf: 'flex-end', backgroundColor: 'rgba(21,101,255,0.16)', borderBottomRightRadius: 3 }, theirs: { alignSelf: 'flex-start', backgroundColor: colors.panel, borderBottomLeftRadius: 3 },
   body: { color: colors.text, lineHeight: 20 }, time: { color: colors.textDim, fontSize: 10, alignSelf: 'flex-end' }, empty: { color: colors.textDim, textAlign: 'center' },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 12, backgroundColor: colors.panel, borderTopWidth: 1, borderTopColor: colors.panelBorder },
   input: { flex: 1, color: colors.text, backgroundColor: colors.panelRaised, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, maxHeight: 100 },

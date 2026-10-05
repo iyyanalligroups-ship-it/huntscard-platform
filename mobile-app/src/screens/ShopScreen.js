@@ -238,8 +238,8 @@ export default function ShopScreen({ navigation, route }) {
       {!visiblePlans.length ? <Text style={styles.dim}>No other plans available right now.</Text> : <>
         {!couponMode && visiblePlans.length > 1 ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} style={{ flexGrow: 0 }}>
           {visiblePlans.map((p) => <Pressable key={p.key} onPress={() => selectPlan(p.key)} style={[styles.pill, selectedKey === p.key && styles.pillOn]}>
-            <Text style={[styles.pillText, selectedKey === p.key && { color: '#06120f' }]}>{p.name}</Text>
-            {loggedIn && ownedKeys.has(p.key) ? <Glyph name="badgeCheck" size={13} color={selectedKey === p.key ? '#06120f' : colors.holoCyan} /> : null}
+            <Text style={[styles.pillText, selectedKey === p.key && { color: '#ffffff' }]}>{p.name}</Text>
+            {loggedIn && ownedKeys.has(p.key) ? <Glyph name="badgeCheck" size={13} color={selectedKey === p.key ? '#ffffff' : colors.holoCyan} /> : null}
           </Pressable>)}
         </ScrollView> : null}
 
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
   pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, height: 38, borderRadius: 19, backgroundColor: colors.panelRaised, borderWidth: 1, borderColor: colors.panelBorder },
   pillOn: { backgroundColor: colors.holoCyan, borderColor: colors.holoCyan }, pillText: { color: colors.text, fontWeight: '700', fontSize: 13 },
   planName: { color: colors.text, fontSize: 24, fontWeight: '900' }, price: { color: colors.holoCyan, fontSize: 24, fontWeight: '900' },
-  badge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(94,234,212,0.4)' }, badgeText: { color: colors.holoCyan, fontSize: 11, fontWeight: '700' },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(21,101,255,0.4)' }, badgeText: { color: colors.holoCyan, fontSize: 11, fontWeight: '700' },
   face: { flex: 1, aspectRatio: 85 / 55, borderRadius: 12, backgroundColor: colors.panelRaised, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   faceVertical: { aspectRatio: 55 / 85 }, faceEmpty: { color: colors.textDim, fontSize: 11, textAlign: 'center', padding: 8 },
   faceTag: { position: 'absolute', top: 6, left: 6, color: '#fff', fontSize: 10, fontWeight: '700', backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },

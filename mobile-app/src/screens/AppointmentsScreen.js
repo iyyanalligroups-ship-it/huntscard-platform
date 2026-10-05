@@ -51,7 +51,7 @@ function MiniMonth({ shown, onShown, selectedDay, onSelect, appointmentDays }) {
       {row.map((d) => {
         const key = dateKey(d); const selected = key === selectedDay; const inMonth = d.getMonth() === month;
         return <Pressable key={key} onPress={() => onSelect(d)} style={[styles.day, selected && styles.daySelected, key === todayKey && !selected && styles.dayToday, !inMonth && { opacity: 0.35 }]}>
-          <Text style={[styles.dayText, selected && { color: '#06120f' }, key === todayKey && { fontWeight: '900' }]}>{d.getDate()}</Text>
+          <Text style={[styles.dayText, selected && { color: '#ffffff' }, key === todayKey && { fontWeight: '900' }]}>{d.getDate()}</Text>
           {appointmentDays.has(key) && !selected ? <View style={styles.apptDot} /> : null}
         </Pressable>;
       })}
@@ -76,14 +76,14 @@ function WeekGrid({ weekStart, onWeekChange, onToday, appointments, interval, on
         <Pressable style={styles.navBtn} onPress={() => onWeekChange(new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() - 7))}><Glyph name="chevronLeft" size={14} /></Pressable>
         <Pressable style={styles.navBtn} onPress={() => onWeekChange(new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 7))}><Glyph name="chevronRight" size={14} /></Pressable>
       </View>
-      <View style={styles.intervals}>{INTERVAL_OPTIONS.map((m) => <Pressable key={m} onPress={() => onInterval(m)} style={[styles.interval, interval === m && styles.intervalOn]}><Text style={[styles.intervalText, interval === m && { color: '#06120f' }]}>{m}m</Text></Pressable>)}</View>
+      <View style={styles.intervals}>{INTERVAL_OPTIONS.map((m) => <Pressable key={m} onPress={() => onInterval(m)} style={[styles.interval, interval === m && styles.intervalOn]}><Text style={[styles.intervalText, interval === m && { color: '#ffffff' }]}>{m}m</Text></Pressable>)}</View>
     </View>
     <Text style={styles.strong}>{days[0].toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – {days[6].toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</Text>
     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
       <View>
         <View style={{ flexDirection: 'row', paddingLeft: 62 }}>
           {days.map((d) => { const key = dateKey(d); const selected = key === selectedDay; return <Pressable key={key} onPress={() => onSelectDay(selected ? null : key)} style={[styles.dayHead, { width: COL }, selected && { backgroundColor: colors.holoCyan }, key === todayKey && !selected && { borderBottomColor: colors.holoCyan }]}>
-            <Text style={[styles.dayHeadSmall, selected && { color: '#06120f' }]}>{d.toLocaleDateString(undefined, { weekday: 'short' })}</Text><Text style={[styles.dayHeadNum, selected && { color: '#06120f' }]}>{d.getDate()}</Text>
+            <Text style={[styles.dayHeadSmall, selected && { color: '#ffffff' }]}>{d.toLocaleDateString(undefined, { weekday: 'short' })}</Text><Text style={[styles.dayHeadNum, selected && { color: '#ffffff' }]}>{d.getDate()}</Text>
           </Pressable>; })}
         </View>
         <ScrollView style={{ maxHeight: 300 }} nestedScrollEnabled>
@@ -171,7 +171,7 @@ export default function AppointmentsScreen() {
       <Button compact kind={tab === 'sent' ? 'primary' : 'secondary'} title="Sent" onPress={() => { setTab('sent'); setPage(1); }} />
     </View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6 }}>
-      {QUICK_FILTERS.map((f) => { const on = quickFilter === f.key && !selectedDay; return <Pressable key={f.key} onPress={() => { setQuickFilter(f.key); setSelectedDay(null); setPage(1); }} style={[styles.filter, on && styles.filterOn]}><Text style={[styles.filterText, on && { color: '#06120f' }]}>{f.label}</Text></Pressable>; })}
+      {QUICK_FILTERS.map((f) => { const on = quickFilter === f.key && !selectedDay; return <Pressable key={f.key} onPress={() => { setQuickFilter(f.key); setSelectedDay(null); setPage(1); }} style={[styles.filter, on && styles.filterOn]}><Text style={[styles.filterText, on && { color: '#ffffff' }]}>{f.label}</Text></Pressable>; })}
     </ScrollView>
 
     <Message>{error}</Message>
@@ -239,6 +239,6 @@ const styles = StyleSheet.create({
   interval: { paddingHorizontal: 11, paddingVertical: 5, borderRadius: 999 }, intervalOn: { backgroundColor: colors.holoCyan }, intervalText: { color: colors.textDim, fontWeight: '700', fontSize: 12 },
   dayHead: { alignItems: 'center', paddingVertical: 6, borderBottomWidth: 2, borderBottomColor: 'transparent' }, dayHeadSmall: { color: colors.textDim, fontSize: 10, textTransform: 'uppercase' }, dayHeadNum: { color: colors.text, fontWeight: '800', fontSize: 15 },
   slotLabel: { width: 62, color: colors.textDim, fontSize: 10, paddingTop: 7, paddingLeft: 4 },
-  chip: { borderRadius: 5, paddingHorizontal: 5, paddingVertical: 3 }, chipText: { color: '#06120f', fontSize: 10, fontWeight: '700' },
+  chip: { borderRadius: 5, paddingHorizontal: 5, paddingVertical: 3 }, chipText: { color: '#ffffff', fontSize: 10, fontWeight: '700' },
   filter: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: colors.panelBorder }, filterOn: { backgroundColor: colors.holoCyan, borderColor: colors.holoCyan }, filterText: { color: colors.textDim, fontWeight: '700', fontSize: 12 },
 });

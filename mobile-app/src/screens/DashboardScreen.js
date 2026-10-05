@@ -193,7 +193,7 @@ export default function DashboardScreen({ navigation }) {
       <Text style={styles.h2}>Order progress</Text>
       {stage === -1 ? <View style={{ gap: 12 }}><Text style={styles.dim}>No card order yet.</Text><Button compact title="Browse the Shop" onPress={() => navigation.navigate('Shop')} style={{ alignSelf: 'flex-start' }} /></View> : <>
         {ORDER_STAGES.map((label, i) => <View key={label} style={styles.stage}>
-          <View style={[styles.stageDot, i <= stage && styles.stageDotDone]}>{i <= stage ? <Glyph name="check" size={13} color="#06120f" strokeWidth={3} /> : <Text style={styles.stageNum}>{i + 1}</Text>}</View>
+          <View style={[styles.stageDot, i <= stage && styles.stageDotDone]}>{i <= stage ? <Glyph name="check" size={13} color="#ffffff" strokeWidth={3} /> : <Text style={styles.stageNum}>{i + 1}</Text>}</View>
           <Text style={[styles.stageLabel, i > stage && { color: colors.textDim }]}>{label}</Text>
         </View>)}
         <Button compact kind="ghost" title="Full tracking details →" onPress={() => navigation.navigate('Track Orders')} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} />
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   preview: { width: '100%', borderRadius: 14, overflow: 'hidden', backgroundColor: colors.panelRaised, alignSelf: 'center', maxHeight: 320 },
   previewEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }, brand: { color: colors.holoCyan, fontWeight: '900', fontSize: 24 },
   zing: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  zingBtn: { width: 54, height: 54, borderRadius: 27, backgroundColor: colors.holoCyan, alignItems: 'center', justifyContent: 'center' }, zingGlyph: { fontSize: 22, color: '#06120f', fontWeight: '900' },
+  zingBtn: { width: 54, height: 54, borderRadius: 27, backgroundColor: colors.holoCyan, alignItems: 'center', justifyContent: 'center' }, zingGlyph: { fontSize: 22, color: '#ffffff', fontWeight: '900' },
   toast: { color: colors.text, backgroundColor: colors.panelRaised, padding: 10, borderRadius: 10, textAlign: 'center', overflow: 'hidden' },
   kpis: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, kpi: { width: '48%', gap: 4, padding: 14 },
   kpiChip: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },

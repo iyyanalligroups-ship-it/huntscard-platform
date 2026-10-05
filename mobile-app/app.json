@@ -5,7 +5,10 @@
     "version": "0.1.0",
     "extra": {
       "apiUrl": "",
-      "webUrl": ""
+      "webUrl": "",
+      "eas": {
+        "projectId": "9cd3a69b-921b-48ab-97e0-8695133ef25e"
+      }
     },
     "plugins": [
       "expo-sharing",
@@ -22,14 +25,18 @@
         "NSCameraUsageDescription": "huntsTAG uses the camera for Magic Camera, AR and QR scanning.",
         "NSContactsUsageDescription": "huntsTAG imports and saves contacts.",
         "NSPhotoLibraryUsageDescription": "huntsTAG uploads your photos, banners and card artwork."
-      }
+      },
+      "bundleIdentifier": "com.huntstag.client"
     },
     "android": {
       "permissions": [
-        "CAMERA",
-        "READ_CONTACTS",
-        "WRITE_CONTACTS"
-      ]
-    }
+        "android.permission.CAMERA",
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.mobileapp"
+    },
+    "owner": "charles_huntsworld"
   }
 }

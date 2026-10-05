@@ -132,11 +132,11 @@ export default function HomeScreen({ navigation }) {
   return <Screen contentStyle={{ padding: 0, gap: 0, paddingBottom: 0 }}>
     {/* 1. HOOK */}
     <View style={styles.hero}>
-      <Text style={styles.eyebrow}>NFC SMART BUSINESS CARD</Text>
-      <Text style={styles.h1}>Your identity,</Text>
-      <Text style={[styles.h1, { color: colors.holoCyan }]}>beyond a card.</Text>
-      <Text style={styles.tag}>Tap. Connect. Impress.</Text>
-      <Text style={styles.lead}>Paper cards get lost. A HuntsTAG card gets saved. One tap opens your profile, WhatsApp and portfolio on their phone.</Text>
+      <Text style={[styles.eyebrow, { color: '#6fa3ff' }]}>NFC SMART BUSINESS CARD</Text>
+      <Text style={[styles.h1, { color: '#fff' }]}>Your identity,</Text>
+      <Text style={[styles.h1, { color: '#4d8dff' }]}>beyond a card.</Text>
+      <Text style={[styles.tag, { color: '#8db6ff' }]}>Tap. Connect. Impress.</Text>
+      <Text style={[styles.lead, { color: '#c3d0ea' }]}>Paper cards get lost. A HuntsTAG card gets saved. One tap opens your profile, WhatsApp and portfolio on their phone.</Text>
       <View style={styles.stack}>
         <Button title={`Get your card${SITE.fromPrice ? ` — from ₹${SITE.fromPrice}` : ''}`} onPress={go('Shop')} />
         {hasWhatsApp ? <Button title="Chat on WhatsApp" kind="secondary" icon="chat" onPress={() => { trackEvent('whatsapp_click', { placement: 'hero' }); openWhatsApp(); }} /> : null}
@@ -161,7 +161,7 @@ export default function HomeScreen({ navigation }) {
     </View>
 
     {/* 3. AUGMENTED REALITY */}
-    <Section tint="#0c1630" eyebrow="Augmented reality" title="Your card, floating off the page." sub="Point a phone camera at the QR on your card and your own panel rises above it: a video, a 3D model, your contact details, portfolio and social links.">
+    <Section tint="#e8f0ff" eyebrow="Augmented reality" title="Your card, floating off the page." sub="Point a phone camera at the QR on your card and your own panel rises above it: a video, a 3D model, your contact details, portfolio and social links.">
       {AR_POINTS.map(([icon, title, text]) => <IconRow key={title} icon={icon} title={title} text={text} />)}
       <View style={styles.numRow}>
         {AR_STEPS.map(([title, text], i) => <View key={title} style={styles.numItem}><Text style={styles.numBig}>0{i + 1}</Text><Text style={styles.cardTitle}>{title}</Text><Text style={styles.cardText}>{text}</Text></View>)}
@@ -178,7 +178,7 @@ export default function HomeScreen({ navigation }) {
     </Section>
 
     {/* 4. PAPER VS HUNTSTAG */}
-    <Section tint="#0e1220" title="Paper cards vs HuntsTAG" sub="Why people stop printing and start tapping.">
+    <Section tint="#eef3fc" title="Paper cards vs HuntsTAG" sub="Why people stop printing and start tapping.">
       <View style={styles.compareHead}><Text style={styles.compareLabel}>Paper card</Text><Text style={[styles.compareLabel, { color: colors.holoCyan }]}>HuntsTAG</Text></View>
       {COMPARE.map(([bad, good]) => <View key={good} style={styles.compareRow}>
         <View style={styles.compareCell}><Glyph name="close" size={15} color={colors.danger} /><Text style={styles.cardText}>{bad}</Text></View>
@@ -192,13 +192,13 @@ export default function HomeScreen({ navigation }) {
     </Section> : null}
 
     {/* 7b. EDITIONS */}
-    {customPlan || limitedPlan ? <Section tint="#0c1630" eyebrow="Make it yours" title="Your own design. Or a one-of-a-kind edition." sub="Two ways to stand out from every other card on the table.">
+    {customPlan || limitedPlan ? <Section tint="#e8f0ff" eyebrow="Make it yours" title="Your own design. Or a one-of-a-kind edition." sub="Two ways to stand out from every other card on the table.">
       {customPlan ? <EditionCard badge="Your artwork" icon="palette" plan={customPlan} text="Bring your own design. Upload the front and the back at checkout and we make the card from your artwork." cta="Design your card" extra={customPlan.requiresDesignUpload ? 'Your own front and back' : ''} onPress={go('Shop', { plan: customPlan.key })} /> : null}
       {limitedPlan ? <EditionCard badge="Limited edition" icon="sparkles" plan={limitedPlan} text="A premium edition set up by our team, with a custom sound that plays when your card is scanned. It stays exactly as designed." cta="See the edition" extra={limitedPlan.isSpecialEdition ? 'Custom sound on scan' : ''} onPress={go('Shop', { plan: limitedPlan.key })} /> : null}
     </Section> : null}
 
     {/* 8a. MAGIC BUSINESS CARD */}
-    <Section tint="#10102a" eyebrow="Magic Business Card" title="The QR opens it. The card image brings it alive." sub="It takes both. The QR on your card opens Magic Camera, then the camera recognises your card’s artwork and plays your own video right on it, with buttons to call, open your portfolio or follow you.">
+    <Section tint="#f1ecff" eyebrow="Magic Business Card" title="The QR opens it. The card image brings it alive." sub="It takes both. The QR on your card opens Magic Camera, then the camera recognises your card’s artwork and plays your own video right on it, with buttons to call, open your portfolio or follow you.">
       {mbcPlan ? <Image source={{ uri: resolveAssetUrl(planImage(mbcPlan, (mbcPlan.variants || [])[0])) }} style={styles.mbcCard} resizeMode="contain" /> : null}
       {MBC_STAGES.map(([icon, title, text], i) => <IconRow key={title} icon={icon} title={`${i + 1}. ${title}`} text={text} />)}
       <View style={styles.bothRow}><Pill icon="qr" text="The QR gets you in" /><Text style={styles.plus}>+</Text><Pill icon="scan" text="The card image is what the camera locks onto" /></View>
@@ -208,7 +208,7 @@ export default function HomeScreen({ navigation }) {
     </Section>
 
     {/* 7c. CONTACT BACKUP */}
-    <Section tint="#0b3a8a" eyebrow="Contact backup" title="Switch phones. Keep every contact." sub="Your contacts live in your HuntsTAG account, not just inside one phone. Lose it, drop it or upgrade, then log in and they are all still there.">
+    <Section tint="#e3efff" eyebrow="Contact backup" title="Switch phones. Keep every contact." sub="Your contacts live in your HuntsTAG account, not just inside one phone. Lose it, drop it or upgrade, then log in and they are all still there.">
       {BK_POINTS.map(([icon, title, text]) => <IconRow key={title} icon={icon} title={title} text={text} />)}
       <Text style={styles.note}>Phone import works on Android. Excel, CSV and export work on any device.</Text>
       <Button title={session ? 'Open my contacts' : 'Start your backup, free'} onPress={goMember('Contacts')} />
@@ -221,11 +221,11 @@ export default function HomeScreen({ navigation }) {
     </Section>
 
     {/* 8-. ORDER TRACKING */}
-    <Section tint="#0e1220" eyebrow="Order tracking" title="Know where your order is, every step of the way." sub="Every card and poster order has its own tracker. No calling, no guessing.">
+    <Section tint="#eef3fc" eyebrow="Order tracking" title="Know where your order is, every step of the way." sub="Every card and poster order has its own tracker. No calling, no guessing.">
       {TRK_FLOWS.map((flow) => <Card key={flow.title} style={{ gap: 12 }}>
         <View style={styles.flowHead}><View style={styles.iconBox}><Glyph name={flow.icon} size={20} color={colors.holoCyan} /></View><Text style={styles.cardTitle}>{flow.title}</Text><View style={{ flex: 1 }} /><Text style={styles.paid}>Paid</Text></View>
         {flow.steps.map(([title, text], i) => <View key={title} style={styles.trkStep}>
-          <View style={styles.trkDot}><Glyph name="check" size={12} color="#06120f" strokeWidth={3} /></View>
+          <View style={styles.trkDot}><Glyph name="check" size={12} color="#ffffff" strokeWidth={3} /></View>
           <View style={{ flex: 1 }}><Text style={styles.cardTitle}>{title}</Text><Text style={styles.cardText}>{text}</Text></View>
         </View>)}
         <Text style={styles.note}>A tracking ID appears once it ships.</Text>
@@ -239,14 +239,14 @@ export default function HomeScreen({ navigation }) {
     </Section>
 
     {/* 8b. DEVICE PROTECTION */}
-    <Section tint="#0b2a2a" eyebrow="Device protection" title="A safety check, built into your account." sub="Your card shares your details, so we help you keep your phone safe too. HuntsTAG reads a few security settings and tells you, in plain words, what is fine and what to fix.">
+    <Section tint="#e4f6f2" eyebrow="Device protection" title="A safety check, built into your account." sub="Your card shares your details, so we help you keep your phone safe too. HuntsTAG reads a few security settings and tells you, in plain words, what is fine and what to fix.">
       {DP_POINTS.map(([icon, title, text, where]) => <IconRow key={title} icon={icon} title={title} text={text} badge={where} />)}
       <Text style={styles.note}>A settings checklist, not antivirus. Nothing is scanned and nothing leaves your device.</Text>
       <Button title={session ? 'Open Device Protection' : 'Create a free account'} onPress={goMember('Device Protection Check')} />
     </Section>
 
     {/* 9. MAGIC POSTERS */}
-    <Section tint="#0c1630" eyebrow="Magic Poster" title="Posters that play a video when scanned" sub="Print comes alive. Point your phone at a poster and a video plays on top of it. No app, no login. Great for shops, salons, restaurants and events.">
+    <Section tint="#e8f0ff" eyebrow="Magic Poster" title="Posters that play a video when scanned" sub="Print comes alive. Point your phone at a poster and a video plays on top of it. No app, no login. Great for shops, salons, restaurants and events.">
       {posters.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
         {posters.map((p) => <Image key={p._id} source={{ uri: resolveAssetUrl(p.imageUrl) }} style={styles.poster} resizeMode="cover" />)}
       </ScrollView> : null}
@@ -258,7 +258,7 @@ export default function HomeScreen({ navigation }) {
     <Section eyebrow="Who it's for" title="Made for people who meet people." sub="Pick your line of work and see what your card does for you.">
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         {AUDIENCES.map((a, i) => <Pressable key={a.title} onPress={() => setAud(i)} style={[styles.audTab, i === aud && styles.audTabOn]}>
-          <Glyph name={a.icon} size={15} color={i === aud ? '#06120f' : colors.text} /><Text style={[styles.audTabText, i === aud && { color: '#06120f' }]}>{a.title}</Text>
+          <Glyph name={a.icon} size={15} color={i === aud ? '#ffffff' : colors.text} /><Text style={[styles.audTabText, i === aud && { color: '#ffffff' }]}>{a.title}</Text>
         </Pressable>)}
       </ScrollView>
       <Card style={{ gap: 10 }}>
@@ -271,7 +271,7 @@ export default function HomeScreen({ navigation }) {
     </Section>
 
     {/* 13. BULK */}
-    <Section tint="#0c1630" title="Need cards for a whole team?" sub="Bulk cards, your own artwork or branded Magic Posters. Tell us what you need and we will shape it with you.">
+    <Section tint="#e8f0ff" title="Need cards for a whole team?" sub="Bulk cards, your own artwork or branded Magic Posters. Tell us what you need and we will shape it with you.">
       {BULK.map(([icon, text]) => <View key={text} style={styles.bulkRow}><Glyph name={icon} size={18} color={colors.holoCyan} /><Text style={styles.cardTitle}>{text}</Text></View>)}
       <Button title="Request a quote" onPress={go('Contact Us')} />
       {hasWhatsApp ? <Button title="Talk on WhatsApp" kind="secondary" icon="chat" onPress={() => { trackEvent('whatsapp_click', { placement: 'bulk' }); openWhatsApp(); }} /> : null}
@@ -294,15 +294,15 @@ export default function HomeScreen({ navigation }) {
     </Section>
 
     {/* 14. FAQ */}
-    {faqs && faqs.length ? <Section tint="#0e1220" title="Questions, answered">
+    {faqs && faqs.length ? <Section tint="#eef3fc" title="Questions, answered">
       {faqs.map((item, i) => <Accordion key={item._id || i} title={item.question} defaultOpen={i === 0}><Text style={styles.cardText}>{item.answer}</Text></Accordion>)}
       <Button title={'See all questions →'} kind="ghost" onPress={go('FAQ')} />
     </Section> : null}
 
     {/* 15. FINAL */}
     <View style={[styles.section, styles.final]}>
-      <Text style={[styles.h2, { textAlign: 'center' }]}>Stop handing out cards people throw away.</Text>
-      <Text style={[styles.cardText, { textAlign: 'center' }]}>Get yours today. One tap, and you are in their phone.</Text>
+      <Text style={[styles.h2, { textAlign: 'center', color: '#fff' }]}>Stop handing out cards people throw away.</Text>
+      <Text style={[styles.cardText, { textAlign: 'center', color: '#dbe9ff' }]}>Get yours today. One tap, and you are in their phone.</Text>
       <View style={[styles.stack, { alignSelf: 'stretch' }]}>
         <Button title="Order your card" onPress={go('Shop')} />
         {hasWhatsApp ? <Button title="Chat on WhatsApp" kind="secondary" icon="chat" onPress={() => { trackEvent('whatsapp_click', { placement: 'final' }); openWhatsApp(); }} /> : null}
@@ -395,7 +395,7 @@ function EditionCard({ badge, icon, plan, text, cta, extra, onPress }) {
 }
 
 const styles = StyleSheet.create({
-  hero: { padding: 22, paddingTop: 28, gap: 10, backgroundColor: colors.panel, borderBottomWidth: 1, borderBottomColor: colors.panelBorder },
+  hero: { padding: 22, paddingTop: 28, gap: 10, backgroundColor: colors.navy },
   eyebrow: { color: colors.holoCyan, fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
   h1: { color: colors.text, fontSize: 36, fontWeight: '900', letterSpacing: -1, lineHeight: 40 },
   h2: { color: colors.text, fontSize: 25, fontWeight: '800', letterSpacing: -0.4, lineHeight: 30 },
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
   trustItem: { flexDirection: 'row', gap: 6, alignItems: 'center', borderWidth: 1, borderColor: colors.panelBorder, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   trustText: { color: colors.text, fontSize: 12, fontWeight: '600' },
   section: { padding: 22, gap: 12 },
-  final: { alignItems: 'center', backgroundColor: '#0b3a8a' },
+  final: { alignItems: 'center', backgroundColor: colors.holoCyan },
   iconRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   iconBox: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.panelRaised, borderWidth: 1, borderColor: colors.panelBorder, alignItems: 'center', justifyContent: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
@@ -462,9 +462,9 @@ const styles = StyleSheet.create({
   pillText: { color: colors.text, fontSize: 12, fontWeight: '700', flexShrink: 1 },
   step: { flexDirection: 'row', gap: 14, alignItems: 'center' },
   stepNo: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.holoCyan, alignItems: 'center', justifyContent: 'center' },
-  stepNoText: { color: '#06120f', fontWeight: '900', fontSize: 18 },
+  stepNoText: { color: '#ffffff', fontWeight: '900', fontSize: 18 },
   flowHead: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  paid: { color: '#06120f', backgroundColor: colors.holoCyan, fontSize: 11, fontWeight: '800', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, overflow: 'hidden' },
+  paid: { color: '#ffffff', backgroundColor: colors.holoCyan, fontSize: 11, fontWeight: '800', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, overflow: 'hidden' },
   trkStep: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   trkDot: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.holoCyan, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   poster: { width: 150, height: 200, borderRadius: 12, backgroundColor: colors.panelRaised },

@@ -71,6 +71,6 @@ export default function DateTimeField({ label, value, onChange, mode = 'date', m
 const styles = StyleSheet.create({
   label: { color: colors.textDim, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   input: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingHorizontal: 13, borderRadius: 10, borderWidth: 1, borderColor: colors.panelBorder, backgroundColor: colors.panelRaised },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', justifyContent: 'flex-end' },
+  overlay: { flex: 1, backgroundColor: 'rgba(11,22,48,0.55)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: colors.panel, padding: 18, gap: 12, borderTopLeftRadius: 22, borderTopRightRadius: 22 },
 });

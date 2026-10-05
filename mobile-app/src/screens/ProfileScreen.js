@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
   rowIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: colors.panelRaised, alignItems: 'center', justifyContent: 'center' }, rowIconText: { color: colors.holoCyan, fontWeight: '800', fontSize: 11 },
   rowLabel: { color: colors.text, flex: 1, fontSize: 14 },
-  hw: { gap: 12, padding: 14, borderRadius: 12, backgroundColor: colors.panelRaised }, hwBadge: { width: 40, height: 40, borderRadius: 10, backgroundColor: colors.holoViolet, alignItems: 'center', justifyContent: 'center' }, hwBadgeText: { color: '#06120f', fontWeight: '900', fontSize: 18 },
+  hw: { gap: 12, padding: 14, borderRadius: 12, backgroundColor: colors.panelRaised }, hwBadge: { width: 40, height: 40, borderRadius: 10, backgroundColor: colors.holoViolet, alignItems: 'center', justifyContent: 'center' }, hwBadgeText: { color: '#ffffff', fontWeight: '900', fontSize: 18 },
   name2: { color: colors.text, fontWeight: '800' }, dim: { color: colors.textDim, fontSize: 12, lineHeight: 18 }, link: { color: colors.holoCyan, fontWeight: '700' },
   h2: { color: colors.text, fontSize: 17, fontWeight: '800' }, pct: { color: colors.holoCyan, fontSize: 26, fontWeight: '900' },
   bar: { height: 10, borderRadius: 5, backgroundColor: colors.panelRaised, overflow: 'hidden' }, barFill: { height: '100%', backgroundColor: colors.holoCyan, borderRadius: 5 },

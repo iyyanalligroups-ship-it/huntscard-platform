@@ -77,7 +77,7 @@ export function PasswordField({ label, ...props }) {
 }
 
 export function Button({ title, onPress, disabled, kind = 'primary', compact = false, style, icon, loading }) {
-  const iconColor = kind === 'primary' ? '#06120f' : kind === 'danger' ? colors.danger : colors.text;
+  const iconColor = kind === 'primary' ? '#ffffff' : kind === 'danger' ? colors.danger : colors.text;
   return (
     <Pressable
       onPress={onPress}
@@ -125,7 +125,7 @@ export function Tabs({ tabs, value, onChange, style }) {
         const active = tab.key === value;
         return (
           <Pressable key={tab.key} onPress={() => onChange(tab.key)} style={[styles.tab, active && styles.tabActive]}>
-            {tab.icon ? <Glyph name={tab.icon} size={14} color={active ? '#06120f' : colors.textDim} /> : null}
+            {tab.icon ? <Glyph name={tab.icon} size={14} color={active ? '#ffffff' : colors.textDim} /> : null}
             <Text style={[styles.tabText, active && styles.tabTextActive]}>{tab.label}</Text>
           </Pressable>
         );
@@ -261,8 +261,8 @@ const styles = StyleSheet.create({
   button: { minHeight: 48, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, backgroundColor: colors.holoCyan, flexDirection: 'row', gap: 8 },
   button_secondary: { backgroundColor: colors.panelRaised, borderWidth: 1, borderColor: colors.panelBorder },
   button_ghost: { backgroundColor: 'transparent' },
-  button_danger: { backgroundColor: 'rgba(244,116,106,0.12)', borderWidth: 1, borderColor: colors.danger },
-  buttonText: { color: '#06120f', fontSize: 14, fontWeight: '800' },
+  button_danger: { backgroundColor: 'rgba(220,38,38,0.12)', borderWidth: 1, borderColor: colors.danger },
+  buttonText: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
   secondaryText: { color: colors.text },
   dangerText: { color: colors.danger },
   compact: { minHeight: 36, paddingHorizontal: 12 },
@@ -271,8 +271,8 @@ const styles = StyleSheet.create({
   iconButton: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.panelRaised, borderWidth: 1, borderColor: colors.panelBorder, alignItems: 'center', justifyContent: 'center' },
   badge: { position: 'absolute', top: -4, right: -4, minWidth: 17, height: 17, borderRadius: 9, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
   badgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  message: { color: colors.danger, backgroundColor: 'rgba(244,116,106,0.10)', borderRadius: 9, padding: 11, lineHeight: 18, overflow: 'hidden' },
-  success: { color: colors.holoCyan, backgroundColor: 'rgba(94,234,212,0.08)' },
+  message: { color: colors.danger, backgroundColor: 'rgba(220,38,38,0.10)', borderRadius: 9, padding: 11, lineHeight: 18, overflow: 'hidden' },
+  success: { color: colors.holoCyan, backgroundColor: 'rgba(21,101,255,0.08)' },
   info: { color: colors.textDim, backgroundColor: colors.panelRaised },
   loading: { minHeight: 180, alignItems: 'center', justifyContent: 'center', gap: 10 },
   empty: { color: colors.textDim, textAlign: 'center', lineHeight: 20 },
@@ -280,11 +280,11 @@ const styles = StyleSheet.create({
   tab: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 36, borderRadius: 18, backgroundColor: colors.panelRaised, borderWidth: 1, borderColor: colors.panelBorder },
   tabActive: { backgroundColor: colors.holoCyan, borderColor: colors.holoCyan },
   tabText: { color: colors.textDim, fontWeight: '700', fontSize: 13 },
-  tabTextActive: { color: '#06120f' },
+  tabTextActive: { color: '#ffffff' },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   stepBtn: { width: 30, height: 30, borderRadius: 8, backgroundColor: colors.panelRaised, borderWidth: 1, borderColor: colors.panelBorder, alignItems: 'center', justifyContent: 'center' },
   stepValue: { color: colors.text, fontWeight: '800', minWidth: 24, textAlign: 'center' },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', justifyContent: 'flex-end' },
+  overlay: { flex: 1, backgroundColor: 'rgba(11,22,48,0.55)', justifyContent: 'flex-end' },
   sheet: { maxHeight: '92%', backgroundColor: colors.panel, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 18, gap: 12, borderWidth: 1, borderColor: colors.panelBorder },
   sheetHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   option: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.panelBorder },
