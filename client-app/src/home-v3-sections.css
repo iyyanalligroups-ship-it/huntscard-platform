@@ -1,0 +1,113 @@
+/* Per-section design upgrades for the engagement homepage (loaded after home-v3.css). */
+.hv3-tone-blue   { --t: #1565ff; --tb: #e3edff; }
+.hv3-tone-violet { --t: #7c3aed; --tb: #efe6ff; }
+.hv3-tone-green  { --t: #16a34a; --tb: #dcf7e6; }
+.hv3-tone-orange { --t: #ea6a12; --tb: #ffeadb; }
+.hv3 .hv3-ico { background: var(--tb, #e3edff); color: var(--t, #1565ff); width: 58px; height: 58px; border-radius: 16px; }
+
+.hv3-eyebrow-dark { color: var(--blue); }
+.hv3-eyebrow::before { content: ""; display: inline-block; width: 22px; height: 3px; border-radius: 3px; background: currentColor; vertical-align: middle; margin-right: 10px; }
+
+/* hero */
+.hv3-hero { position: relative; overflow: hidden; }
+.hv3-hero::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background-image: linear-gradient(rgba(120,160,255,.09) 1px, transparent 1px), linear-gradient(90deg, rgba(120,160,255,.09) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse at 70% 40%, #000 0%, transparent 70%);
+  mask-image: radial-gradient(ellipse at 70% 40%, #000 0%, transparent 70%);
+}
+.hv3-hero .hv3-in { position: relative; }
+.hv3 h1 { margin-bottom: 22px; }
+.hv3-tag { margin-top: 0 !important; color: #8db6ff; }
+.hv3-lead { margin-top: 6px; }
+.hv3-chip { position: absolute; display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px 9px 10px; border-radius: 14px; font-size: 13px; font-weight: 700; background: #fff; box-shadow: 0 14px 34px rgba(0,0,0,.28); animation: hv3-bob 5s ease-in-out infinite; z-index: 2; }
+.hv3-chip svg { padding: 5px; box-sizing: content-box; border-radius: 9px; background: var(--tb); color: var(--t); }
+.hv3-chip-a { top: 20%; left: 2%; }
+.hv3-chip-b { top: 46%; left: -6%; animation-delay: -1.2s; }
+.hv3-chip-c { bottom: 18%; left: 4%; animation-delay: -2.4s; }
+.hv3-chip-d { top: 60%; right: -2%; animation-delay: -3.3s; }
+.hv3-savebadge { position: absolute; bottom: 6%; right: 8%; display: inline-flex; gap: 8px; align-items: center; padding: 10px 16px; border-radius: 999px; background: var(--blue); font-size: 13px; font-weight: 700; box-shadow: 0 12px 30px rgba(21,101,255,.5); animation: hv3-bob 4.5s ease-in-out infinite; animation-delay: -1.8s; }
+.hv3-phone { position: relative; box-shadow: 0 30px 90px rgba(0,0,0,.6), 0 0 90px rgba(21,101,255,.55), inset 0 0 0 1px rgba(255,255,255,.08); }
+.hv3-phone::before { content: ""; position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 72px; height: 20px; border-radius: 20px; background: #0a0f1c; z-index: 2; }
+html body .sh-theme .hv3 .hv3-chip { color: #0b1630 !important; -webkit-text-fill-color: #0b1630 !important; }
+html body .sh-theme .hv3 .hv3-savebadge { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+
+/* proof bar: pill chips */
+.hv3-proof li { padding: 8px 16px; border-radius: 999px; background: #f3f7ff; border: 1px solid var(--line); }
+
+/* why / confidence cards */
+.hv3-card-tone { position: relative; overflow: hidden; padding-top: 28px; }
+.hv3-card-tone::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--t); }
+.hv3-card-tone::after { content: ""; position: absolute; right: -40px; top: -40px; width: 130px; height: 130px; border-radius: 50%; background: var(--tb); opacity: .7; z-index: 0; }
+.hv3-card-tone > * { position: relative; z-index: 1; }
+.hv3-card-tone:hover { box-shadow: 0 18px 40px rgba(11,22,48,.12); }
+
+/* compare: VS badge */
+.hv3-compare { position: relative; }
+.hv3-compare::after { content: "VS"; position: absolute; left: 50%; top: 18px; transform: translateX(-50%); width: 34px; height: 34px; border-radius: 50%; background: #0b1630; color: #fff; font-size: 11px; font-weight: 800; display: grid; place-items: center; box-shadow: 0 0 0 4px #fff; }
+.hv3-compare-row .good { border-left: 1px solid var(--line); }
+
+/* digital card visual */
+.hv3-media { position: relative; }
+.hv3-media::before { content: ""; position: absolute; inset: -18px; border-radius: 34px; background: linear-gradient(135deg, #cfe0ff, #f1e8ff); z-index: 0; transform: rotate(-3deg); }
+.hv3-media img { position: relative; z-index: 1; }
+.hv3-chip-e { top: -14px; right: -10px; }
+.hv3-chip-f { bottom: 26px; left: -18px; animation-delay: -1.5s; }
+.hv3-chip-g { bottom: -16px; right: 8%; animation-delay: -2.7s; }
+.hv3-media .hv3-chip { box-shadow: 0 12px 28px rgba(11,22,48,.2); border: 1px solid var(--line); z-index: 3; }
+
+/* plans: warm glow like the reference's gold wave */
+#plans { background: radial-gradient(900px 340px at 50% 108%, rgba(214,150,60,.45), transparent 70%), var(--navy); }
+.hv3 .hv3-plan { background: linear-gradient(180deg, rgba(255,255,255,.1), rgba(255,255,255,.03)); backdrop-filter: blur(6px); }
+.hv3 .hv3-plan:hover { border-color: #ffd27a; box-shadow: 0 18px 50px rgba(214,150,60,.28); }
+.hv3-plan img { box-shadow: 0 14px 30px rgba(0,0,0,.45); }
+.hv3-plan-cta { padding: 8px 16px; border-radius: 999px; background: rgba(255,255,255,.1); margin-top: 8px; }
+
+/* steps: connectors + ghost numbers */
+.hv3-step { position: relative; overflow: visible; }
+.hv3-step:not(:last-child)::after { content: ""; position: absolute; top: 52px; left: calc(100% + 1px); width: 17px; border-top: 2px dashed #9db8ee; }
+.hv3-steps .hv3-step small { position: absolute; right: 18px; top: 10px; margin: 0; font-size: 44px; font-weight: 800; letter-spacing: 0; color: var(--tb); line-height: 1; }
+.hv3-step .hv3-ico { background: var(--t); color: #fff; box-shadow: 0 10px 22px rgba(21,101,255,.25); }
+
+/* magic poster */
+.hv3-posters { position: relative; padding: 30px 0 40px; }
+.hv3-posters::before { content: ""; position: absolute; inset: 0; margin: auto; width: 80%; height: 80%; border-radius: 50%; background: radial-gradient(closest-side, rgba(21,101,255,.55), transparent); filter: blur(10px); }
+.hv3-posters img { position: relative; }
+.hv3-playbadge { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); z-index: 3; display: inline-flex; gap: 6px; align-items: center; padding: 8px 14px; border-radius: 999px; background: #fff; font-size: 13px; font-weight: 700; box-shadow: 0 10px 26px rgba(0,0,0,.4); }
+html body .sh-theme .hv3 .hv3-playbadge { color: #0b1630 !important; -webkit-text-fill-color: #0b1630 !important; }
+.hv3-playbadge svg { color: var(--blue); fill: var(--blue); }
+
+/* audience */
+.hv3 .hv3-aud-card { position: relative; padding: 24px; }
+.hv3-aud-card .hv3-ico { margin-bottom: 14px; }
+.hv3-aud-go { position: absolute; right: 18px; bottom: 18px; color: var(--t); opacity: 0; transform: translateX(-6px); transition: all .2s ease; }
+.hv3 .hv3-aud-card:hover { border-color: var(--t); box-shadow: 0 16px 36px rgba(11,22,48,.1); }
+.hv3 .hv3-aud-card:hover .hv3-aud-go { opacity: 1; transform: none; }
+.hv3 .hv3-aud-card:hover .hv3-ico { background: var(--t); color: #fff; }
+
+/* bulk */
+.hv3-bulk li { transition: transform .2s ease, background .2s ease; }
+.hv3-bulk li:hover { transform: translateX(6px); background: rgba(255,255,255,.12); }
+
+/* faq */
+.hv3-faq-item { transition: box-shadow .2s ease, border-color .2s ease; }
+.hv3-faq-item.open { border-color: var(--blue); box-shadow: 0 10px 28px rgba(21,101,255,.12); }
+
+/* final */
+.hv3-final { position: relative; overflow: hidden; padding-top: 100px; padding-bottom: 100px; }
+.hv3-final::before, .hv3-final::after { content: ""; position: absolute; border-radius: 50%; background: rgba(255,255,255,.08); }
+.hv3-final::before { width: 420px; height: 420px; left: -120px; top: -160px; }
+.hv3-final::after { width: 320px; height: 320px; right: -80px; bottom: -150px; }
+.hv3-final .hv3-in { position: relative; z-index: 1; }
+.hv3-final .hv3-h2 { font-size: clamp(30px, 4.6vw, 52px); }
+
+@media (max-width: 960px) {
+  .hv3-chip-a, .hv3-chip-b, .hv3-chip-c, .hv3-chip-d { display: none; }
+  .hv3-step::after { display: none !important; }
+  .hv3-media::before { inset: -10px; }
+  .hv3-chip-f { left: 4px; }
+  .hv3-compare::after { top: 12px; }
+}
+@media (max-width: 560px) { .hv3-savebadge { right: 2%; } .hv3-chip-e { right: 4px; } }
+@media (prefers-reduced-motion: reduce) { .hv3-chip, .hv3-savebadge { animation: none; } }

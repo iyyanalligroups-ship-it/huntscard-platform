@@ -10,6 +10,11 @@ import './bw-photos.css';
 import './gradient-color.css';
 import './tapmo-color.css';
 import './blue-full.css';
+import './conversion.css';
+import './site-theme.css';
+import { initAnalytics } from './analytics.js';
+
+initAnalytics();
 
 const savedAccent = window.localStorage.getItem('huntstag-dashboard-accent');
 if (['teal', 'violet', 'amber'].includes(savedAccent)) {

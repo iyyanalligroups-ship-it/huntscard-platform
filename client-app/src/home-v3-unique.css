@@ -1,0 +1,268 @@
+/* Distinct layouts for the sections that used to share one icon-card grid:
+   Why = bento, How = numbered timeline on a warm field, Confidence = ribbon,
+   Who it's for = interactive profession tabs. Loaded last. */
+
+/* shared two-column section head (left-aligned, replaces the centred stack) */
+.hv3-split-head { display: grid; grid-template-columns: 1.4fr 1fr; gap: 40px; align-items: end; margin-bottom: 44px; text-align: left; }
+.hv3-split-head .hv3-sub { margin: 0; max-width: 420px; justify-self: end; }
+.hv3 .hv3-split-head .hv3-h2 { font-size: clamp(30px, 4.4vw, 52px); }
+
+/* ============================ WHY: bento ============================ */
+.hv3-why { background: #fff; }
+.hv3-bento { display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: 250px 250px; gap: 18px; }
+.bt { position: relative; overflow: hidden; border-radius: 30px; padding: 30px; display: flex; flex-direction: column; justify-content: flex-end; box-sizing: border-box; transition: transform .25s ease; }
+.bt:hover { transform: translateY(-4px); }
+.bt h3 { font-size: 24px; margin: 0 0 6px; }
+.bt p { font-size: 15px; line-height: 1.5; max-width: 320px; }
+.bt-tap { grid-area: 1 / 1 / 3 / 7; background: linear-gradient(150deg, #1d6bff 0%, #0b3fb8 100%); }
+.bt-qr { grid-area: 1 / 7 / 2 / 13; background: #efe6ff; }
+.bt-app { grid-area: 2 / 7 / 3 / 10; background: #07142b; }
+.bt-update { grid-area: 2 / 10 / 3 / 13; background: linear-gradient(150deg, #ffa24f, #ea5a0c); }
+
+.bt-tap h3, .bt-app h3 { font-size: 26px; }
+.bt-tap .bt-rings { position: absolute; right: -60px; top: -60px; width: 340px; height: 340px; display: grid; place-items: center; color: #fff; }
+.bt-rings i { position: absolute; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.35); animation: bt-pulse 3.6s ease-out infinite; }
+.bt-rings i:nth-child(1) { width: 120px; height: 120px; } .bt-rings i:nth-child(2) { width: 210px; height: 210px; animation-delay: -1.2s; } .bt-rings i:nth-child(3) { width: 300px; height: 300px; animation-delay: -2.4s; }
+@keyframes bt-pulse { 0% { opacity: .9; transform: scale(.85); } 100% { opacity: 0; transform: scale(1.1); } }
+.bt-tap .bt-card { position: absolute; right: 36px; bottom: 36px; width: 170px; border-radius: 14px; transform: rotate(9deg); box-shadow: 0 24px 50px rgba(0,0,0,.45); border: 2px solid rgba(255,255,255,.25); }
+
+.bt-qr { flex-direction: row; align-items: flex-end; justify-content: space-between; gap: 20px; }
+.bt-qr > div:last-child, .bt-qr h3, .bt-qr p { position: relative; }
+.bt-qrart { order: 2; flex: none; display: grid; grid-template-columns: repeat(9, 1fr); gap: 3px; width: 150px; height: 150px; padding: 12px; background: #fff; border-radius: 18px; box-shadow: 0 14px 30px rgba(124,58,237,.25); align-self: center; }
+.bt-qrart i { border-radius: 2px; background: #efe6ff; }
+.bt-qrart i.on { background: #4c1d95; }
+.bt-qr h3, .bt-qr p { order: 1; }
+
+.bt-browser { position: absolute; left: 24px; right: 24px; top: 24px; height: 40px; border-radius: 12px; background: rgba(255,255,255,.1); display: flex; align-items: center; gap: 6px; padding: 0 14px; }
+.bt-browser span { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,.4); }
+.bt-browser em { margin-left: 10px; font-style: normal; font-size: 12px; color: #9fb2d6; }
+
+.bt-field { position: absolute; left: 24px; right: 24px; top: 24px; padding: 14px 16px; border-radius: 16px; background: rgba(255,255,255,.95); display: grid; gap: 2px; box-shadow: 0 12px 28px rgba(0,0,0,.18); }
+.bt-field small { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #8a94a8; }
+.bt-field s { font-size: 13px; color: #9aa3b5; }
+.bt-field b { font-size: 16px; }
+.bt-field span { display: inline-flex; align-items: center; gap: 4px; width: fit-content; margin-top: 4px; padding: 3px 9px; border-radius: 999px; background: #dcf7e6; color: #16803c; font-size: 11px; font-weight: 700; }
+
+html body .sh-theme .hv3 .bt-tap h3, html body .sh-theme .hv3 .bt-app h3 { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+html body .sh-theme .hv3 .bt-tap p, html body .sh-theme .hv3 .bt-app p { color: rgba(255,255,255,.82) !important; -webkit-text-fill-color: rgba(255,255,255,.82) !important; }
+html body .sh-theme .hv3 .bt-update h3 { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+html body .sh-theme .hv3 .bt-update p { color: rgba(255,255,255,.92) !important; -webkit-text-fill-color: rgba(255,255,255,.92) !important; }
+html body .sh-theme .hv3 .bt-qr h3 { color: #2e1065 !important; -webkit-text-fill-color: #2e1065 !important; }
+html body .sh-theme .hv3 .bt-qr p { color: #5b4a86; }
+html body .sh-theme .hv3 .bt-field b { color: #0b1630 !important; -webkit-text-fill-color: #0b1630 !important; }
+
+/* ====================== HOW: numbered timeline ====================== */
+.hv3-how { background: #fff1cf; }
+.hv3-timeline { list-style: none; margin: 0; padding: 0; position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; }
+.hv3-timeline::before { content: ""; position: absolute; left: 17px; right: calc(25% - 17px); top: 131px; border-top: 2px dashed rgba(11,22,48,.35); }
+.hv3-tl-item { position: relative; }
+.hv3-tl-num { display: block; height: 100px; font: 800 104px/100px 'Manrope', sans-serif; letter-spacing: -.04em; color: transparent; -webkit-text-fill-color: transparent; -webkit-text-stroke: 2px #0b1630; }
+.hv3-tl-dot { position: relative; z-index: 1; display: grid; place-items: center; width: 34px; height: 34px; margin-top: 14px; border-radius: 50%; background: #0b1630; color: #fff; box-shadow: 0 0 0 6px #fff1cf; }
+.hv3-tl-item h3 { margin: 22px 0 8px; font-size: 22px; }
+.hv3-tl-item p { max-width: 240px; font-size: 15px; line-height: 1.55; color: #5b5240; }
+.hv3-tl-item:hover .hv3-tl-num { -webkit-text-fill-color: #ffb830; }
+
+/* ===================== CONFIDENCE: ribbon panel ===================== */
+.hv3-conf { background: #f1f5ff; }
+.hv3-ribbon { display: grid; grid-template-columns: 340px 1fr; background: #fff; border: 1px solid var(--line); border-radius: 30px; box-shadow: 0 18px 50px rgba(11,22,48,.08); overflow: hidden; text-align: left; }
+.hv3-ribbon-head { padding: 40px; background: linear-gradient(160deg, #0b1630, #12306b); }
+html body .sh-theme .hv3 .hv3-ribbon-head h2 { color: #fff !important; -webkit-text-fill-color: #fff !important; font-size: 32px; }
+html body .sh-theme .hv3 .hv3-ribbon-head .hv3-sub { color: #b9c8e6 !important; -webkit-text-fill-color: #b9c8e6 !important; }
+.hv3-pay { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 24px; }
+.hv3-pay span { padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.35); font-size: 13px; font-weight: 700; color: #fff; }
+.hv3-pay em { font-style: normal; font-size: 12px; color: #9fb2d6; }
+.hv3-ribbon-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; }
+.hv3-ribbon-list li { display: flex; gap: 16px; align-items: flex-start; padding: 34px 36px; border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.hv3-ribbon-list li:nth-child(n+3) { border-bottom: 0; }
+.hv3-ribbon-list svg { color: var(--blue); flex: none; margin-top: 2px; }
+.hv3-ribbon-list b { display: block; font-size: 17px; margin-bottom: 4px; }
+.hv3-ribbon-list span { font-size: 14.5px; line-height: 1.5; color: var(--mute); }
+
+/* ================== WHO IT'S FOR: interactive tabs ================== */
+.hv3-aud-band { background: #fff; }
+.hv3-aud-tabs { display: grid; grid-template-columns: 340px 1fr; gap: 28px; align-items: stretch; }
+.hv3-aud-list { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.hv3-aud-tab { display: flex; align-items: center; gap: 14px; padding: 18px 8px; border-bottom: 1px solid var(--line); cursor: pointer; font-weight: 700; font-size: 17px; transition: padding .2s ease, background .2s ease, color .2s ease; }
+.hv3-aud-tab span { flex: 1; }
+.hv3-aud-tab svg:last-child { opacity: 0; transform: translateX(-6px); transition: all .2s ease; }
+.hv3-aud-tab:hover, .hv3-aud-tab.on { padding-left: 18px; color: var(--blue); }
+.hv3-aud-tab.on svg:last-child { opacity: 1; transform: none; }
+.hv3-aud-tab:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.hv3-aud-panel { display: grid; grid-template-columns: 1fr 250px; gap: 30px; align-items: center; padding: 44px; border-radius: 32px; background: var(--tb); animation: aud-in .35s ease; min-height: 430px; }
+@keyframes aud-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.hv3-aud-kicker { display: inline-block; padding: 6px 14px; border-radius: 999px; background: var(--t); color: #fff; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+html body .sh-theme .hv3 .hv3-aud-kicker { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+.hv3-aud-info h3 { margin: 18px 0 12px; font-size: clamp(26px, 3vw, 36px); line-height: 1.12; }
+.hv3-aud-info p { font-size: 16.5px; line-height: 1.6; color: #3b4760; margin-bottom: 24px; max-width: 460px; }
+.hv3-aud-phone { background: #fff; border-radius: 30px; padding: 26px 20px 22px; text-align: center; box-shadow: 0 26px 60px rgba(11,22,48,.18); display: grid; gap: 8px; justify-items: center; }
+.hv3-aud-avatar { width: 62px; height: 62px; border-radius: 50%; display: grid; place-items: center; background: var(--t); color: #fff; margin-bottom: 4px; }
+.hv3-aud-phone b { font-size: 17px; } .hv3-aud-phone small { font-size: 12.5px; color: var(--mute); margin-bottom: 8px; }
+.hv3-aud-phone span { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 999px; font-size: 13px; font-weight: 700; background: var(--tb); color: var(--t); }
+.hv3-aud-phone span:first-of-type { background: var(--t); color: #fff; }
+
+/* ============================ responsive ============================ */
+@media (max-width: 960px) {
+  .hv3-split-head { grid-template-columns: 1fr; gap: 14px; margin-bottom: 30px; }
+  .hv3-split-head .hv3-sub { justify-self: start; }
+  .hv3-bento { grid-template-columns: 1fr 1fr; grid-template-rows: none; grid-auto-rows: minmax(230px, auto); }
+  .bt-tap { grid-area: auto; grid-column: 1 / -1; min-height: 360px; }
+  .bt-qr { grid-area: auto; grid-column: 1 / -1; }
+  .bt-app, .bt-update { grid-area: auto; }
+  .hv3-timeline { grid-template-columns: 1fr 1fr; row-gap: 40px; }
+  .hv3-timeline::before { display: none; }
+  .hv3-ribbon { grid-template-columns: 1fr; }
+  .hv3-aud-tabs { grid-template-columns: 1fr; }
+  .hv3-aud-list { flex-direction: row; overflow-x: auto; border-top: 0; gap: 8px; padding-bottom: 6px; }
+  .hv3-aud-tab { flex: none; padding: 10px 16px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; }
+  .hv3-aud-tab:hover, .hv3-aud-tab.on { padding-left: 16px; background: #e3edff; }
+  .hv3-aud-tab svg:last-child { display: none; }
+  .hv3-aud-panel { grid-template-columns: 1fr; padding: 28px; min-height: 0; }
+  .hv3-aud-phone { max-width: 260px; }
+}
+@media (max-width: 560px) {
+  .hv3-bento { grid-template-columns: 1fr; }
+  .bt-qr { flex-direction: column; align-items: flex-start; }
+  .bt-qrart { align-self: flex-start; order: 0; }
+  .hv3-timeline { grid-template-columns: 1fr; }
+  .hv3-ribbon-list { grid-template-columns: 1fr; }
+  .hv3-ribbon-list li { border-left: 0; }
+  .hv3-ribbon-list li:nth-child(n+3) { border-bottom: 1px solid var(--line); }
+  .hv3-ribbon-list li:last-child { border-bottom: 0; }
+  .hv3-ribbon-head { padding: 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bt-rings i, .hv3-aud-panel { animation: none; }
+  .bt, .hv3-aud-tab { transition: none; }
+}
+
+/* beat the generic white-band gradient from home-v3-fill.css */
+.hv3 .hv3-band.hv3-how { background: #fff1cf; }
+.hv3 .hv3-band.hv3-conf { background: #f1f5ff; }
+.bt-qr .bt-text { order: 1; }
+.bt-qr .bt-text h3 { margin-bottom: 6px; }
+
+/* ===================== motion support (GSAP drives transforms) ===================== */
+/* GSAP owns `transform` on animated nodes, so hover lifts use the independent
+   `translate` property, and CSS keyframes that fought it are switched off. */
+.bt { transition: translate .25s ease; }
+.bt:hover { transform: none; translate: 0 -4px; }
+.hv3 .hv3-plan { transition: translate .2s ease, border-color .2s ease, box-shadow .2s ease; transform-style: preserve-3d; }
+.hv3 .hv3-plan:hover { transform: none; translate: 0 -6px; }
+.hv3-motion .hv3-chip, .hv3-motion .hv3-savebadge, .hv3-motion .hv3-float, .hv3-motion .hv3-aud-panel { animation: none; }
+.hv3-timeline::before { transform-origin: left center; transform: scaleX(var(--tl, 1)); }
+.bt-browser em { display: inline-block; }
+.hv3-aud-tabs { display: grid; }
+
+/* bulk band: wolf emblem photo instead of a repeated card stack */
+.hv3-wolf { margin: 28px 0 0; height: 260px; max-width: 460px; border-radius: 26px; overflow: hidden; position: relative; box-shadow: 0 24px 60px rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.14); }
+.hv3-wolf img { width: 100%; height: 118%; object-fit: cover; display: block; filter: contrast(1.05); }
+.hv3-wolf::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(7,20,43,.55)); }
+
+/* final band: centred, wolf mark watermark, pulsing primary button */
+.hv3-final { text-align: center; }
+.hv3-final-copy { position: relative; z-index: 1; max-width: 760px; margin: 0 auto; }
+.hv3-final-copy .hv3-sub { margin-left: auto; margin-right: auto; }
+.hv3-final-copy .hv3-eyebrow { color: #cfe0ff; }
+.hv3-final-mark { position: absolute; right: -60px; top: 50%; width: 380px; margin-top: -190px; opacity: .1; filter: brightness(0) invert(1); pointer-events: none; }
+.hv3-btn-pulse { animation: hv3-pulse 2.4s ease-out infinite; }
+@keyframes hv3-pulse { 0% { box-shadow: 0 0 0 0 rgba(255,255,255,.55); } 70% { box-shadow: 0 0 0 16px rgba(255,255,255,0); } 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); } }
+@media (prefers-reduced-motion: reduce) { .hv3-btn-pulse { animation: none; } }
+
+/* hero phone: fill the lower half like a real profile (about text + booking bar) */
+.hv3-profile-about { width: 100%; box-sizing: border-box; padding: 18px 20px 0; display: grid; gap: 7px; }
+.hv3-profile-about i { display: block; height: 7px; border-radius: 4px; background: #e6ebf5; }
+.hv3-profile-about i.short { width: 62%; }
+.hv3-profile-book { margin: 16px 16px 0; width: calc(100% - 32px); box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-radius: 14px; background: #f1f5ff; border: 1px solid #dbe5f7; font-size: 12px; color: #1565ff; }
+.hv3-profile-book span { flex: 1; font-weight: 600; color: #3b4760; }
+.hv3-profile-book b { padding: 5px 12px; border-radius: 999px; background: #1565ff; color: #fff; font-size: 11px; }
+html body .sh-theme .hv3 .hv3-profile-book span { color: #3b4760 !important; -webkit-text-fill-color: #3b4760 !important; }
+html body .sh-theme .hv3 .hv3-profile-book b { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+
+/* timeline line stops exactly on the last dot */
+.hv3-timeline::before { right: calc(25% - 38px); }
+
+/* A CSS `transition: transform` on a node GSAP is animating makes GSAP's frames lag
+   forever (the bulk rows stayed offset). Hover lifts therefore use `translate`. */
+.hv3-bulk li { transition: translate .2s ease, background .2s ease; }
+.hv3-bulk li:hover { transform: none; translate: 6px 0; }
+.hv3 .hv3-btn { transition: translate .15s ease, background .15s ease, box-shadow .15s ease; }
+.hv3 .hv3-btn:hover { transform: none; translate: 0 -2px; }
+.hv3-profile { aspect-ratio: 9 / 16.6; }
+
+/* ======================= responsive pass (tablet + mobile) =======================
+   Loaded last so these beat the desktop rules in the earlier home-v3 files. */
+@media (max-width: 960px) {
+  /* hero: stack copy over the phone (a later 1fr 1fr rule had kept two columns) */
+  .hv3 .hv3-hero-grid { grid-template-columns: 1fr; gap: 44px; }
+  .hv3-hero-copy { max-width: 620px; }
+  .hv3-hero-visual { min-height: 520px; width: 100%; }
+  .hv3-hero-card-a { left: 6%; } .hv3-hero-card-b { right: 6%; }
+  .hv3-chip-a, .hv3-chip-b, .hv3-chip-c, .hv3-chip-d { display: inline-flex; }
+  .hv3-chip-a { left: 8%; } .hv3-chip-b { left: 2%; } .hv3-chip-c { left: 10%; } .hv3-chip-d { right: 4%; }
+
+  /* bento: illustration blocks flow with the text instead of floating over it */
+  .bt-browser, .bt-field { position: relative; left: auto; right: auto; top: auto; margin-bottom: auto; }
+  .bt-app, .bt-update { min-height: 250px; }
+
+  /* video band */
+  .hv3-video-wrap { padding: 0 0 20px; }
+
+  /* audience: keep the profile card beside the copy on tablets */
+  .hv3-aud-panel { grid-template-columns: 1fr 230px; }
+  .hv3-aud-phone { max-width: none; }
+
+}
+
+@media (max-width: 640px) {
+  .hv3-aud-panel { grid-template-columns: 1fr; }
+  .hv3-aud-phone { max-width: 260px; margin: 0 auto; }
+}
+
+@media (max-width: 560px) {
+  .hv3 { --gutter: 18px; }
+  .hv3-band { padding-top: 48px; padding-bottom: 48px; }
+  .hv3 h1 { font-size: clamp(36px, 11vw, 46px); }
+  .hv3-hero { padding-top: 40px; padding-bottom: 44px; }
+  .hv3-hero-visual { min-height: 470px; }
+  .hv3-phone { width: min(290px, 78vw); }
+  .hv3-hero-card, .hv3-chip-a, .hv3-chip-b, .hv3-chip-c, .hv3-chip-d, .hv3-float { display: none; }
+  .hv3-savebadge { right: 4%; bottom: 3%; }
+  .hv3-mini { gap: 16px; }
+  .hv3-cta-row { flex-direction: column; }
+
+  /* bento */
+  .bt { padding: 24px; border-radius: 24px; }
+  .bt-tap { min-height: 410px; justify-content: flex-start; }
+  .bt-tap .bt-card { width: 150px; right: 18px; bottom: -34px; }
+  .bt-tap .bt-rings { right: -90px; top: -90px; opacity: .8; }
+  .bt-qr { min-height: 0; }
+  .bt-qrart { width: 130px; height: 130px; }
+
+  /* compare: keep the VS badge off the column titles */
+  .hv3-compare-head span:last-child { padding-left: 26px; }
+  .hv3-compare::after { top: 10px; width: 30px; height: 30px; }
+
+  /* pricing: two across */
+  .hv3-plans { gap: 12px; }
+  .hv3-plans > * { flex: 1 1 calc(50% - 12px); max-width: calc(50% - 6px); }
+  .hv3 .hv3-plan { padding: 12px 10px 16px; }
+  .hv3-plan b { font-size: 15px; } .hv3-price { font-size: 20px; }
+  .hv3-plan-cta { padding: 6px 12px; font-size: 12px; }
+
+  /* video + posters */
+  .hv3-phone-video { width: min(260px, 74vw); }
+  .hv3-posters { padding: 14px 0 44px; }
+  .hv3-posters img { width: 44%; max-width: 170px; }
+
+  /* timeline: stack with a vertical rail */
+  .hv3-timeline { grid-template-columns: 1fr; gap: 34px; padding-left: 0; }
+  .hv3-tl-num { font-size: 80px; line-height: 78px; height: 78px; }
+  .hv3-tl-item p { max-width: none; }
+
+  .hv3-ribbon-head { padding: 26px; }
+  .hv3-ribbon-list li { padding: 22px 24px; }
+  .hv3-aud-panel { padding: 22px; border-radius: 24px; }
+  .hv3-final { padding-top: 64px; padding-bottom: 64px; }
+  .hv3-final-mark { width: 240px; right: -60px; margin-top: -120px; }
+  .hv3-wolf { height: 210px; }
+}

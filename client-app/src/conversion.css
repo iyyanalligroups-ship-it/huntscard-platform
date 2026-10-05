@@ -1,0 +1,30 @@
+/* Conversion additions: WhatsApp button, trust strip, audience grid.
+   Self-contained colours so the theme override layers don't affect them. */
+
+.wa-float {
+  position: fixed; right: 16px; bottom: 16px; z-index: 900;
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 48px; padding: 0 18px; border-radius: 999px;
+  background: #25d366; color: #052e16; font-weight: 700; font-size: 15px;
+  text-decoration: none; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+.wa-float:hover { background: #1fbd5a; }
+@media (max-width: 520px) { .wa-float span { display: none; } .wa-float { width: 52px; height: 52px; padding: 0; justify-content: center; } }
+
+.hero-trust-line { margin: 14px 0 0; font-size: 14px; opacity: 0.85; }
+.btn-wa { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 22px; border-radius: 999px; background: #25d366; color: #052e16 !important; font-weight: 700; text-decoration: none; }
+
+.trust-strip { max-width: 1100px; margin: 28px auto; padding: 0 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.trust-item { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border-radius: 14px; background: rgba(120, 140, 170, 0.12); border: 1px solid rgba(120, 140, 170, 0.25); }
+.trust-item svg { flex: none; }
+.trust-item b { display: block; font-size: 15px; }
+.trust-item small { font-size: 13px; opacity: 0.8; }
+
+.audience { max-width: 1100px; margin: 56px auto; padding: 0 16px; text-align: center; }
+.audience-grid { margin-top: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.audience-card { padding: 18px 12px; border-radius: 14px; background: rgba(120, 140, 170, 0.12); border: 1px solid rgba(120, 140, 170, 0.25); text-decoration: none; color: inherit; }
+.audience-card b { display: block; font-size: 16px; margin-bottom: 4px; }
+.audience-card small { font-size: 13px; opacity: 0.8; }
+.audience-card:hover { border-color: #25d366; }
+
+.footer-business { display: block; font-size: 13px; opacity: 0.8; margin-top: 8px; }

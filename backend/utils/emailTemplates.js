@@ -1,14 +1,14 @@
 function passwordResetEmail(otp) {
   const code = String(otp);
   const text = [
-    'Reset your HunsTAG password',
+    'Reset your HuntsTAG password',
     '',
     `Your verification code is: ${code}`,
     '',
     'This code expires in 10 minutes and can only be used once.',
     "If you didn't request a password reset, you can safely ignore this email.",
     '',
-    'HunsTAG Security',
+    'HuntsTAG Security',
   ].join('\n');
 
   const html = `<!doctype html>
@@ -16,7 +16,7 @@ function passwordResetEmail(otp) {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Reset your HunsTAG password</title>
+    <title>Reset your HuntsTAG password</title>
     <style>
       @media only screen and (max-width: 600px) {
         .email-shell { padding: 20px 12px !important; }
@@ -28,7 +28,7 @@ function passwordResetEmail(otp) {
   </head>
   <body style="margin:0;padding:0;background:#f4f6f8;color:#2f2b3d;font-family:Arial,Helvetica,sans-serif;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
-      Use ${code} to reset your HunsTAG password. This code expires in 10 minutes.
+      Use ${code} to reset your HuntsTAG password. This code expires in 10 minutes.
     </div>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f4f6f8;">
       <tr>
@@ -54,7 +54,7 @@ function passwordResetEmail(otp) {
                     <td style="color:#2f2b3d;font-size:28px;line-height:1.25;font-weight:800;padding-bottom:10px;">Reset your password</td>
                   </tr>
                   <tr>
-                    <td style="color:#6f6b80;font-size:15px;line-height:1.65;padding-bottom:26px;">We received a request to reset your HunsTAG password. Enter this verification code on the password reset screen.</td>
+                    <td style="color:#6f6b80;font-size:15px;line-height:1.65;padding-bottom:26px;">We received a request to reset your HuntsTAG password. Enter this verification code on the password reset screen.</td>
                   </tr>
                   <tr>
                     <td style="padding-bottom:24px;">
@@ -81,7 +81,7 @@ function passwordResetEmail(otp) {
             </tr>
             <tr>
               <td align="center" style="padding:20px 24px;background:#fafafa;border-top:1px solid #ececf1;color:#9591a2;font-size:11px;line-height:1.6;">
-                Sent securely by HunsTAG<br>
+                Sent securely by HuntsTAG<br>
                 <span style="color:#0d9fa3;">A smart card for a smarter first impression.</span>
               </td>
             </tr>

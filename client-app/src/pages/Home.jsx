@@ -5,7 +5,8 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { api, isLoggedIn } from '../api.js';
 import WhyChooseHuntsworld from '../components/WhyChooseHuntsworld.jsx';
 import TechGlobe from '../components/TechGlobe.jsx';
-import { Nfc, UserRound, BookUser, QrCode, Lock, RefreshCw, Smartphone, Sparkles, ShieldCheck, Palette, Check } from 'lucide-react';
+import { SITE, whatsappLink, trackEvent } from '../siteConfig.js';
+import { Nfc, UserRound, BookUser, QrCode, Lock, RefreshCw, Smartphone, Sparkles, ShieldCheck, Palette, Check, MessageCircle, Truck, BadgeCheck, Eye } from 'lucide-react';
 import { IlloChooseCard, IlloProfile, IlloTap, IlloUpdate, IlloLock, IlloDesign } from '../components/Illustrations.jsx';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -100,6 +101,26 @@ function CountUp({ target, suffix = '', from = 0, finalText }) {
     return () => { cancelAnimationFrame(raf); io.disconnect(); };
   }, [target, suffix, from, finalText]);
   return <span ref={ref}>{from}{suffix}</span>;
+}
+
+const AUDIENCES = [
+  ['Doctors & clinics', 'Patients save your number and book in a tap'],
+  ['Shop owners', 'Share your location, catalogue and WhatsApp'],
+  ['Real estate', 'Hand over listings and contact in one tap'],
+  ['Salons & studios', 'Show your work and take appointments'],
+  ['CAs & consultants', 'Look professional, be easy to reach'],
+  ['Creators & freelancers', 'Link every profile and portfolio'],
+  ['Students & job seekers', 'Stand out with a modern resume card'],
+];
+
+function WhatsAppCta({ placement, className = 'btn-wa', label = 'Chat on WhatsApp' }) {
+  const href = whatsappLink();
+  if (!href) return null;
+  return (
+    <a className={className} href={href} target="_blank" rel="noopener noreferrer" onClick={() => trackEvent('whatsapp_click', { placement })}>
+      <MessageCircle size={18} aria-hidden="true" /> {label}
+    </a>
+  );
 }
 
 const BENEFITS = [
@@ -445,7 +466,7 @@ export default function Home() {
         <div className="hero-scanline" aria-hidden="true" />
 
         <div className="hero-col-text">
-          <span className="hero-eyebrow">NFC &middot; NTAG216 &middot; Password-locked</span>
+          <span className="hero-eyebrow">NFC smart cards &middot; Magic Posters &middot; No app needed</span>
           <h1>
             Your identity,<br />
             <span className="grad glitch-text" ref={glitchRef} data-text="broadcast on tap.">
@@ -453,14 +474,14 @@ export default function Home() {
             </span>
           </h1>
           <p>
-            One tap transmits your full profile over near-field induction — no app on their end, no
-            battery, no signal drop. Update your details anytime; every card in the world reflects it
-            instantly, without a reprint.
+            Paper cards get lost. A HuntsTAG card gets saved. One tap opens your profile, WhatsApp and
+            portfolio on their phone — no app, no battery. Change your details anytime without a reprint.
           </p>
           <div className="hero-cta-row">
-            <Link to="/shop" className="btn-primary">
-              Shop Cards
+            <Link to="/shop" className="btn-primary" onClick={() => trackEvent('order_click', { placement: 'hero' })}>
+              Order Your Card{SITE.fromPrice ? ` — from ₹${SITE.fromPrice}` : ''}
             </Link>
+            <WhatsAppCta placement="hero" />
             <Link to="/contact" className="btn-secondary">
               Contact Us
             </Link>
@@ -506,6 +527,14 @@ export default function Home() {
         </div>
 
       </div>
+
+      <section className="trust-strip" aria-label="Why buy from HuntsTAG">
+        <div className="trust-item"><Smartphone size={22} aria-hidden="true" /><span><b>Works on phones</b><small>No app needed to receive your card</small></span></div>
+        <div className="trust-item"><RefreshCw size={22} aria-hidden="true" /><span><b>Update anytime</b><small>Change details without reprinting</small></span></div>
+        {SITE.deliveryTime && <div className="trust-item"><Truck size={22} aria-hidden="true" /><span><b>Delivery in {SITE.deliveryTime}</b><small>Order tracking included</small></span></div>}
+        {SITE.freeDesignPreview && <div className="trust-item"><Eye size={22} aria-hidden="true" /><span><b>Free design preview</b><small>See it before you pay</small></span></div>}
+        {SITE.cardsDelivered && <div className="trust-item"><BadgeCheck size={22} aria-hidden="true" /><span><b>{SITE.cardsDelivered} cards delivered</b><small>Trusted by real customers</small></span></div>}
+      </section>
 
       <section className="home-poster" aria-label="NFC smart business card">
         <img
@@ -559,6 +588,16 @@ export default function Home() {
           </div>
         </section>
       )}
+
+      <section className="audience" aria-label="Who HuntsTAG is for">
+        <h2 className="section-heading">Made for people who meet people</h2>
+        <p className="section-subheading">Whatever you do, one tap puts you in their phone.</p>
+        <div className="audience-grid">
+          {AUDIENCES.map(([title, text]) => (
+            <Link to="/shop" className="audience-card" key={title}><b>{title}</b><small>{text}</small></Link>
+          ))}
+        </div>
+      </section>
 
       <section className="pro-video" aria-label="See it in action">
         <div className="pro-video-text">
@@ -698,6 +737,7 @@ export default function Home() {
         </div>
         <div className="hero-cta-row">
           <Link to="/contact" className="btn-primary">Contact us</Link>
+          <WhatsAppCta placement="final" />
           <Link to="/chat" className="btn-secondary">Chat with support</Link>
         </div>
       </section>

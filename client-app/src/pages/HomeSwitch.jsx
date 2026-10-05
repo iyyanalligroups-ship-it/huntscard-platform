@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import Home from './Home.jsx';
 import HomeD1 from './HomeD1.jsx';
+import HomeV3 from './HomeV3.jsx';
 
 // Which homepage design is live is now an admin-toggled setting (see
 // Layout.jsx's topbar switch in the admin app), not a hardcoded import --
@@ -21,5 +22,9 @@ export default function HomeSwitch() {
   }, []);
 
   if (theme === null) return null;
-  return theme === 'orange' ? <HomeD1 /> : <Home />;
+  // 'default' is the engagement-focused homepage; the previous design stays
+  // available as the 'cyber' option, and 'orange' keeps its own hero.
+  if (theme === 'orange') return <HomeD1 />;
+  if (theme === 'cyber') return <Home />;
+  return <HomeV3 />;
 }

@@ -5,6 +5,8 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
 gsap.registerPlugin(ScrollTrigger);
 
+import { SITE } from '../siteConfig.js';
+
 const SUPPORT_EMAIL = 'info@huntsworld.com';
 
 export default function Footer({ homeTheme }) {
@@ -56,6 +58,9 @@ export default function Footer({ homeTheme }) {
             <span className="brand-name">HuntsTAG</span>
           </div>
           <p className="site-footer-tagline">A smart card for a smarter first impression.</p>
+          {SITE.phone && <span className="footer-business">Phone: {SITE.phone}</span>}
+          {SITE.businessAddress && <span className="footer-business">{SITE.businessAddress}</span>}
+          {SITE.gstNumber && <span className="footer-business">GSTIN: {SITE.gstNumber}</span>}
         </div>
 
         <div className="site-footer-col">

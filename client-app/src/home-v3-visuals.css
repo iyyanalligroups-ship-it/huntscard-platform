@@ -1,0 +1,57 @@
+/* Imagery for the homepage: code-drawn profile phone, real card designs in
+   tilted stacks, and the framed tap-demo video. */
+
+/* ---- card fan ---- */
+.hv3-fan { position: relative; height: 340px; width: 100%; max-width: 520px; margin: 28px 0 0; }
+.hv3-fan img { position: absolute; bottom: 0; height: 88%; width: auto; border-radius: 16px; box-shadow: 0 24px 50px rgba(0,0,0,.45); border: 2px solid rgba(255,255,255,.18); transition: transform .35s ease; }
+.hv3-fan-0 { left: 4%; transform: rotate(-14deg); }
+.hv3-fan-1 { left: 31%; transform: rotate(-2deg) translateY(-10px); z-index: 1; }
+.hv3-fan-2 { left: 58%; transform: rotate(11deg); }
+.hv3-fan:hover .hv3-fan-0 { transform: rotate(-19deg) translateX(-10px); }
+.hv3-fan:hover .hv3-fan-2 { transform: rotate(16deg) translateX(10px); }
+.hv3-fan-sm { height: 230px; max-width: 360px; }
+.hv3-fan-lg { height: 400px; max-width: 600px; margin: 0 auto; }
+.hv3-final-split { align-items: center; }
+.hv3-final-split .hv3-fan img { border-color: rgba(255,255,255,.35); }
+
+/* ---- profile phone (hero) ---- */
+.hv3-profile { display: flex; flex-direction: column; align-items: center; padding: 0 0 18px; overflow: hidden; background: #fff; border: 8px solid #0a0f1c; aspect-ratio: 9 / 18.5; }
+.hv3-profile::before { top: 8px; z-index: 3; }
+.hv3-profile-banner { align-self: stretch; height: 92px; background: linear-gradient(120deg, #1565ff, #7c3aed 70%, #ea6a12); flex: none; }
+.hv3-profile-avatar { margin-top: -34px; width: 70px; height: 70px; border-radius: 50%; display: grid; place-items: center; background: #0b1630; color: #fff; border: 4px solid #fff; z-index: 1; flex: none; }
+.hv3-profile-name { margin-top: 10px; font-size: 17px; font-weight: 800; }
+.hv3-profile-role { font-size: 12px; margin-top: 2px; }
+.hv3-profile-save { margin-top: 12px; display: inline-flex; gap: 6px; align-items: center; padding: 9px 20px; border-radius: 999px; background: #1565ff; font-size: 12px; font-weight: 700; }
+.hv3-profile-grid { margin-top: 16px; padding: 0 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px 6px; width: 100%; box-sizing: border-box; }
+.hv3-profile-grid span { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; }
+.hv3-profile-grid i { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--tb); color: var(--t); }
+html body .sh-theme .hv3 .hv3-profile-name { color: #0b1630 !important; -webkit-text-fill-color: #0b1630 !important; }
+html body .sh-theme .hv3 .hv3-profile-role { color: #55627a !important; -webkit-text-fill-color: #55627a !important; }
+html body .sh-theme .hv3 .hv3-profile-save { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+html body .sh-theme .hv3 .hv3-profile-grid span { color: #3b4760 !important; -webkit-text-fill-color: #3b4760 !important; }
+html body .sh-theme .hv3 .hv3-hero-visual .hv3-profile { color: #0b1630 !important; }
+
+/* real cards peeking out behind the hero phone */
+.hv3-hero-card { position: absolute; width: 190px; border-radius: 16px; box-shadow: 0 26px 60px rgba(0,0,0,.55); border: 2px solid rgba(255,255,255,.2); z-index: 0; }
+.hv3-hero-card-a { left: 4%; bottom: 8%; transform: rotate(-16deg); }
+.hv3-hero-card-b { right: 2%; top: 6%; transform: rotate(13deg); width: 170px; }
+.hv3-hero-visual .hv3-profile { z-index: 1; }
+
+/* ---- framed video band ---- */
+.hv3-split-rev { grid-template-columns: .9fr 1.1fr; }
+.hv3-video-wrap { position: relative; display: flex; justify-content: center; padding: 10px 0 30px; }
+.hv3-phone-video { width: min(300px, 70vw); position: relative; z-index: 1; }
+.hv3-fan-behind { position: absolute; inset: auto 0 0 0; margin: 0 auto; height: 300px; max-width: 520px; z-index: 0; opacity: .95; }
+.hv3-fan-behind .hv3-fan-0 { left: -4%; } .hv3-fan-behind .hv3-fan-1 { display: none; } .hv3-fan-behind .hv3-fan-2 { left: 66%; }
+
+@media (max-width: 960px) {
+  .hv3-split-rev { grid-template-columns: 1fr; }
+  .hv3-fan-lg { height: 300px; } .hv3-fan { height: 280px; }
+  .hv3-hero-card-a, .hv3-hero-card-b { width: 120px; }
+  .hv3-fan-behind { display: none; }
+}
+@media (max-width: 560px) { .hv3-hero-card-a, .hv3-hero-card-b { display: none; } }
+@media (prefers-reduced-motion: reduce) { .hv3-fan img { transition: none; } }
+
+/* footer sits flush under the final band: no gap, no floating rounded card */
+html body.hv3-active .sh-theme .site-footer:not(#_a):not(#_b) { margin: 0 !important; border-radius: 0 !important; }

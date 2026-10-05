@@ -1,0 +1,74 @@
+/* HuntsTAG public-site theme: carries the new homepage look (white header, blue
+   accent, heavy Manrope headings, Inter body, soft rounded cards, flush footer)
+   onto every page inside PublicLayout. PublicLayout adds `hv3-active` to <body>
+   while mounted, so the dashboard and standalone pages are untouched.
+   The homepage itself (.hv3) styles its own headings and is excluded here. */
+
+html body.hv3-active.public-site-active { background: #f6f8fd !important; background-image: none !important; }
+
+/* ---- typography ---- */
+html body.hv3-active .sh-theme .public-page-shell { font-family: 'Inter', 'Manrope', system-ui, sans-serif; color: #0b1630; }
+html body.hv3-active .sh-theme .public-page-shell :is(h1, h2, .section-heading):not(.hv3 *) {
+  font-family: 'Manrope', 'Inter', sans-serif; font-weight: 800 !important; letter-spacing: -0.025em; line-height: 1.08;
+  color: #0b1630 !important; -webkit-text-fill-color: #0b1630 !important; background: none !important;
+}
+html body.hv3-active .sh-theme .public-page-shell :is(h3, h4):not(.hv3 *) { font-family: 'Manrope', 'Inter', sans-serif; font-weight: 700; letter-spacing: -0.015em; }
+html body.hv3-active .sh-theme .public-page-shell :is(h1, h2) .grad:not(.hv3 *),
+html body.hv3-active .sh-theme .public-page-shell :is(h1, h2) em:not(.hv3 *) {
+  color: #1565ff !important; -webkit-text-fill-color: #1565ff !important; background: none !important; font-style: normal; font-weight: 800 !important;
+}
+html body.hv3-active .sh-theme .public-page-shell :is(p, li, label, small):not(.hv3 *) { font-weight: 400; }
+html body.hv3-active .sh-theme .public-page-shell :is(.section-subheading, .subtitle):not(.hv3 *) { color: #55627a !important; -webkit-text-fill-color: #55627a !important; font-size: 17px; line-height: 1.6; }
+
+/* eyebrow pills ("CARD VARIANTS", "HUNTSTAG") match the homepage eyebrow */
+html body.hv3-active .sh-theme .public-page-shell :is(.hero-eyebrow, .pro-eyebrow, .au-eyebrow, .eyebrow):not(.hv3 *) {
+  color: #1565ff !important; -webkit-text-fill-color: #1565ff !important; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; background: #e3edff !important; border: 0 !important; border-radius: 999px; padding: 6px 14px;
+}
+
+/* ---- surfaces ---- */
+html body.hv3-active.public-site-active .sh-theme .public-page-shell :is(.card, .feature-card, .plan-variant-card, .checkout-panel):not(.hv3 *):not(#_a) {
+  background: #fff; border: 1px solid #dbe5f7; border-radius: 22px; box-shadow: 0 10px 30px rgba(11, 22, 48, .06);
+}
+html body.hv3-active.public-site-active .sh-theme .public-page-shell :is(input, select, textarea):not(.hv3 *):not(#_a) {
+  border: 1px solid #cfd9ee !important; border-radius: 12px; background: #fff !important; color: #0b1630 !important; font-family: 'Inter', sans-serif;
+}
+html body.hv3-active.public-site-active .sh-theme .public-page-shell :is(input, select, textarea):focus:not(.hv3 *) {
+  outline: 2px solid #1565ff; outline-offset: 1px; border-color: #1565ff !important;
+}
+
+/* ---- buttons: the homepage's solid blue pill ---- */
+html body.hv3-active.public-site-active .sh-theme .public-page-shell :is(.btn-primary, button[type="submit"], .primary):not(.hv3 *):not(#_a):not(#_b) {
+  background: #1565ff !important; background-image: none !important; color: #fff !important; -webkit-text-fill-color: #fff !important;
+  border: 0 !important; border-radius: 999px; font-weight: 700; box-shadow: 0 8px 22px rgba(21, 101, 255, .32) !important;
+}
+html body.hv3-active.public-site-active .sh-theme .public-page-shell :is(.btn-primary, button[type="submit"], .primary):hover:not(.hv3 *):not(#_a):not(#_b) { background: #2a74ff !important; }
+html body.hv3-active.public-site-active .sh-theme .public-page-shell .btn-secondary:not(.hv3 *):not(#_a):not(#_b) {
+  background: #fff !important; background-image: none !important; color: #1565ff !important; -webkit-text-fill-color: #1565ff !important;
+  border: 2px solid #1565ff !important; border-radius: 999px; font-weight: 700; box-shadow: none !important;
+}
+
+/* ---- links ---- */
+html body.hv3-active .sh-theme .public-page-shell a:not([class]):not(.hv3 *) { color: #1565ff; }
+
+/* ---- page rhythm: more air under the white header, same gutters as the homepage ---- */
+html body.hv3-active.public-site-active .public-page-shell { max-width: 1240px; padding: 44px clamp(18px, 4vw, 40px) 80px; }
+@media (max-width: 760px) { html body.hv3-active.public-site-active .public-page-shell { padding: 28px 16px 56px; } }
+
+/* ---- footer: flush under the page, no floating rounded card ---- */
+html body.hv3-active .sh-theme .site-footer:not(#_a):not(#_b) { margin-top: 0 !important; margin-bottom: 0 !important; border-radius: 0 !important; }
+
+/* ---- header hover states on the white header (the blue-theme hovers used white text on a light fill) ---- */
+html body.hv3-active.public-site-active .sh-theme .top-nav .public-account-actions .pill-outline:last-child:hover:not(#_a):not(#_b),
+html body.hv3-active.public-site-active .sh-theme .top-nav .public-account-actions .public-logout-action:last-child:hover:not(#_a):not(#_b) {
+  background: #0b3fb8 !important; background-image: none !important; color: #fff !important; -webkit-text-fill-color: #fff !important;
+  box-shadow: 0 8px 22px rgba(21, 101, 255, .35) !important;
+}
+html body.hv3-active.public-site-active .sh-theme .top-nav .public-account-actions .pill-outline:last-child:hover span { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+html body.hv3-active.public-site-active .sh-theme .top-nav .public-account-actions .pill-outline:not(:last-child):hover:not(#_a):not(#_b),
+html body.hv3-active.public-site-active .sh-theme .top-nav .public-account-actions .public-dashboard-action:hover:not(#_a):not(#_b) {
+  background: #eef4ff !important; color: #1565ff !important; -webkit-text-fill-color: #1565ff !important;
+}
+html body.hv3-active.public-site-active .sh-theme .top-nav .public-account-actions .pill-outline:not(:last-child):hover span { color: #1565ff !important; -webkit-text-fill-color: #1565ff !important; }
+html body.hv3-active.public-site-active .sh-theme .top-nav .public-nav-icon-button:hover:not(#_a):not(#_b),
+html body.hv3-active.public-site-active .sh-theme .top-nav .public-nav-icon-button:focus-visible:not(#_a):not(#_b) { background: #eef4ff !important; box-shadow: none !important; }
+html body.hv3-active .sh-theme .top-nav .public-nav-icon-button:hover svg { color: #1565ff !important; stroke: #1565ff !important; }

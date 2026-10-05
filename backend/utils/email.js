@@ -30,7 +30,7 @@ async function sendEmail(to, subject, body) {
   }
   try {
     await t.sendMail({
-      from: `HunsTAG <${process.env.APP_EMAIL}>`,
+      from: `HuntsTAG <${process.env.APP_EMAIL}>`,
       to,
       subject,
       text: content?.text || '',

@@ -315,7 +315,7 @@ router.post('/forgot-password', otpLimiter, async (req, res) => {
       await client.save();
       await sendEmail(
         client.loginEmail,
-        'Your HunsTAG password reset code',
+        'Your HuntsTAG password reset code',
         passwordResetEmail(otp)
       );
     }

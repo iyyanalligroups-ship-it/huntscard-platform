@@ -6,6 +6,7 @@ import { useCart } from '../cart.jsx';
 import AuthModal from './AuthModal.jsx';
 import NotificationBell from './NotificationBell.jsx';
 import Footer from './Footer.jsx';
+import WhatsAppButton from './WhatsAppButton.jsx';
 import ParticleWaves from './ParticleWaves.jsx';
 import PublicMotion from './PublicMotion.jsx';
 
@@ -47,9 +48,9 @@ export default function PublicLayout() {
   }, []);
 
   useEffect(() => {
-    document.body.classList.add('public-site-active');
+    document.body.classList.add('public-site-active', 'hv3-active');
     document.body.classList.toggle('theme-cyber', homeTheme === 'cyber');
-    return () => document.body.classList.remove('public-site-active', 'theme-cyber');
+    return () => document.body.classList.remove('public-site-active', 'theme-cyber', 'hv3-active');
   }, [homeTheme]);
 
   // Close the mobile dropdown on navigation (link clicks already do this
@@ -204,6 +205,7 @@ export default function PublicLayout() {
       </main>
 
       <Footer homeTheme={homeTheme} />
+      <WhatsAppButton />
 
       {authMode && (
         <AuthModal

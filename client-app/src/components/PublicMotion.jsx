@@ -14,9 +14,9 @@ gsap.registerPlugin(ScrollTrigger);
 // .home-motion. React owns the DOM, so nothing here edits element children -- it only animates
 // transforms/opacity/clip-path on the elements themselves, and a MutationObserver picks up
 // content that renders after a fetch.
-const TEXT_SEL = '.public-page-shell :is(h1, h2, .section-heading):not(.home-motion *)';
-const SUB_SEL = '.public-page-shell :is(.section-subheading, .subtitle, .hero-sub):not(.home-motion *)';
-const BLOCK_SEL = '.public-page-shell :is(.card, .plan-variant-card, .feature-card, .step-item, .request-row-wrap, .faq-item):not(.home-motion *)';
+const TEXT_SEL = '.public-page-shell :is(h1, h2, .section-heading):not(.home-motion *):not(.hv3 *)';
+const SUB_SEL = '.public-page-shell :is(.section-subheading, .subtitle, .hero-sub):not(.home-motion *):not(.hv3 *)';
+const BLOCK_SEL = '.public-page-shell :is(.card, .plan-variant-card, .feature-card, .step-item, .request-row-wrap, .faq-item):not(.home-motion *):not(.hv3 *)';
 const MAGNETIC_SEL = '.btn-primary, .btn-secondary, .public-account-action, .how-it-works-cta a';
 
 export default function PublicMotion() {
