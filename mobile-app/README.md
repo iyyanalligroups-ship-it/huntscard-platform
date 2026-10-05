@@ -5,7 +5,7 @@ same client accounts and data as `../client-app`.
 
 ## Included flows (parity with client-app)
 
-**Public (no login):** Home, Shop (plans, variants, coupons), Catalog, Magic Poster gallery + cart, Contact Us, About, What is HuntsWorld, FAQ, Chat Support gate, Open a Card (QR scan / link), public card page (tabs, exchange contact, save, share, QR, deactivated-card ticket), Magic Camera / 3D / AR via the website's own pages in a camera WebView.
+**Public (no login):** Home (the website's engagement homepage: AR, Zing, editions, Magic Business Card, contact backup, order tracking, device protection, profession tabs, contact form/chat, live plans with style swatches, optional WhatsApp button via EXPO_PUBLIC_WHATSAPP_NUMBER), Shop (plans, variants, coupons), Catalog, Magic Poster gallery + cart, Contact Us, About, What is HuntsWorld, FAQ, Chat Support gate, Open a Card (QR scan / link), public card page (tabs, exchange contact, save, share, QR, deactivated-card ticket), Magic Camera / 3D / AR via the website's own pages in a camera WebView.
 
 **Auth:** password + phone-OTP login, registration (gender/DOB/designation), 3-step forgot password with resend cooldown, forced password change, admin impersonation deep link (huntstag://impersonate?token=&clientId=).
 

@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Nfc, QrCode, Smartphone, RefreshCw, ArrowRight, ShoppingCart, UserRound, Share2, MessageCircle,
@@ -6,6 +6,7 @@ import {
   FileText, PackageSearch, Send, CreditCard, Image as ImageIcon, Cloud, FileSpreadsheet, Download, StickyNote, Frame, Upload, Volume2, Crown, Bug, Settings, ShieldCheck, Zap, MessageSquare, Radio, UserPlus, Headphones, Video, Box, Move, ScanLine, Users, Palette, Quote, Phone, Mail, Globe, Stethoscope,
   Store, Building2, Scissors, Calculator, Camera, Sparkles,
 } from 'lucide-react';
+import ArModelViewer from '../components/ArModelViewer.jsx';
 import { api, isLoggedIn, API_URL } from '../api.js';
 import { createMotion as gsap_context, dynamicMotion, planTilt, audienceSwap, motionAllowed } from '../homeV3Motion.js';
 import { SITE, TESTIMONIALS, DEMO_PROFILE_URL, whatsappLink, trackEvent } from '../siteConfig.js';
@@ -237,7 +238,7 @@ function PlanCard({ plan, index }) {
   const price = plan.priceAmount || plan.price;
   const shape = v && v.shape === 'horizontal' ? 'horizontal' : 'vertical';
   return (
-    <article className="hv3-plan">
+    <article className="hv3-plan" data-spot-label={plan.zingEnabled ? 'Includes Zing' : ''} data-zing={plan.zingEnabled ? '1' : '0'} data-ar={plan.arEnabled ? '1' : '0'} data-magic={plan.magicEnabled ? '1' : '0'}>
       <Link to={`/shop?plan=${plan.key}`} className={`hv3-plan-media ${shape}`} aria-label={`${plan.name} card`}
             onMouseEnter={() => setBack(true)} onMouseLeave={() => setBack(false)}
             onClick={() => trackEvent('plan_click', { plan: plan.key })}>
@@ -290,8 +291,10 @@ function TapDemo({ user }) {
   );
 }
 
-function FaqItem({ question, answer, defaultOpen }) {
+function FaqItem({ question, answer, defaultOpen, openSignal }) {
   const [open, setOpen] = useState(!!defaultOpen);
+  // a 'What is Zing?' style button bumps openSignal to expand this item
+  useEffect(() => { if (openSignal) setOpen(true); }, [openSignal]);
   const toggle = () => setOpen((v) => !v);
   return (
     <div className={`hv3-faq-item${open ? ' open' : ''}`}>
@@ -321,6 +324,37 @@ export default function HomeV3() {
   const [faqs, setFaqs] = useState(null);
   const [posters, setPosters] = useState([]);
   const [aud, setAud] = useState(0);
+  const [spot, setSpot] = useState(null); // 'zing' | 'ar' | 'magic' while a feature is being highlighted
+  const [faqSignal, setFaqSignal] = useState({ id: null, n: 0 });
+  const spotTimer = useRef(null);
+  // FAQ shown on the homepage: the first 6, plus the Zing entry if the admin put it further down.
+  const zingFaq = (faqs || []).find((f) => /zing/i.test(f.question));
+  const shownFaqs = (faqs || []).slice(0, 6).concat(zingFaq && !(faqs || []).slice(0, 6).includes(zingFaq) ? [zingFaq] : []);
+
+  // "What is Zing?": glide to the FAQ and open the Zing question (answer comes from the admin panel).
+  function showZingFaq(e) {
+    e.preventDefault();
+    trackEvent('zing_faq_click');
+    if (!zingFaq) { navigate('/faq'); return; }
+    setFaqSignal((s) => ({ id: zingFaq._id || zingFaq.question, n: s.n + 1 }));
+    // Opening the answer adds DOM nodes, and PublicMotion's observer refreshes ScrollTrigger ~120ms
+    // later, which cancels a smooth scroll already under way. Start scrolling after that refresh.
+    window.setTimeout(() => document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 380);
+  }
+
+  // "Get a Zing-ready card": glide to the plans and spotlight the cards that include the feature for ~2.5s.
+  function spotlight(feature) {
+    return (e) => {
+      e.preventDefault();
+      trackEvent('feature_spotlight', { feature });
+      document.getElementById('plans')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.clearTimeout(spotTimer.current);
+      spotTimer.current = window.setTimeout(() => setSpot(feature), 550);
+      spotTimer.current = window.setTimeout(() => setSpot(null), 3400);
+    };
+  }
+  useEffect(() => () => window.clearTimeout(spotTimer.current), []);
+
   const zingPlans = (plans || []).filter((p) => p.zingEnabled);
   const mbcPlan = (plans || []).find((p) => !p.requiresDesignUpload && !p.isSpecialEdition && edImage(p));
   const mbcImg = (mbcPlan && edImage(mbcPlan)) || '/assets/photos/card-black.jpg';
@@ -329,6 +363,7 @@ export default function HomeV3() {
   const limitedPlan = (plans || []).find((p) => p.isSpecialEdition);
   const [me, setMe] = useState(null);
   const location = useLocation();
+  const navigate = useNavigate();
   const rootRef = useRef(null);
   const ctxRef = useRef(null);
   const firstAud = useRef(true);
@@ -377,7 +412,7 @@ export default function HomeV3() {
 
   useEffect(() => {
     api.listPlans().then((l) => setPlans(Array.isArray(l) ? l.slice(0, 6) : [])).catch(() => setPlans([]));
-    api.getPublicFaq().then((l) => setFaqs(Array.isArray(l) ? l.slice(0, 6) : [])).catch(() => setFaqs([]));
+    api.getPublicFaq().then((l) => setFaqs(Array.isArray(l) ? l : [])).catch(() => setFaqs([]));
     api.getPublicMagicArt().then((l) => setPosters(Array.isArray(l) ? l.filter((p) => p.imageUrl).slice(0, 3) : [])).catch(() => setPosters([]));
   }, []);
 
@@ -456,9 +491,9 @@ export default function HomeV3() {
               ))}
             </ul>
             <R className="hv3-cta-row">
-              <Link to="/shop" className="hv3-btn hv3-btn-primary" onClick={() => trackEvent('ar_click', { placement: 'ar-section' })}>
+              <a href="#plans" className="hv3-btn hv3-btn-primary" onClick={spotlight('ar')}>
                 See AR-ready cards <ArrowRight size={18} aria-hidden="true" />
-              </Link>
+              </a>
               <Link to="/faq" className="hv3-btn hv3-btn-ghost">How AR works</Link>
             </R>
             <R as="p" className="hv3-ar-note">Included on selected plans. You arrange every element yourself in AR Layout.</R>
@@ -488,8 +523,8 @@ export default function HomeV3() {
                 <i className="hv3-tone-blue"><CalendarCheck size={16} /></i>
               </div></div>
               <div className="ar-panel ar-p-model"><div className="ar-float">
-                <div className="ar-cube"><u /><u /><u /><u /><u /><u /></div>
-                <small>3D model</small>
+                <ArModelViewer src="/assets/models/ar-demo.glb" poster="/assets/huntsTAG-wolf-logo.png" />
+                <small>Drag to rotate</small>
               </div></div>
               <div className="ar-cardwrap">
                 <img className="ar-card" src="/assets/photos/card-black.jpg" alt="" loading="lazy" decoding="async" />
@@ -566,10 +601,10 @@ export default function HomeV3() {
               </R>
             )}
             <R className="hv3-cta-row">
-              <Link to="/shop" className="hv3-btn hv3-btn-primary" onClick={() => trackEvent('zing_click', { placement: 'zing-section' })}>
+              <a href="#plans" className="hv3-btn hv3-btn-primary" onClick={spotlight('zing')}>
                 Get a Zing-ready card <ArrowRight size={18} aria-hidden="true" />
-              </Link>
-              <Link to="/faq" className="hv3-btn hv3-btn-outline-dark">What is Zing?</Link>
+              </a>
+              <a href="#faq" className="hv3-btn hv3-btn-outline-dark" onClick={showZingFaq}>What is Zing?</a>
             </R>
           </div>
         </div>
@@ -645,7 +680,7 @@ export default function HomeV3() {
             <h2 className="hv3-h2">Card types &amp; pricing</h2>
             <p className="hv3-sub">Premium designs for every professional.</p>
           </R>
-          <div className="hv3-plans">
+          <div className="hv3-plans" data-spot={spot || undefined}>
             {plans.map((p, i) => (
               <R key={p._id || p.key}><PlanCard plan={p} index={i} /></R>
             ))}
@@ -884,7 +919,7 @@ export default function HomeV3() {
             <div className="mbc-plans"><small>Included on</small>{magicPlans.map((p) => (<Link key={p.key} to={`/shop?plan=${p.key}`}>{p.name}</Link>))}</div>
           )}
           <div className="hv3-cta-row">
-            <Link to="/shop" className="hv3-btn hv3-btn-light" onClick={() => trackEvent('magic_card_click', { placement: 'mbc' })}>Get a Magic Business Card <ArrowRight size={18} aria-hidden="true" /></Link>
+            <a href="#plans" className="hv3-btn hv3-btn-light" onClick={spotlight('magic')}>Get a Magic Business Card <ArrowRight size={18} aria-hidden="true" /></a>
             <Link to="/magic-camera" className="hv3-btn hv3-btn-outline-light"><Play size={16} aria-hidden="true" /> Try Magic Camera</Link>
           </div>
         </R>
@@ -1101,10 +1136,10 @@ export default function HomeV3() {
 
       {/* 14. QUESTIONS */}
       {faqs && faqs.length > 0 && (
-        <Band className="hv3-c hv3-tint" label="Frequently asked questions">
+        <Band className="hv3-c hv3-tint" id="faq" label="Frequently asked questions">
           <R><h2 className="hv3-h2">Questions, answered</h2></R>
           <div className="hv3-faq">
-            {faqs.map((f, i) => (<FaqItem key={f._id || i} question={f.question} answer={f.answer} defaultOpen={i === 0} />))}
+            {shownFaqs.map((f, i) => (<FaqItem key={f._id || i} question={f.question} answer={f.answer} defaultOpen={i === 0} openSignal={faqSignal.id && faqSignal.id === (f._id || f.question) ? faqSignal.n : 0} />))}
           </div>
           <Link to="/faq" className="hv3-link">See all questions <ArrowRight size={14} aria-hidden="true" /></Link>
         </Band>

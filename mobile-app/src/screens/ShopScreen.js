@@ -264,12 +264,24 @@ export default function ShopScreen({ navigation, route }) {
             <SectionTitle>Card style{variantTotal > 0 ? ` (${variantTotal} card${variantTotal > 1 ? 's' : ''} total)` : ''}</SectionTitle>
             {selectedPlan.variants.map((v, i) => {
               const qty = variantQty[v._id] || 0;
+              const vertical = v.shape !== 'horizontal';
               return <View key={v._id} style={[styles.variant, qty > 0 && styles.variantOn]}>
-                <Pressable onPress={() => setFocus(i)} style={{ flexDirection: 'row', gap: 6 }}>
-                  {[v.frontImageUrl, v.backImageUrl].map((url, idx) => <View key={idx} style={styles.vPhoto}>{url ? <Image source={{ uri: resolveAssetUrl(url) }} style={{ width: '100%', height: '100%' }} /> : <Text style={styles.caption}>{idx ? 'Back' : 'Front'}</Text>}</View>)}
-                </Pressable>
-                <View style={{ flex: 1, gap: 2 }}><Text style={styles.strong}>{v.name}</Text><Text style={styles.dim}>{v.shape === 'vertical' ? 'Vertical' : 'Horizontal'}</Text></View>
-                <Stepper value={qty} min={0} max={MAX_QUANTITY} onChange={(value) => adjustVariant(v._id, value - qty)} disabledPlus={couponMode ? qty > 0 : variantTotal >= MAX_QUANTITY} />
+                <View style={styles.stack}>
+                  <View style={[styles.stackFace, styles.stackBack, !vertical && styles.stackFaceWide]}>
+                    {v.backImageUrl ? <Image source={{ uri: resolveAssetUrl(v.backImageUrl) }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <Text style={styles.caption}>Back</Text>}
+                    <Text style={styles.faceTag}>Back</Text>
+                  </View>
+                  <View style={[styles.stackFace, styles.stackFront, !vertical && styles.stackFaceWide]}>
+                    {v.frontImageUrl ? <Image source={{ uri: resolveAssetUrl(v.frontImageUrl) }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <Text style={styles.caption}>Front</Text>}
+                    <Text style={styles.faceTag}>Front</Text>
+                  </View>
+                </View>
+                <Text style={[styles.strong, { textAlign: 'center', fontSize: 16 }]}>{v.name}</Text>
+                <Text style={[styles.dim, { textAlign: 'center' }]}>{vertical ? 'VERTICAL' : 'HORIZONTAL'}</Text>
+                {selectedPlan.chargeAmount ? <Text style={styles.tilePrice}>{rupees(selectedPlan.chargeAmount)}<Text style={styles.dim}> / card</Text></Text> : null}
+                <View style={{ alignSelf: 'center' }}>
+                  <Stepper value={qty} min={0} max={MAX_QUANTITY} onChange={(value) => adjustVariant(v._id, value - qty)} disabledPlus={couponMode ? qty > 0 : variantTotal >= MAX_QUANTITY} />
+                </View>
               </View>;
             })}
             {variantTotal === 0 ? <Text style={styles.dim}>{couponMode ? 'Pick a card style above.' : 'Pick at least one style and quantity above.'}</Text>
@@ -323,6 +335,12 @@ export default function ShopScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
+  stack: { height: 190, alignItems: 'center', justifyContent: 'center' },
+  stackFace: { position: 'absolute', width: 118, height: 172, borderRadius: 12, overflow: 'hidden', backgroundColor: '#0b1630', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
+  stackFaceWide: { width: 172, height: 118 },
+  stackFront: { transform: [{ translateX: -22 }, { rotate: '-3deg' }], zIndex: 2 },
+  stackBack: { transform: [{ translateX: 34 }, { rotate: '5deg' }], zIndex: 1 },
+  tilePrice: { color: colors.holoCyan, fontWeight: '900', fontSize: 20, textAlign: 'center' },
   text: { color: colors.text, lineHeight: 21 }, code: { fontWeight: '800', color: colors.holoCyan }, dim: { color: colors.textDim, fontSize: 12, lineHeight: 18 },
   strong: { color: colors.text, fontWeight: '800', fontSize: 14 }, caption: { color: colors.textDim, fontSize: 10, textAlign: 'center' },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, height: 38, borderRadius: 19, backgroundColor: colors.panelRaised, borderWidth: 1, borderColor: colors.panelBorder },
@@ -334,7 +352,7 @@ const styles = StyleSheet.create({
   faceTag: { position: 'absolute', top: 6, left: 6, color: '#fff', fontSize: 10, fontWeight: '700', backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
   thumb: { width: 52, height: 52, borderRadius: 8, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent', backgroundColor: colors.panelRaised, alignItems: 'center', justifyContent: 'center' }, thumbOn: { borderColor: colors.holoCyan },
   gallery: { width: 260, height: 195, borderRadius: 10, backgroundColor: colors.panelRaised },
-  variant: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.panelBorder, backgroundColor: colors.panelRaised }, variantOn: { borderColor: colors.holoCyan },
+  variant: {  alignItems: 'center', gap: 10, padding: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.panelBorder, backgroundColor: colors.panelRaised }, variantOn: { borderColor: colors.holoCyan },
   vPhoto: { width: 40, height: 54, borderRadius: 6, overflow: 'hidden', backgroundColor: colors.panel, alignItems: 'center', justifyContent: 'center' },
   summary: { gap: 6, padding: 12, borderRadius: 12, backgroundColor: colors.panelRaised },
 });

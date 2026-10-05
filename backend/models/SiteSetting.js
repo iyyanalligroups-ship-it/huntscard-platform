@@ -22,6 +22,20 @@ const siteSettingSchema = new mongoose.Schema(
     // here never rewrites a past order's charged amount.
     deliveryFee: { type: Number, default: 0 },
     gstPercent: { type: Number, default: 0 },
+    // Mobile app downloads shown in the website footer. Android is an uploaded .apk; iOS is either
+    // a store/TestFlight link (iosUrl) or an uploaded .ipa served through an itms-services manifest.
+    appDownloads: {
+      androidFile: { type: String, trim: true },
+      androidSize: { type: Number },
+      androidVersion: { type: String, trim: true },
+      androidStoreUrl: { type: String, trim: true },
+      androidUpdatedAt: { type: Date },
+      iosFile: { type: String, trim: true },
+      iosSize: { type: Number },
+      iosUrl: { type: String, trim: true },
+      iosVersion: { type: String, trim: true },
+      iosBundleId: { type: String, trim: true },
+    },
     updatedBy: { type: String, trim: true },
   },
   { timestamps: true }

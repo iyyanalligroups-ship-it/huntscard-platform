@@ -929,6 +929,50 @@ router.get('/magic-card/:clientId', async (req, res) => {
   }
 });
 
+// What the footer needs to offer the app downloads. Only fields that really exist are returned, so
+// the footer never shows a button that leads nowhere.
+function publicAppDownloads(doc) {
+  const a = (doc && doc.appDownloads) || {};
+  const base = process.env.BACKEND_URL || '';
+  const out = {};
+  if (a.androidFile) {
+    out.android = {
+      url: base + '/uploads/app-downloads/' + a.androidFile,
+      version: a.androidVersion || '',
+      sizeMb: a.androidSize ? Math.round((a.androidSize / 1048576) * 10) / 10 : null,
+    };
+  }
+  if (a.androidStoreUrl) out.googlePlay = { url: a.androidStoreUrl };
+  if (a.iosUrl) {
+    out.ios = { url: a.iosUrl, version: a.iosVersion || '', type: 'link' };
+  } else if (a.iosFile && a.iosBundleId) {
+    out.ios = {
+      url: 'itms-services://?action=download-manifest&url=' + encodeURIComponent(base + '/api/public/app/ios-manifest.plist'),
+      version: a.iosVersion || '',
+      type: 'ipa',
+    };
+  }
+  return out;
+}
+
+// iOS over-the-air install manifest for an uploaded .ipa (iOS requires HTTPS for this in production).
+router.get('/app/ios-manifest.plist', async (req, res) => {
+  const doc = await SiteSetting.findOne({ key: 'global' });
+  const a = (doc && doc.appDownloads) || {};
+  if (!a.iosFile || !a.iosBundleId) return res.status(404).send('No iOS build uploaded');
+  const base = process.env.BACKEND_URL || '';
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  res.type('application/xml').send(
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n' +
+    '<plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict>' +
+    '<key>kind</key><string>software-package</string><key>url</key><string>' + esc(base + '/uploads/app-downloads/' + a.iosFile) + '</string>' +
+    '</dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>' + esc(a.iosBundleId) + '</string>' +
+    '<key>bundle-version</key><string>' + esc(a.iosVersion || '1.0') + '</string><key>kind</key><string>software</string>' +
+    '<key>title</key><string>HuntsTAG</string></dict></dict></array></dict></plist>'
+  );
+});
+
 // GET /api/public/site-settings -- currently just which homepage design
 // to render (see App.jsx). No auth -- read on every client-app load,
 // before we know if anyone's logged in. Defaults to 'default' if the
@@ -937,7 +981,7 @@ router.get('/site-settings', async (req, res) => {
   try {
     const doc = await SiteSetting.findOne({ key: 'global' });
     res.set('Cache-Control', 'no-store');
-    res.json({ homeTheme: doc?.homeTheme || 'default' });
+    res.json({ homeTheme: doc?.homeTheme || 'default', appDownloads: publicAppDownloads(doc) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

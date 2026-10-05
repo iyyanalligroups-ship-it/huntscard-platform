@@ -91,3 +91,90 @@ html .sh-theme .auth-modal-card:not(.auth-modal-card--register) .field { margin-
 html body.hv3-active.public-site-active .sh-theme .public-page-shell :is(.checkout-panel .card, .shop-detail-card):not(.hv3 *):not(#_a):not(#_b) {
   border: 0 !important; box-shadow: none !important; background: transparent !important; border-radius: 0 !important;
 }
+
+/* ---- dashboard hero: show the card alone (no panel box, border or shadows) ---- */
+html body .dash-shell .dash-home .dash-hero-right:not(#_a):not(#_b),
+html body .dash-shell.theme-orange .dash-home .dash-hero-right:not(#_a):not(#_b),
+html body .dash-shell.theme-cyber .dash-home .dash-hero-right:not(#_a):not(#_b) {
+  background: transparent !important; background-image: none !important;
+  border: 0 !important; box-shadow: none !important; backdrop-filter: none !important;
+}
+html body .dash-shell .dash-home .dash-hero-right .tap-card.mini:not(#_a):not(#_b) {
+  border: 0 !important; box-shadow: none !important; filter: none !important;
+}
+html body .dash-shell .dash-home .dash-hero-right .tap-card.mini::before,
+html body .dash-shell .dash-home .dash-hero-right .tap-card.mini::after { box-shadow: none !important; }
+
+/* ---- contact page: transparent wolf emblem with a glow and a gentle float (no photo background) ---- */
+.contact-wolf { position: relative; max-width: 460px; margin-top: 36px; }
+.contact-wolf img { position: relative; z-index: 1; width: 100%; height: auto; display: block; animation: contact-float 6s ease-in-out infinite; filter: drop-shadow(0 20px 26px rgba(11, 22, 48, .35)); }
+.contact-wolf-glow { position: absolute; inset: 10% 8% 6%; border-radius: 50%; background: radial-gradient(closest-side, rgba(21, 101, 255, .35), rgba(124, 58, 237, .16) 60%, transparent); filter: blur(8px); animation: contact-glow 4s ease-in-out infinite; }
+@keyframes contact-float { 50% { transform: translateY(-10px) rotate(-1.5deg); } }
+@keyframes contact-glow { 50% { opacity: .65; transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .contact-wolf img, .contact-wolf-glow { animation: none; } }
+
+/* ---- Magic Poster gallery: smaller cards, true poster shape, A4 size label ---- */
+html .sh-theme .magic-art-gallery:not(#_a) { grid-template-columns: repeat(auto-fill, minmax(210px, 230px)); gap: 20px; justify-content: center; align-items: start; }
+html .sh-theme .magic-art-card.is-horizontal:not(#_a) { grid-column: span 2; }
+html .sh-theme .magic-art-card-media:not(#_a) { width: 100%; }
+html .sh-theme .magic-art-card-media .magic-art-lightbox-trigger img:not(#_a) { aspect-ratio: auto; height: 100%; }
+html .sh-theme .magic-art-card-media::after { height: 22%; }
+html .sh-theme .magic-art-badge { top: 10px !important; left: 10px !important; padding: 4px 8px !important; font-size: 9px !important; }
+html .sh-theme .magic-art-size { display: flex; align-items: center; gap: 8px; margin: 10px 16px 0; font-size: 11px; position: relative; z-index: 1; }
+html .sh-theme .magic-art-size b { padding: 3px 9px; border-radius: 999px; background: #1565ff; color: #fff !important; -webkit-text-fill-color: #fff !important; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; font-size: 10px; }
+html .sh-theme .magic-art-size span { color: #55627a !important; -webkit-text-fill-color: #55627a !important; font-weight: 600; }
+html .sh-theme .magic-art-card-title { margin: 6px 16px 0 !important; font-size: 1.15rem !important; line-height: 1.15 !important; font-weight: 800 !important; letter-spacing: -.02em !important; }
+html .sh-theme .magic-art-card-camera-link { margin: 8px 16px 0 !important; font-size: 10.5px !important; }
+html .sh-theme .magic-art-card-description { margin: 8px 16px 0 !important; font-size: 12.5px !important; }
+html .sh-theme .magic-art-meta-row { margin-left: 0; margin-right: 0; }
+html .sh-theme .magic-art-buy { margin: 12px 16px 0 !important; gap: 8px 10px !important; }
+html .sh-theme .magic-art-price { font-size: 1.35rem !important; }
+html .sh-theme .magic-art-price span { font-size: 11px !important; margin-left: 5px !important; }
+html .sh-theme .magic-art-card .magic-art-add { margin-left: 16px; margin-right: 16px; }
+html .sh-theme .magic-art-card-steps { margin: 12px 16px 16px !important; padding: 12px !important; }
+html .sh-theme .magic-art-card-steps li { font-size: 11.5px !important; }
+@media (max-width: 560px) {
+  html .sh-theme .magic-art-gallery:not(#_a) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  html .sh-theme .magic-art-card.is-horizontal:not(#_a) { grid-column: span 2; }
+}
+html .sh-theme .magic-art-gallery:not(#_a) { grid-template-columns: repeat(auto-fit, minmax(210px, 230px)); }
+html .sh-theme .magic-art-title-wrap { padding: 0 16px; margin: 0; text-align: left; }
+html .sh-theme .magic-art-title-wrap .magic-art-card-title { margin: 6px 0 0 !important; display: block; text-align: left; }
+html .sh-theme .magic-art-meta-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0 16px; margin: 8px 0 0; }
+html .sh-theme .magic-art-meta-row .magic-art-card-camera-link { margin: 0 !important; }
+html .sh-theme .magic-art-meta-row .magic-art-card-description { margin: 0 !important; text-align: right; }
+html .sh-theme .magic-art-card .magic-art-add { width: calc(100% - 32px) !important; margin: 0 16px 4px !important; box-sizing: border-box; min-height: 40px; }
+html .sh-theme .magic-art-card-steps:not(#_a) { margin: 12px 16px 16px !important; }
+
+/* Magic Poster: start from the left (no centring) */
+html .sh-theme .magic-art-gallery:not(#_a) { grid-template-columns: repeat(auto-fill, minmax(210px, 230px)); justify-content: start; }
+html .sh-theme .public-page-shell > div > div:has(> h1.section-heading) { text-align: left; }
+html .sh-theme .public-page-shell h1.section-heading { text-align: left; }
+
+/* ---- footer: app download buttons ---- */
+.site-footer-apps { margin-top: 22px; display: grid; gap: 10px; }
+.site-footer-apps-title { display: inline-flex; gap: 8px; align-items: center; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #8db6ff; }
+.site-footer-apps-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.site-footer .app-btn { display: inline-flex; align-items: center; gap: 12px; padding: 10px 18px; border-radius: 14px; background: #1565ff; color: #fff !important; text-decoration: none; box-shadow: 0 8px 22px rgba(21,101,255,.35); transition: translate .15s ease, background .2s ease; }
+.site-footer .app-btn:hover { translate: 0 -2px; background: #2a74ff; }
+.site-footer .app-btn span { display: grid; line-height: 1.25; text-align: left; }
+.site-footer .app-btn small { font-size: 10.5px; opacity: .85; letter-spacing: .04em; }
+.site-footer .app-btn b { font-size: 14.5px; font-weight: 700; }
+.site-footer .app-btn em { font-style: normal; font-size: 11px; opacity: .85; }
+html body .sh-theme .site-footer .app-btn, html body .sh-theme .site-footer .app-btn * { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+
+/* ---- footer: Google Play / App Store style buttons ---- */
+.site-footer .store-btn { display: inline-flex; align-items: center; gap: 10px; min-width: 164px; padding: 8px 16px 8px 12px; border-radius: 10px; background: #000; border: 1px solid #5c5c5c; color: #fff !important; text-decoration: none; transition: translate .15s ease, border-color .2s ease; }
+.site-footer .store-btn:hover { translate: 0 -2px; border-color: #fff; }
+.site-footer .store-btn span { display: grid; line-height: 1.15; text-align: left; }
+.site-footer .store-btn small { font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; opacity: .9; }
+.site-footer .store-btn b { font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+.site-footer .store-btn-apk { background: #1565ff; border-color: #1565ff; }
+html body .sh-theme .site-footer .store-btn, html body .sh-theme .site-footer .store-btn * { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+/* store badge that has no link yet: visible but clearly not clickable */
+.site-footer .store-btn.is-soon { opacity: .55; cursor: default; border-style: dashed; }
+.site-footer .store-btn.is-soon:hover { translate: none; border-color: #5c5c5c; }
+/* app badges now live under the Support column: stack them in the narrow column */
+.site-footer-col .site-footer-apps { margin-top: 26px; }
+.site-footer-col .site-footer-apps-row { flex-direction: column; align-items: flex-start; }
+.site-footer-col .store-btn { width: 100%; max-width: 230px; box-sizing: border-box; }

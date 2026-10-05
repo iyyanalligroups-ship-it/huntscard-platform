@@ -12,6 +12,7 @@ import './tapmo-color.css';
 import './blue-full.css';
 import './conversion.css';
 import './site-theme.css';
+import './shop-gallery.css';
 import { initAnalytics } from './analytics.js';
 
 initAnalytics();

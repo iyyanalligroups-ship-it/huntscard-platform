@@ -4227,6 +4227,91 @@ router.post('/encode-tool/upload', requireAdminPrime, uploadEncodeTool.single('i
 });
 
 // ---------------------------------------------------------------------
+// Mobile app downloads (website footer): upload the Android .apk / iOS .ipa, or set an iOS
+// store / TestFlight link. Files overwrite fixed names so the public URL never changes.
+// ---------------------------------------------------------------------
+const APP_DL_DIR = path.join(__dirname, '..', 'uploads', 'app-downloads');
+fs.mkdirSync(APP_DL_DIR, { recursive: true });
+function appUpload(field, ext, fixedName) {
+  return multer({
+    storage: multer.diskStorage({ destination: APP_DL_DIR, filename: (req, file, cb) => cb(null, fixedName) }),
+    limits: { fileSize: 500 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => (path.extname(file.originalname).toLowerCase() === ext ? cb(null, true) : cb(new Error('Only a ' + ext + ' file is allowed'))),
+  }).single(field);
+}
+const uploadApk = appUpload('apk', '.apk', 'HuntsTAG.apk');
+const uploadIpa = appUpload('ipa', '.ipa', 'HuntsTAG.ipa');
+
+async function appDownloadsDoc() {
+  const doc = await SiteSetting.findOne({ key: 'global' });
+  return (doc && doc.appDownloads) || {};
+}
+
+router.get('/app-downloads', requireAdmin, async (req, res) => {
+  try { res.json(await appDownloadsDoc()); } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/app-downloads/android', requireAdmin, (req, res) => {
+  uploadApk(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'No .apk received' });
+    try {
+      const update = { 'appDownloads.androidFile': req.file.filename, 'appDownloads.androidSize': req.file.size, 'appDownloads.androidUpdatedAt': new Date(), updatedBy: req.admin?.email || 'unknown' };
+      if (req.body.version) update['appDownloads.androidVersion'] = String(req.body.version).trim();
+      await SiteSetting.findOneAndUpdate({ key: 'global' }, update, { upsert: true });
+      res.json(await appDownloadsDoc());
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+});
+
+router.post('/app-downloads/ios', requireAdmin, (req, res) => {
+  uploadIpa(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'No .ipa received' });
+    try {
+      const update = { 'appDownloads.iosFile': req.file.filename, 'appDownloads.iosSize': req.file.size, updatedBy: req.admin?.email || 'unknown' };
+      if (req.body.version) update['appDownloads.iosVersion'] = String(req.body.version).trim();
+      if (req.body.bundleId) update['appDownloads.iosBundleId'] = String(req.body.bundleId).trim();
+      await SiteSetting.findOneAndUpdate({ key: 'global' }, update, { upsert: true });
+      res.json(await appDownloadsDoc());
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+});
+
+// Text fields: iOS store / TestFlight link, versions, bundle id.
+router.patch('/app-downloads', requireAdmin, async (req, res) => {
+  try {
+    const update = { updatedBy: req.admin?.email || 'unknown' };
+    for (const key of ['iosUrl', 'androidStoreUrl', 'iosVersion', 'androidVersion', 'iosBundleId']) {
+      if (req.body[key] === undefined) continue;
+      const v = String(req.body[key]).trim();
+      if ((key === 'iosUrl' || key === 'androidStoreUrl') && v && !/^(https?:\/\/|itms-services:\/\/)/i.test(v)) {
+        return res.status(400).json({ error: 'Store links must start with https://' });
+      }
+      update['appDownloads.' + key] = v;
+    }
+    await SiteSetting.findOneAndUpdate({ key: 'global' }, update, { upsert: true });
+    res.json(await appDownloadsDoc());
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/app-downloads/:platform', requireAdmin, async (req, res) => {
+  try {
+    const cur = await appDownloadsDoc();
+    if (req.params.platform === 'android') {
+      if (cur.androidFile) fs.unlink(path.join(APP_DL_DIR, cur.androidFile), () => {});
+      await SiteSetting.findOneAndUpdate({ key: 'global' }, { $unset: { 'appDownloads.androidFile': '', 'appDownloads.androidSize': '', 'appDownloads.androidUpdatedAt': '', 'appDownloads.androidStoreUrl': '' } });
+    } else if (req.params.platform === 'ios') {
+      if (cur.iosFile) fs.unlink(path.join(APP_DL_DIR, cur.iosFile), () => {});
+      await SiteSetting.findOneAndUpdate({ key: 'global' }, { $unset: { 'appDownloads.iosFile': '', 'appDownloads.iosSize': '', 'appDownloads.iosUrl': '' } });
+    } else {
+      return res.status(400).json({ error: 'platform must be android or ios' });
+    }
+    res.json(await appDownloadsDoc());
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ---------------------------------------------------------------------
 // Blank-card inventory (see models/CardInventory.js) -- physical stock on
 // hand before it's ever assigned to a client, distinct from the per-
 // client Card model above. Admin Prime only.

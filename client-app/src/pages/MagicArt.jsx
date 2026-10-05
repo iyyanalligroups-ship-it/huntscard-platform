@@ -27,6 +27,21 @@ const MAGIC_CAMERA_QR_URL = `${API_URL}/api/public/qr/magic-camera`;
 // Magic Camera -- modeled on the real Artivive product's own "scan this"
 // popup (see the reference screenshot this was built from), except
 // scanning this QR opens straight in the browser, no app install.
+// A4 print sheet: 210 x 297 mm upright, 297 x 210 mm on its side. Orientation comes from the
+// uploaded image's own shape (vertical when taller than wide, otherwise horizontal).
+const A4 = { vertical: '210 × 297 mm', horizontal: '297 × 210 mm' };
+function posterOrientation(piece) {
+  return piece.imageWidth && piece.imageHeight && piece.imageWidth > piece.imageHeight ? 'horizontal' : 'vertical';
+}
+// Posters cropped in the admin's A4 step are stored at 2480x3508 / 3508x2480 (A4 at 300 DPI), a 1:1.414 shape.
+// Older uploads were stored at a different shape (e.g. 1080x1350), so only claim "A4" when the stored shape matches.
+function isA4Shape(piece) {
+  if (!piece.imageWidth || !piece.imageHeight) return false;
+  const long = Math.max(piece.imageWidth, piece.imageHeight);
+  const short = Math.min(piece.imageWidth, piece.imageHeight);
+  return Math.abs(long / short - 297 / 210) < 0.03;
+}
+
 export default function MagicArt({ embedded = false }) {
   const cart = useCart();
   const [pieces, setPieces] = useState(null);
@@ -82,8 +97,8 @@ export default function MagicArt({ embedded = false }) {
       ) : (
         <div className="magic-art-gallery">
           {pieces.map((piece, i) => (
-            <div key={piece._id} className="magic-art-card card">
-              <div className="magic-art-card-media">
+            <div key={piece._id} className={`magic-art-card card is-${posterOrientation(piece)}`}>
+              <div className="magic-art-card-media" style={piece.imageWidth && piece.imageHeight ? { aspectRatio: `${piece.imageWidth} / ${piece.imageHeight}` } : undefined}>
                 <span className="magic-art-badge">✨ Scan with Magic Camera</span>
                 <MagicHoverPreview
                   className="magic-art-lightbox-trigger"
@@ -95,6 +110,11 @@ export default function MagicArt({ embedded = false }) {
                   onClick={() => setQrTarget(piece)}
                 />
               </div>
+
+              <p className="magic-art-size" title="Printed on an A4 sheet">
+                <b>{posterOrientation(piece) === 'vertical' ? 'Vertical' : 'Horizontal'}</b>
+                <span>A4 · {A4[posterOrientation(piece)]}</span>
+              </p>
 
               <div className="magic-art-title-wrap">
                 <h3 className="magic-art-card-title" title={piece.name || `Art ${i + 1}`}>{piece.name || `Art ${i + 1}`}</h3>

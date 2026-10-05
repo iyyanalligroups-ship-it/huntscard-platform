@@ -59,7 +59,7 @@ function hero(root) {
 function arScene(root) {
   const q = (sel) => root.querySelectorAll(sel);
   if (!q('.ar-stage').length) return;
-  const tl = gsap.timeline({ scrollTrigger: { trigger: '.ar-stage', start: 'top 80%', end: 'center 50%', scrub: 0.8 } });
+  const tl = gsap.timeline({ scrollTrigger: { trigger: '.ar-stage', start: 'top 85%', end: 'center 68%', scrub: 0.8 } });
   tl.from(q('.ar-viewfinder i'), { scale: 1.5, autoAlpha: 0, stagger: 0.05, duration: 0.3 }, 0)
     .from(q('.ar-card'), { autoAlpha: 0, y: 50, duration: 0.4 }, 0.05)
     .from(q('.ar-glow'), { autoAlpha: 0, scale: 0.6, duration: 0.4 }, 0.15)

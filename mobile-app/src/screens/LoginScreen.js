@@ -47,12 +47,12 @@ export default function LoginScreen({ navigation }) {
             <Button compact title="Phone OTP" kind={mode === 'otp' ? 'primary' : 'secondary'} onPress={() => setMode('otp')} style={styles.tab} />
           </View>
           {mode === 'password' ? <>
-            <Field label="Email or phone" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" keyboardType="email-address" />
-            <PasswordField label="Password" value={password} onChangeText={setPassword} />
+            <Field label="Email or phone" placeholder="Email or 10-digit phone number" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" keyboardType="email-address" />
+            <PasswordField label="Password" placeholder="Your password" value={password} onChangeText={setPassword} />
             <Button title={busy ? 'Signing in…' : 'Sign in'} disabled={busy || !identifier.trim() || !password} onPress={submitPassword} />
           </> : <>
-            <Field label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-            {otpSent && <Field label="6-digit OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} />}
+            <Field label="Phone number" placeholder="e.g. 9876543210" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+            {otpSent && <Field label="6-digit OTP" placeholder="Enter the code you received" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} />}
             <Button title={busy ? 'Please wait…' : otpSent ? 'Verify OTP' : 'Send OTP'} disabled={busy || !phone.trim() || (otpSent && otp.length < 4)} onPress={otpSent ? verifyOtp : requestOtp} />
           </>}
           <Message>{error}</Message><Message tone="success">{message}</Message>

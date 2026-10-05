@@ -29,6 +29,7 @@ import { loadRazorpayScript } from '../razorpay.js';
 import GeoSelect from '../components/GeoSelect.jsx';
 import MyMagicPosterOrders from './MyMagicPosterOrders.jsx';
 import MagicArt from './MagicArt.jsx';
+import VariantMedia from '../components/VariantMedia.jsx';
 
 const PLAN_DISPLAY_ORDER = ['premium', 'elite', 'nova', 'custom', 'apex'];
 const COUNTRY_ISO = 'IN';
@@ -851,6 +852,7 @@ export default function Shop() {
                   {isCurrentPlan(p) && (
                     <span className="current-badge"><BadgeCheck size={11} aria-hidden="true" />Current</span>
                   )}
+
                 </button>
               ))}
             </div>
@@ -878,33 +880,13 @@ export default function Shop() {
 
             {error && <div className="error-banner">{error}</div>}
 
-            <div className={hasVariantImages || selectedPlan.images?.length ? 'checkout-modal-layout' : undefined}>
-            {hasVariantImages ? (
-              <PlanHeroMedia variants={selectedPlan.variants} focusIndex={focusIndex} onFocusChange={setFocusIndex} />
-            ) : selectedPlan.images?.length ? (
+            <div className={!hasVariantImages && selectedPlan.images?.length ? 'checkout-modal-layout' : undefined}>
+            {hasVariantImages ? null : selectedPlan.images?.length ? (
               <div className="checkout-modal-media-col">
                 <PlanImageGallery images={selectedPlan.images} />
               </div>
             ) : null}
             <div className="checkout-modal-form-col">
-            {hasVariantImages && (
-              <div className="plan-spec-strip">
-                <div className="plan-spec-item">
-                  <span className="plan-spec-label">Style</span>
-                  <span className="plan-spec-value">
-                    {(selectedPlan.variants[focusIndex] || selectedPlan.variants[0])?.name}
-                  </span>
-                </div>
-                <div className="plan-spec-item">
-                  <span className="plan-spec-label">Shape</span>
-                  <span className="plan-spec-value">
-                    {(selectedPlan.variants[focusIndex] || selectedPlan.variants[0])?.shape === 'vertical'
-                      ? 'Vertical'
-                      : 'Horizontal'}
-                  </span>
-                </div>
-              </div>
-            )}
             <form onSubmit={couponMode ? handleClaimCoupon : handleCheckout}>
               {hasVariants && (
                 <div className="field">
@@ -928,21 +910,15 @@ export default function Shop() {
                     {selectedPlan.variants.map((v, i) => {
                       const qty = variantQuantities[v._id] || 0;
                       const active = qty > 0;
-                      const focused = hasVariantImages && i === focusIndex;
+                      const focused = false;
                       return (
                         <div
                           key={v._id}
                           className={`plan-variant-card${active ? ' active' : ''}${!active && focused ? ' focused' : ''}`}
                         >
-                          <div
-                            className="plan-variant-photos"
-                            style={{ cursor: hasVariantImages ? 'pointer' : 'default' }}
-                            onClick={hasVariantImages ? () => setFocusIndex(i) : undefined}
-                          >
-                            <VariantPhoto url={v.frontImageUrl} label="Front" />
-                            <VariantPhoto url={v.backImageUrl} label="Back" />
-                          </div>
+                          <VariantMedia variant={v} withSound={Boolean(selectedPlan.isSpecialEdition)} />
                           <span className="plan-variant-name">{v.name}</span>
+                          {selectedPlan.chargeAmount ? <span className="plan-variant-price">₹{selectedPlan.chargeAmount}<small> / card</small></span> : null}
                           <span className="plan-variant-shape">{v.shape === 'vertical' ? 'Vertical' : 'Horizontal'}</span>
                           <div className="plan-variant-stepper">
                             <button

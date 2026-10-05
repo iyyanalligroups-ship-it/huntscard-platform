@@ -108,3 +108,26 @@ html body .sh-theme .hv3 .zing-flight span { color: #0b1630 !important; -webkit-
 
 /* share sheet: fit all four apps inside the phone */
 .zp-sheet { padding: 14px 6px 16px; } .zp-sheet div { gap: 2px; } .zp-sheet span svg { padding: 8px; } .zp-sheet i { font-size: 9px; }
+
+/* ===== feature spotlight: after "Get a Zing / AR / Magic card" the matching plan cards glow for a moment ===== */
+.hv3-plans .hv3-plan { transition: opacity .35s ease, filter .35s ease, translate .2s ease, border-color .2s ease, box-shadow .35s ease; }
+.hv3-plans[data-spot] .hv3-plan { opacity: .3; filter: saturate(.4) blur(.4px); }
+.hv3-plans[data-spot="zing"] .hv3-plan[data-zing="1"],
+.hv3-plans[data-spot="ar"] .hv3-plan[data-ar="1"],
+.hv3-plans[data-spot="magic"] .hv3-plan[data-magic="1"] {
+  opacity: 1; filter: none; translate: 0 -8px; border-color: #8db6ff !important;
+  box-shadow: 0 0 0 3px rgba(141,182,255,.85), 0 0 0 10px rgba(21,101,255,.25), 0 26px 60px rgba(21,101,255,.55) !important;
+  animation: spot-pulse 1.1s ease-in-out infinite;
+}
+.hv3-plans[data-spot="zing"] .hv3-plan[data-zing="1"]::after,
+.hv3-plans[data-spot="ar"] .hv3-plan[data-ar="1"]::after,
+.hv3-plans[data-spot="magic"] .hv3-plan[data-magic="1"]::after {
+  content: attr(data-spot-label); position: absolute; top: -13px; left: 50%; transform: translateX(-50%); padding: 4px 12px; border-radius: 999px; background: #1565ff; color: #fff; font-size: 11px; font-weight: 800; white-space: nowrap;
+}
+.hv3-plans[data-spot="zing"] .hv3-plan { --spot-label: 'Includes Zing'; }
+.hv3 .hv3-plan { position: relative; }
+@keyframes spot-pulse { 50% { box-shadow: 0 0 0 3px rgba(141,182,255,.95), 0 0 0 16px rgba(21,101,255,.12), 0 26px 60px rgba(21,101,255,.6); } }
+@media (prefers-reduced-motion: reduce) { .hv3-plans[data-spot] .hv3-plan[data-zing="1"], .hv3-plans[data-spot] .hv3-plan { animation: none; } }
+.hv3-plans[data-spot="zing"] .hv3-plan[data-zing="1"]::after { content: "Includes Zing"; }
+.hv3-plans[data-spot="ar"] .hv3-plan[data-ar="1"]::after { content: "AR ready"; }
+.hv3-plans[data-spot="magic"] .hv3-plan[data-magic="1"]::after { content: "Magic Business Card"; }

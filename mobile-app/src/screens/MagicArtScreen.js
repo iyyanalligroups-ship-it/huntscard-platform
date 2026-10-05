@@ -35,6 +35,10 @@ export function MagicArtGallery({ navigation, embedded = false }) {
     {pieces?.map((piece, i) => (
       <Card key={piece._id} style={{ gap: 10 }}>
         <TapToPlayMedia imageUrl={piece.imageUrl} videoUrl={piece.overlays?.[0]?.videoUrl} style={{ aspectRatio: piece.imageWidth && piece.imageHeight ? piece.imageWidth / piece.imageHeight : 1 }} />
+        <View style={styles.sizeRow}>
+          <Text style={styles.sizeBadge}>{piece.imageWidth && piece.imageHeight && piece.imageWidth > piece.imageHeight ? 'HORIZONTAL' : 'VERTICAL'}</Text>
+          <Text style={styles.sizeText}>A4 · {piece.imageWidth && piece.imageHeight && piece.imageWidth > piece.imageHeight ? '297 × 210' : '210 × 297'} mm</Text>
+        </View>
         <Text style={styles.name}>{piece.name || `Art ${i + 1}`}</Text>
         <Button compact kind="ghost" icon="magic" title="Open Magic Camera →" onPress={() => setQrTarget(piece)} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} />
         {piece.description ? <Text style={styles.desc}>{piece.description}</Text> : null}
@@ -71,6 +75,9 @@ export default function MagicArtScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  sizeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sizeBadge: { color: '#fff', backgroundColor: '#1565ff', fontSize: 10, fontWeight: '800', letterSpacing: 0.5, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, overflow: 'hidden' },
+  sizeText: { color: '#8b93a3', fontSize: 12, fontWeight: '600' },
   head: { gap: 10 }, sub: { color: colors.textDim, lineHeight: 20, fontSize: 13 },
   name: { color: colors.text, fontWeight: '800', fontSize: 18 }, desc: { color: colors.textDim, lineHeight: 19, fontSize: 13 },
   buy: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
