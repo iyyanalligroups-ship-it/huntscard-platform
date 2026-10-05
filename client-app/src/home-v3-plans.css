@@ -1,0 +1,92 @@
+/* Plan cards: full card image (never cropped), style swatches, front/back flip. */
+#plans .hv3-plans > * { flex: 1 1 210px; max-width: 250px; }
+.hv3 .hv3-plan { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 16px 14px 20px; border-radius: 20px; height: 100%; box-sizing: border-box; }
+.hv3-plan-media { position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 3 / 4; border-radius: 14px; background: radial-gradient(circle at 50% 40%, rgba(255,255,255,.1), rgba(255,255,255,.02)); text-decoration: none; overflow: hidden; }
+.hv3-plan-media.horizontal { aspect-ratio: 4 / 3; }
+.hv3 .hv3-plan-media img { width: auto; height: auto; max-width: 92%; max-height: 92%; aspect-ratio: auto; object-fit: contain; border-radius: 10px; margin: 0; box-shadow: 0 14px 30px rgba(0,0,0,.5); transition: opacity .2s ease; }
+.hv3-flip { position: absolute; top: 10px; left: 10px; padding: 3px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; background: rgba(0,0,0,.55); }
+html body .sh-theme .hv3 .hv3-flip { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+.hv3-swatches { display: flex; gap: 7px; justify-content: center; align-items: center; margin-top: 2px; }
+.hv3 .hv3-swatches button { width: 34px; height: 34px; padding: 0; border-radius: 9px; overflow: hidden; border: 2px solid rgba(255,255,255,.25); background: #000; cursor: pointer; opacity: .75; transition: opacity .15s, border-color .15s, translate .15s; }
+.hv3 .hv3-swatches button:hover { opacity: 1; translate: 0 -2px; }
+.hv3 .hv3-swatches button.on { opacity: 1; border-color: #ffd27a; }
+.hv3 .hv3-swatches button img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 0; box-shadow: none; }
+.hv3 .hv3-swatches button:focus-visible { outline: 2px solid #8db6ff; outline-offset: 2px; }
+.hv3-swatches em { font-style: normal; font-size: 12px; font-weight: 700; color: #b9c8e6; }
+.hv3-style-name { font-size: 12.5px; }
+html body .sh-theme .hv3 .hv3-style-name { color: #b9c8e6 !important; -webkit-text-fill-color: #b9c8e6 !important; }
+.hv3 a.hv3-plan-cta { text-decoration: none; margin-top: 4px; }
+html body .sh-theme .hv3 a.hv3-plan-cta { color: #8db6ff !important; -webkit-text-fill-color: #8db6ff !important; }
+
+/* Tap demo: drawn phone, card slides in, ripple, profile opens (loops). */
+.hv3-tapdemo { position: relative; width: min(290px, 74vw); aspect-ratio: 9 / 16.6; padding: 8px; overflow: visible; }
+.td-screen { position: relative; width: 100%; height: 100%; border-radius: 30px; overflow: hidden; background: linear-gradient(170deg, #0f1f45, #07142b); display: grid; place-items: center; }
+.td-idle { display: grid; gap: 8px; justify-items: center; color: #8db6ff; animation: td-idle 7s infinite; }
+.td-idle small { font-size: 12px; font-weight: 600; }
+.td-profile { position: absolute; inset: 0; background: #fff; display: flex; flex-direction: column; align-items: center; opacity: 0; animation: td-open 7s infinite; }
+.td-banner { align-self: stretch; height: 22%; background: linear-gradient(120deg, #1565ff, #7c3aed 70%, #ea6a12); }
+.td-avatar { margin-top: -26px; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: #0b1630; color: #fff; border: 3px solid #fff; }
+.td-profile b { margin-top: 8px; font-size: 15px; } .td-profile span { font-size: 11px; }
+.td-profile em { margin-top: 10px; display: inline-flex; gap: 5px; align-items: center; font-style: normal; font-size: 11px; font-weight: 700; padding: 7px 14px; border-radius: 999px; background: #1565ff; }
+.td-row { margin-top: 14px; display: flex; gap: 8px; }
+.td-row i { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--tb); color: var(--t); }
+html body .sh-theme .hv3 .td-profile b { color: #0b1630 !important; -webkit-text-fill-color: #0b1630 !important; }
+html body .sh-theme .hv3 .td-profile span { color: #55627a !important; -webkit-text-fill-color: #55627a !important; }
+html body .sh-theme .hv3 .td-profile em { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+.td-ripple { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; border: 2px solid #6fa3ff; opacity: 0; animation: td-ripple 7s infinite; }
+.td-ripple.r2 { animation-delay: .35s; }
+.td-card { position: absolute; left: 50%; top: 56%; width: 120px; height: 76px; margin-left: -60px; border-radius: 12px; z-index: 3; background: linear-gradient(135deg, #ea6a12, #7c1d00); box-shadow: 0 22px 40px rgba(0,0,0,.55); padding: 10px; box-sizing: border-box; animation: td-card 7s infinite; }
+.td-chip { display: block; width: 22px; height: 16px; border-radius: 4px; background: rgba(255,255,255,.75); }
+.td-card i { display: block; height: 5px; margin-top: 9px; border-radius: 3px; background: rgba(255,255,255,.55); } .td-card i.s { width: 50%; margin-top: 5px; }
+@keyframes td-card { 0% { transform: translate(120px, 150px) rotate(18deg); opacity: 0; } 10% { opacity: 1; } 30%, 52% { transform: translate(0, -40px) rotate(0); opacity: 1; } 68%, 100% { transform: translate(-110px, 160px) rotate(-14deg); opacity: 0; } }
+@keyframes td-ripple { 0%, 28% { opacity: 0; transform: scale(.6); } 34% { opacity: .9; } 48%, 100% { opacity: 0; transform: scale(7); } }
+@keyframes td-open { 0%, 40% { opacity: 0; transform: scale(.96); } 50%, 90% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes td-idle { 0%, 36% { opacity: 1; } 42%, 96% { opacity: 0; } 100% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .td-card, .td-ripple, .td-idle { animation: none; } .td-profile { animation: none; opacity: 1; } .td-card, .td-idle { display: none; } }
+@media (max-width: 560px) {
+  #plans .hv3-plans > * { flex: 1 1 calc(50% - 12px); max-width: calc(50% - 6px); }
+  .hv3 .hv3-plan { padding: 10px 8px 14px; }
+  .hv3 .hv3-swatches button { width: 28px; height: 28px; }
+}
+
+/* Fill the frame and letterbox (contain) so the card is fully visible. `width:auto` made the lazy
+   image 0px wide, so it never started loading. */
+.hv3 .hv3-plan-media img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; padding: 10px; box-sizing: border-box; object-fit: contain; box-shadow: none; border-radius: 0; }
+.hv3 .hv3-swatches button img { position: static; padding: 0; object-fit: cover; }
+
+/* Tap demo: logged-in details */
+.td-avatar { overflow: hidden; }
+.td-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.td-avatar u { text-decoration: none; font: 800 17px 'Manrope', sans-serif; }
+html body .sh-theme .hv3 .td-avatar u { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+.td-profile b, .td-profile span { max-width: calc(100% - 28px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+
+/* Bulk band: transparent wolf emblem on a glow, no photo background */
+.hv3 .hv3-wolf { height: auto; max-width: 460px; margin: 28px 0 0; border: 0; border-radius: 0; box-shadow: none; overflow: visible; background: none; }
+.hv3 .hv3-wolf::after { display: none; }
+.hv3 .hv3-wolf::before { content: ""; position: absolute; inset: 6% 8%; border-radius: 50%; background: radial-gradient(closest-side, rgba(70,130,255,.65), rgba(21,101,255,.22) 60%, transparent); filter: blur(6px); }
+.hv3 .hv3-wolf img { position: relative; width: 100%; height: auto; max-height: 260px; object-fit: contain; filter: drop-shadow(0 0 1.5px rgba(190,215,255,.9)) drop-shadow(0 18px 28px rgba(0,0,0,.5)); }
+@media (max-width: 560px) { .hv3 .hv3-wolf { max-width: 100%; } .hv3 .hv3-wolf img { max-height: 200px; } }
+
+/* the card must be gone before the profile opens (it overlapped the profile) */
+@keyframes td-card { 0% { transform: translate(120px, 150px) rotate(18deg); opacity: 0; } 8% { opacity: 1; } 24%, 36% { transform: translate(0, -40px) rotate(0); opacity: 1; } 44%, 100% { transform: translate(-110px, 160px) rotate(-14deg); opacity: 0; } }
+@keyframes td-open { 0%, 44% { opacity: 0; transform: scale(.96); } 52%, 92% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes td-idle { 0%, 30% { opacity: 1; } 38%, 96% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes td-ripple { 0%, 22% { opacity: 0; transform: scale(.6); } 28% { opacity: .9; } 42%, 100% { opacity: 0; transform: scale(7); } }
+
+/* tap demo: a fuller profile so the phone never looks empty once it opens */
+.td-profile { justify-content: flex-start; }
+.td-profile .td-about { width: 100%; box-sizing: border-box; padding: 14px 20px 0; display: grid; gap: 6px; }
+.td-about i { display: block; height: 6px; border-radius: 3px; background: #e6ebf5; } .td-about i.short { width: 60%; }
+.td-video { position: relative; width: calc(100% - 32px); height: 92px; margin-top: 14px; border-radius: 14px; background: linear-gradient(135deg, #6366f1, #ec4899 60%, #f59e0b); display: grid; place-items: center; box-shadow: 0 10px 22px rgba(99,102,241,.35); }
+.td-video span { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.25); border: 1px solid rgba(255,255,255,.6); }
+.td-video em { position: absolute; left: 10px; bottom: 7px; font-style: normal; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(0,0,0,.4); }
+html body .sh-theme .hv3 .td-video span, html body .sh-theme .hv3 .td-video em { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+.td-tiles { width: calc(100% - 32px); margin-top: 10px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.td-tiles i { display: block; aspect-ratio: 1; border-radius: 11px; background: linear-gradient(135deg, #1565ff, #7c3aed); }
+.td-tiles i:nth-child(2) { background: linear-gradient(135deg, #ea6a12, #f5b72b); } .td-tiles i:nth-child(3) { background: linear-gradient(135deg, #16a34a, #1565ff); }
+.td-book { width: calc(100% - 32px); box-sizing: border-box; margin-top: 12px; display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 12px; background: #f1f5ff; border: 1px solid #dbe5f7; color: #1565ff; }
+.td-book span { flex: 1; font-size: 11px; font-weight: 600; text-align: left; max-width: none; }
+.td-book b { margin: 0; padding: 4px 11px; border-radius: 999px; background: #1565ff; font-size: 10.5px; max-width: none; }
+html body .sh-theme .hv3 .td-book span { color: #3b4760 !important; -webkit-text-fill-color: #3b4760 !important; }
+html body .sh-theme .hv3 .td-book b { color: #fff !important; -webkit-text-fill-color: #fff !important; }

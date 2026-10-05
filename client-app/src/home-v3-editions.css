@@ -1,0 +1,253 @@
+/* Editions (Custom + Limited), Magic Business Card, and the Magic Poster try-it box. */
+
+/* ======================= Editions: warm black + gold ======================= */
+.hv3 .hv3-band.hv3-ed {
+  background:
+    radial-gradient(700px 380px at 18% 0%, rgba(245, 183, 43, .22), transparent 70%),
+    radial-gradient(640px 360px at 92% 100%, rgba(234, 106, 18, .20), transparent 70%),
+    #140e07;
+  overflow: hidden;
+}
+.hv3-ed-head .hv3-eyebrow { color: #f5b72b; }
+.hv3-ed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: stretch; }
+.ed-panel { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 14px; padding: 30px; border-radius: 30px; border: 1px solid rgba(245, 183, 43, .28); background: linear-gradient(160deg, rgba(255,255,255,.07), rgba(255,255,255,.015)); box-sizing: border-box; transition: translate .25s ease, border-color .25s ease; }
+.ed-panel:hover { translate: 0 -5px; border-color: rgba(245, 183, 43, .65); }
+.ed-panel::before { content: ""; position: absolute; right: -80px; top: -80px; width: 260px; height: 260px; border-radius: 50%; background: radial-gradient(closest-side, rgba(245,183,43,.28), transparent); }
+.ed-limited { border-color: rgba(245, 183, 43, .5); }
+.ed-badge { align-self: flex-start; display: inline-flex; gap: 6px; align-items: center; padding: 6px 13px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; background: rgba(245,183,43,.15); border: 1px solid rgba(245,183,43,.5); position: relative; }
+.ed-panel h3 { font-size: 30px; position: relative; }
+.ed-panel p { font-size: 15.5px; line-height: 1.6; max-width: 480px; position: relative; }
+html body .sh-theme .hv3 .ed-badge { color: #f8cf66 !important; -webkit-text-fill-color: #f8cf66 !important; }
+html body .sh-theme .hv3 .ed-panel h3 { color: #fff !important; -webkit-text-fill-color: #fff !important; font-size: 30px; }
+html body .sh-theme .hv3 .ed-panel p { color: #d9ccb4 !important; -webkit-text-fill-color: #d9ccb4 !important; }
+
+.ed-visual { position: relative; height: 250px; margin: 6px 0; display: flex; align-items: center; justify-content: center; gap: 14px; }
+.ed-cardframe { position: relative; flex: none; height: 210px; aspect-ratio: 3 / 4; border-radius: 14px; overflow: hidden; background: #000; box-shadow: 0 24px 50px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.14); }
+.ed-cardframe img { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+.ed-blank { position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; font-weight: 700; color: #f8cf66; }
+.ed-cardframe.tilt { transform: rotate(-6deg); height: 220px; }
+
+/* custom: two dropzones feed one card */
+.ed-upload { justify-content: space-between; gap: 10px; }
+.ed-upload .ed-drop { position: absolute; left: 0; width: 132px; padding: 12px 10px; display: grid; justify-items: center; gap: 6px; border-radius: 16px; border: 2px dashed rgba(245,183,43,.6); background: rgba(245,183,43,.07); top: 4px; animation: ed-float 4s ease-in-out infinite; }
+.ed-upload .ed-drop.d2 { top: auto; bottom: 4px; animation-delay: -2s; }
+.ed-drop svg { color: #f5b72b; } .ed-drop b { font-size: 12px; } .ed-drop i { width: 70%; height: 5px; border-radius: 3px; background: rgba(255,255,255,.25); }
+html body .sh-theme .hv3 .ed-drop b { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+.ed-arrow { position: absolute; left: 150px; top: 50%; margin-top: -13px; color: #f5b72b; animation: ed-nudge 1.8s ease-in-out infinite; }
+.ed-upload .ed-cardframe { margin-left: auto; margin-right: 6%; }
+
+/* limited: card with sound rings + equaliser */
+.ed-sound .ed-wave { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; }
+.ed-wave i { position: absolute; left: -90px; top: -90px; width: 180px; height: 180px; border-radius: 50%; border: 2px solid rgba(245,183,43,.55); animation: ed-ring 3.2s ease-out infinite; opacity: 0; }
+.ed-wave i:nth-child(2) { animation-delay: 1s; } .ed-wave i:nth-child(3) { animation-delay: 2s; }
+.ed-speaker { position: absolute; right: 4%; top: 6%; display: inline-flex; gap: 7px; align-items: center; padding: 8px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 700; background: rgba(0,0,0,.55); border: 1px solid rgba(245,183,43,.6); backdrop-filter: blur(6px); }
+html body .sh-theme .hv3 .ed-speaker { color: #f8cf66 !important; -webkit-text-fill-color: #f8cf66 !important; }
+.ed-eq { position: absolute; right: 8%; bottom: 12%; display: flex; align-items: flex-end; gap: 4px; height: 44px; }
+.ed-eq i { width: 6px; border-radius: 3px; background: linear-gradient(#f8cf66, #ea6a12); animation: ed-eq 1s ease-in-out infinite; }
+.ed-eq i:nth-child(1) { height: 40%; animation-delay: -.1s; } .ed-eq i:nth-child(2) { height: 85%; animation-delay: -.4s; } .ed-eq i:nth-child(3) { height: 55%; animation-delay: -.7s; }
+.ed-eq i:nth-child(4) { height: 100%; animation-delay: -.2s; } .ed-eq i:nth-child(5) { height: 60%; animation-delay: -.55s; }
+
+.ed-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; position: relative; }
+.ed-chips li { display: inline-flex; gap: 6px; align-items: center; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.16); }
+.ed-chips svg { color: #f5b72b; }
+html body .sh-theme .hv3 .ed-chips li { color: #efe3c8 !important; -webkit-text-fill-color: #efe3c8 !important; }
+.ed-foot { margin-top: auto; padding-top: 6px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; position: relative; }
+.ed-price { font-size: 30px; font-weight: 800; }
+html body .sh-theme .hv3 .ed-price { color: #ffd27a !important; -webkit-text-fill-color: #ffd27a !important; }
+
+@keyframes ed-float { 50% { transform: translateY(-8px); } }
+@keyframes ed-nudge { 50% { transform: translateX(8px); } }
+@keyframes ed-ring { 0% { opacity: .9; transform: scale(.45); } 100% { opacity: 0; transform: scale(1.5); } }
+@keyframes ed-eq { 50% { transform: scaleY(.35); } }
+.ed-eq i { transform-origin: bottom; }
+
+/* ===================== Magic Business Card: indigo -> violet ===================== */
+.hv3 .hv3-band.hv3-mbc {
+  background:
+    radial-gradient(640px 360px at 85% 0%, rgba(236, 72, 153, .30), transparent 70%),
+    radial-gradient(640px 380px at 8% 100%, rgba(59, 130, 246, .30), transparent 70%),
+    linear-gradient(160deg, #1b1050 0%, #3b1a85 55%, #5b21b6 100%);
+  overflow: hidden;
+}
+.hv3-mbc-head { text-align: center; max-width: 720px; margin: 0 auto 44px; }
+.hv3-mbc-head .hv3-eyebrow { color: #f0abfc; }
+.hv3-mbc-head .hv3-sub { margin-left: auto; margin-right: auto; }
+html body .sh-theme .hv3 .hv3-mbc-head .hv3-sub { color: #dcd2fb !important; -webkit-text-fill-color: #dcd2fb !important; }
+.mbc-stages { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; position: relative; }
+.mbc-stage { position: relative; padding: 22px 22px 26px; border-radius: 26px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); backdrop-filter: blur(8px); text-align: left; }
+.mbc-stage:not(:last-child)::after { content: ""; position: absolute; top: 120px; left: calc(100% + 1px); width: 21px; border-top: 2px dashed rgba(255,255,255,.5); }
+.mbc-stage em { display: block; margin-top: 18px; font-style: normal; font: 800 38px/1 'Manrope', sans-serif; color: transparent; -webkit-text-stroke: 1.5px rgba(240,171,252,.85); }
+html body .sh-theme .hv3 .mbc-stage em { color: transparent !important; -webkit-text-fill-color: transparent !important; }
+.mbc-stage h3 { margin: 6px 0 6px; font-size: 21px; }
+.mbc-stage p { font-size: 14.5px; line-height: 1.55; }
+html body .sh-theme .hv3 .mbc-stage h3 { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+html body .sh-theme .hv3 .mbc-stage p { color: #dcd2fb !important; -webkit-text-fill-color: #dcd2fb !important; }
+
+.mbc-art { position: relative; height: 230px; border-radius: 20px; background: rgba(8, 4, 30, .55); border: 1px solid rgba(255,255,255,.14); display: grid; place-items: center; overflow: hidden; }
+/* stage 1: the real Magic Camera QR inside scan brackets */
+.mbc-qr img { width: 150px; height: 150px; padding: 10px; background: #fff; border-radius: 14px; box-sizing: border-box; animation: mbc-pop 4s ease-in-out infinite; }
+.mbc-corner { position: absolute; width: 26px; height: 26px; border: 3px solid #f0abfc; }
+.mbc-corner.c1 { top: 28px; left: 36px; border-right: 0; border-bottom: 0; border-top-left-radius: 8px; } .mbc-corner.c2 { top: 28px; right: 36px; border-left: 0; border-bottom: 0; border-top-right-radius: 8px; }
+.mbc-corner.c3 { bottom: 28px; left: 36px; border-right: 0; border-top: 0; border-bottom-left-radius: 8px; } .mbc-corner.c4 { bottom: 28px; right: 36px; border-left: 0; border-top: 0; border-bottom-right-radius: 8px; }
+/* shared card drawing */
+.mbc-card { position: relative; width: 150px; height: 96px; border-radius: 12px; background: linear-gradient(135deg, #111827, #1f2a44); box-shadow: 0 18px 36px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.16); padding: 12px; box-sizing: border-box; }
+.mbc-logo { display: block; width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, #f0abfc, #6366f1); }
+.mbc-card i { display: block; height: 5px; margin-top: 8px; border-radius: 3px; background: rgba(255,255,255,.4); } .mbc-card i.s { width: 55%; }
+/* stage 2: tracking frame, feature points, scan line */
+.mbc-trace .mbc-frame { position: absolute; width: 176px; height: 122px; animation: mbc-lock 4s ease-in-out infinite; }
+.mbc-frame b { position: absolute; width: 22px; height: 22px; border: 3px solid #f0abfc; } .mbc-frame b:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; } .mbc-frame b:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; }
+.mbc-frame b:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; } .mbc-frame b:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; }
+.mbc-dots { position: absolute; width: 150px; height: 96px; }
+.mbc-dots u { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #f0abfc; box-shadow: 0 0 8px #f0abfc; opacity: 0; animation: mbc-dot 4s infinite; animation-delay: calc(var(--d) * .08s); }
+.mbc-dots u:nth-child(3n+1) { left: calc(var(--d) * 9px + 6px); top: 10px; } .mbc-dots u:nth-child(3n+2) { left: calc(var(--d) * 8px + 12px); top: 46px; } .mbc-dots u:nth-child(3n) { left: calc(var(--d) * 7px + 4px); top: 76px; }
+.mbc-scanline { position: absolute; left: 50%; width: 170px; margin-left: -85px; height: 2px; background: linear-gradient(90deg, transparent, #f0abfc, #fff, #f0abfc, transparent); box-shadow: 0 0 14px 3px rgba(240,171,252,.7); animation: mbc-scan 2.6s ease-in-out infinite; }
+.mbc-tag { position: absolute; bottom: 12px; display: inline-flex; gap: 6px; align-items: center; padding: 5px 12px; border-radius: 999px; font-size: 11px; font-weight: 700; background: rgba(240,171,252,.18); border: 1px solid rgba(240,171,252,.5); }
+html body .sh-theme .hv3 .mbc-tag { color: #f5d0fe !important; -webkit-text-fill-color: #f5d0fe !important; }
+/* stage 3: video on the card + floating pills */
+.mbc-card.live { padding: 0; overflow: hidden; width: 168px; height: 108px; margin-top: -26px; background: #000; }
+.mbc-video { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #6366f1, #ec4899 60%, #f59e0b); animation: mbc-video 4s ease-in-out infinite; }
+html body .sh-theme .hv3 .mbc-video { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+.mbc-pill { position: absolute; bottom: 20px; display: inline-flex; gap: 5px; align-items: center; padding: 6px 11px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #fff; box-shadow: 0 10px 22px rgba(0,0,0,.4); animation: mbc-pill 4s ease-in-out infinite; }
+.mbc-pill svg { color: #6d28d9; }
+html body .sh-theme .hv3 .mbc-pill { color: #1b1050 !important; -webkit-text-fill-color: #1b1050 !important; }
+.mbc-pill.p1 { left: 10%; } .mbc-pill.p2 { left: 50%; margin-left: -34px; animation-delay: .15s; } .mbc-pill.p3 { right: 8%; animation-delay: .3s; }
+
+.hv3-mbc-foot { margin-top: 36px; display: grid; justify-items: center; gap: 4px; }
+.mbc-plans { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
+.mbc-plans small { font-size: 13px; font-weight: 700; margin-right: 4px; }
+html body .sh-theme .hv3 .mbc-plans small { color: #dcd2fb !important; -webkit-text-fill-color: #dcd2fb !important; }
+.hv3 .mbc-plans a { padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 700; text-decoration: none; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.3); }
+html body .sh-theme .hv3 .mbc-plans a { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+.hv3-mbc-foot .hv3-cta-row { justify-content: center; }
+
+@keyframes mbc-pop { 0%, 100% { transform: scale(1); } 50% { transform: scale(.94); } }
+@keyframes mbc-lock { 0%, 20% { transform: scale(1.25); opacity: .3; } 45%, 100% { transform: scale(1); opacity: 1; } }
+@keyframes mbc-dot { 0%, 20% { opacity: 0; } 40%, 85% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes mbc-scan { 0% { top: 22%; opacity: 0; } 15%, 85% { opacity: 1; } 100% { top: 74%; opacity: 0; } }
+@keyframes mbc-video { 0%, 20% { opacity: .15; } 45%, 100% { opacity: 1; } }
+@keyframes mbc-pill { 0%, 35% { opacity: 0; transform: translateY(16px); } 55%, 100% { opacity: 1; transform: none; } }
+
+/* ========== Magic Poster: try-it QR + tracing brackets over the posters ========== */
+.hv3-trybox { display: flex; gap: 16px; align-items: center; margin-top: 22px; padding: 14px 16px; max-width: 460px; border-radius: 18px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.2); }
+.hv3-trybox img { flex: none; width: 92px; height: 92px; padding: 6px; background: #fff; border-radius: 12px; box-sizing: border-box; }
+.hv3-trybox b { display: block; font-size: 16px; margin-bottom: 3px; } .hv3-trybox small { display: block; font-size: 13px; line-height: 1.45; }
+html body .sh-theme .hv3 .hv3-trybox b { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+html body .sh-theme .hv3 .hv3-trybox small { color: #b9c8e6 !important; -webkit-text-fill-color: #b9c8e6 !important; }
+.hv3-trace { position: absolute; inset: 14% 12% 16%; z-index: 4; pointer-events: none; animation: mbc-lock 4s ease-in-out infinite; }
+.hv3-trace i { position: absolute; width: 28px; height: 28px; border: 3px solid #8db6ff; }
+.hv3-trace i:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; } .hv3-trace i:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; }
+.hv3-trace i:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; } .hv3-trace i:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; }
+
+/* ============================== responsive ============================== */
+@media (max-width: 960px) {
+  .hv3-ed-grid { grid-template-columns: 1fr; }
+  .mbc-stages { grid-template-columns: 1fr; gap: 18px; }
+  .mbc-stage:not(:last-child)::after { display: none; }
+}
+@media (max-width: 560px) {
+  .ed-panel { padding: 22px; border-radius: 24px; }
+  .ed-visual { height: 230px; }
+  .ed-upload .ed-drop { width: 112px; } .ed-arrow { left: 124px; }
+  .ed-cardframe { height: 190px; }
+  .ed-foot { flex-direction: column; align-items: flex-start; }
+  .hv3-trybox { flex-direction: row; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ed-drop, .ed-arrow, .ed-wave i, .ed-eq i, .mbc-qr img, .mbc-frame, .mbc-dots u, .mbc-scanline, .mbc-video, .mbc-pill, .hv3-trace { animation: none; }
+  .mbc-dots u, .mbc-pill, .mbc-video { opacity: 1; } .mbc-scanline { display: none; }
+}
+
+/* ===== Magic Business Card v2: the real card image in every stage ===== */
+.mbc-art { height: 250px; }
+.mbc-cardimg { position: relative; height: 188px; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: #000; box-shadow: 0 20px 40px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.18); }
+.mbc-cardimg img { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.mbc-art .mbc-tag { bottom: 10px; z-index: 5; background: rgba(20, 8, 60, .75); }
+/* stage 1: brackets pulse over the card's QR area */
+.mbc-qrzone { position: absolute; left: 50%; top: 44%; width: 56%; aspect-ratio: 1; transform: translate(-50%, -50%); animation: mbc-qrpulse 2.2s ease-in-out infinite; }
+.mbc-qrzone b { position: absolute; width: 18px; height: 18px; border: 3px solid #f0abfc; }
+.mbc-qrzone b:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; } .mbc-qrzone b:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; }
+.mbc-qrzone b:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; } .mbc-qrzone b:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; }
+/* stage 2: tracking over the whole artwork */
+.mbc-trace .mbc-frame { width: 150px; height: 214px; }
+.mbc-trace .mbc-dots { width: 138px; height: 188px; }
+.mbc-dots u:nth-child(4n+1) { left: calc(var(--d) * 6px + 8px); top: 14px; } .mbc-dots u:nth-child(4n+2) { left: calc(var(--d) * 7px + 10px); top: 62px; }
+.mbc-dots u:nth-child(4n+3) { left: calc(var(--d) * 6px + 4px); top: 118px; } .mbc-dots u:nth-child(4n) { left: calc(var(--d) * 5px + 12px); top: 164px; }
+.mbc-trace .mbc-scanline { width: 150px; margin-left: -75px; animation-name: mbc-scan2; }
+/* stage 3: video covers the card art (slightly larger, like the live overlay) */
+.mbc-play .mbc-cardimg { margin-top: -26px; }
+.mbc-play .mbc-video { inset: -3%; border-radius: 10px; }
+.mbc-pill { bottom: 16px; }
+@keyframes mbc-qrpulse { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 50% { transform: translate(-50%, -50%) scale(.9); opacity: .7; } }
+@keyframes mbc-scan2 { 0% { top: 14%; opacity: 0; } 15%, 85% { opacity: 1; } 100% { top: 84%; opacity: 0; } }
+
+.mbc-both { margin: 30px auto 0; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; }
+.mbc-both span { display: inline-flex; gap: 8px; align-items: center; padding: 9px 16px; border-radius: 999px; font-size: 14px; font-weight: 700; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.28); }
+.mbc-both span svg { color: #f0abfc; }
+.mbc-both i { font-style: normal; font: 800 22px/1 'Manrope', sans-serif; }
+html body .sh-theme .hv3 .mbc-both span, html body .sh-theme .hv3 .mbc-both i { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+@media (max-width: 560px) { .mbc-art { height: 240px; } .mbc-both span { font-size: 13px; } }
+@media (prefers-reduced-motion: reduce) { .mbc-qrzone { animation: none; } }
+
+/* keep the labels clear of the card and give the "QR + image" row room */
+.mbc-art { height: 276px; }
+.mbc-art .mbc-cardimg { height: 180px; margin-top: -26px; }
+.mbc-trace .mbc-frame { height: 206px; margin-top: -26px; } .mbc-trace .mbc-dots { height: 180px; margin-top: -26px; }
+.mbc-trace .mbc-scanline { margin-top: -26px; }
+.mbc-play .mbc-cardimg { margin-top: -50px; }
+.mbc-art .mbc-tag { bottom: 14px; }
+.hv3 p.mbc-both { margin: 34px auto 0; }
+.hv3 .hv3-mbc-foot { margin-top: 30px; }
+
+/* ===== Retheme: Editions + Magic Business Card follow the AR section's navy/blue look ===== */
+.hv3 .hv3-band.hv3-ed, .hv3 .hv3-band.hv3-mbc {
+  background:
+    radial-gradient(700px 420px at 82% 28%, rgba(124, 58, 237, .32), transparent 70%),
+    radial-gradient(760px 460px at 8% 90%, rgba(21, 101, 255, .28), transparent 70%),
+    #06112a;
+  position: relative;
+}
+.hv3-ed::before, .hv3-mbc::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .45;
+  background-image: linear-gradient(rgba(120,160,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(120,160,255,.08) 1px, transparent 1px);
+  background-size: 54px 54px;
+  -webkit-mask-image: radial-gradient(ellipse at 70% 45%, #000, transparent 72%); mask-image: radial-gradient(ellipse at 70% 45%, #000, transparent 72%);
+}
+.hv3-ed .hv3-in, .hv3-mbc .hv3-in { position: relative; }
+
+/* Editions: gold -> blue */
+.hv3-ed-head .hv3-eyebrow, .hv3-mbc-head .hv3-eyebrow { color: #6fa3ff; }
+.ed-panel { border-color: rgba(141, 182, 255, .3); background: linear-gradient(160deg, rgba(255,255,255,.1), rgba(255,255,255,.03)); backdrop-filter: blur(8px); }
+.ed-panel:hover, .ed-limited { border-color: rgba(141, 182, 255, .65); }
+.ed-panel::before { background: radial-gradient(closest-side, rgba(21,101,255,.35), transparent); }
+.ed-badge { background: rgba(111,163,255,.14); border-color: rgba(111,163,255,.45); }
+html body .sh-theme .hv3 .ed-badge { color: #8db6ff !important; -webkit-text-fill-color: #8db6ff !important; }
+html body .sh-theme .hv3 .ed-panel p { color: #b9c8e6 !important; -webkit-text-fill-color: #b9c8e6 !important; }
+.ed-upload .ed-drop { border-color: rgba(141,182,255,.6); background: rgba(21,101,255,.12); }
+.ed-drop svg, .ed-arrow, .ed-chips svg { color: #6fa3ff; }
+.ed-wave i { border-color: rgba(141,182,255,.6); }
+.ed-speaker { border-color: rgba(141,182,255,.6); }
+html body .sh-theme .hv3 .ed-speaker { color: #cfe0ff !important; -webkit-text-fill-color: #cfe0ff !important; }
+.ed-eq i { background: linear-gradient(#8db6ff, #7c3aed); }
+.ed-blank { color: #8db6ff; }
+html body .sh-theme .hv3 .ed-chips li { color: #dbe6fa !important; -webkit-text-fill-color: #dbe6fa !important; }
+html body .sh-theme .hv3 .ed-price { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+.hv3 .ed-foot .hv3-btn-light { background: #1565ff; box-shadow: 0 8px 24px rgba(21,101,255,.4); }
+html body .sh-theme .hv3 .ed-foot .hv3-btn-light { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+
+/* Magic Business Card: pink -> theme blue/violet */
+.mbc-stage { background: rgba(255,255,255,.07); border-color: rgba(141,182,255,.28); }
+.mbc-stage em { -webkit-text-stroke-color: rgba(141,182,255,.75); }
+html body .sh-theme .hv3 .mbc-stage p, html body .sh-theme .hv3 .hv3-mbc-head .hv3-sub { color: #b9c8e6 !important; -webkit-text-fill-color: #b9c8e6 !important; }
+.mbc-art { background: rgba(6, 17, 42, .6); border-color: rgba(141,182,255,.2); }
+.mbc-corner, .mbc-frame b, .mbc-qrzone b { border-color: #8db6ff; }
+.mbc-dots u { background: #8db6ff; box-shadow: 0 0 8px #6fa3ff; }
+.mbc-scanline { background: linear-gradient(90deg, transparent, #8db6ff, #fff, #8db6ff, transparent); box-shadow: 0 0 14px 3px rgba(111,163,255,.7); }
+.mbc-tag { background: rgba(21,101,255,.2); border-color: rgba(141,182,255,.5); }
+html body .sh-theme .hv3 .mbc-tag { color: #cfe0ff !important; -webkit-text-fill-color: #cfe0ff !important; }
+.mbc-video { background: linear-gradient(135deg, #1565ff, #7c3aed 60%, #ea6a12); }
+.mbc-pill svg, .mbc-both span svg { color: #1565ff; }
+.mbc-both span svg { color: #8db6ff; }
+html body .sh-theme .hv3 .mbc-pill { color: #0b1630 !important; -webkit-text-fill-color: #0b1630 !important; }
+.hv3 .mbc-plans a { background: rgba(21,101,255,.18); border-color: rgba(141,182,255,.4); }
+html body .sh-theme .hv3 .hv3-mbc-foot .hv3-btn-light { color: #0b3fb8 !important; -webkit-text-fill-color: #0b3fb8 !important; }
+html body .sh-theme .hv3 .hv3-mbc-foot .mbc-plans a, html body.hv3-active .sh-theme .hv3 .hv3-mbc-foot .mbc-plans a:not(#_a) { color: #fff !important; -webkit-text-fill-color: #fff !important; text-decoration: none; }

@@ -236,6 +236,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                     id="modalLoginEmail"
                     type="text"
                     autoComplete="username"
+                    placeholder="Email or 10-digit phone number"
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     required
@@ -248,6 +249,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                       id="modalLoginPassword"
                       type={showLoginPassword ? 'text' : 'password'}
                       autoComplete="current-password"
+                      placeholder="Your password"
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
                       required
@@ -276,6 +278,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                     id="modalOtpPhone"
                     type="tel"
                     autoComplete="tel"
+                    placeholder="e.g. 9876543210"
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     required
@@ -297,6 +300,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                     type="text"
                     inputMode="numeric"
                     autoComplete="one-time-code"
+                    placeholder="Enter the code you received"
                     value={otp}
                     onChange={(e) => setOtp(e.target.value)}
                     required
@@ -351,7 +355,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
             <form className="auth-register-form" onSubmit={handleRegister}>
               <div className="field">
                 <label htmlFor="modalFullName">Full name</label>
-                <input id="modalFullName" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+                <input id="modalFullName" placeholder="e.g. Priya Sharma" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
               </div>
               <div className="field">
                 <label htmlFor="modalPhone">Contact number</label>
@@ -363,6 +367,8 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                   maxLength={10}
                   pattern="[0-9]{10}"
                   title="Enter exactly 10 digits"
+                  placeholder="e.g. 9876543210"
+                  autoComplete="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                   required
@@ -400,6 +406,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                   id="modalRegEmail"
                   type="email"
                   autoComplete="username"
+                  placeholder="e.g. priya@example.com"
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value.toLowerCase())}
                   required
@@ -423,6 +430,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                     type={showRegPassword ? 'text' : 'password'}
                     autoComplete="new-password"
                     minLength={8}
+                    placeholder="Create a password"
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
                     required

@@ -1,0 +1,71 @@
+/* Order tracking: two stepper cards that tick through their stages on a loop. */
+.hv3 .hv3-band.hv3-trk {
+  background:
+    radial-gradient(620px 340px at 92% 8%, rgba(22, 163, 74, .13), transparent 70%),
+    radial-gradient(560px 340px at 4% 96%, rgba(21, 101, 255, .12), transparent 70%),
+    #f2f7ff;
+}
+.hv3-trk-head .hv3-sub { max-width: 400px; }
+.trk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.trk-card { padding: 26px; border-radius: 28px; background: #fff; border: 1px solid #dbe5f7; box-shadow: 0 22px 50px rgba(11, 22, 48, .09); text-align: left; }
+.trk-top { display: flex; align-items: center; gap: 14px; padding-bottom: 18px; border-bottom: 1px solid #e8eef9; }
+.trk-ico { flex: none; width: 48px; height: 48px; border-radius: 15px; display: grid; place-items: center; background: linear-gradient(135deg, #1565ff, #7c3aed); color: #fff; }
+.trk-top b { display: block; font-size: 18px; } .trk-top small { font-size: 13px; }
+html body .sh-theme .hv3 .trk-top small { color: #55627a !important; -webkit-text-fill-color: #55627a !important; }
+html body .sh-theme .hv3 .trk-ico { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+.trk-paid { margin-left: auto; display: inline-flex; gap: 5px; align-items: center; padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #dcf7e6; }
+html body .sh-theme .hv3 .trk-paid { color: #15803d !important; -webkit-text-fill-color: #15803d !important; }
+
+.trk-steps { list-style: none; margin: 18px 0 0; padding: 0; position: relative; }
+.trk-steps li { position: relative; display: flex; gap: 16px; padding-bottom: 22px; }
+.trk-steps li:last-child { padding-bottom: 0; }
+.trk-steps li:not(:last-child)::before { content: ""; position: absolute; left: 15px; top: 32px; bottom: 0; width: 2px; background: #dbe5f7; }
+.trk-steps li:not(:last-child)::after { content: ""; position: absolute; left: 15px; top: 32px; bottom: 0; width: 2px; background: #16a34a; transform-origin: top; transform: scaleY(0); }
+.trk-dot { position: relative; z-index: 1; flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: #fff; border: 2px solid #c9d6ee; font-size: 12px; font-weight: 800; }
+.trk-dot i { font-style: normal; } .trk-dot svg { position: absolute; opacity: 0; color: #fff; }
+.trk-steps b { display: block; font-size: 15.5px; } .trk-steps small { display: block; font-size: 13.5px; margin-top: 2px; }
+html body .sh-theme .hv3 .trk-steps small { color: #55627a !important; -webkit-text-fill-color: #55627a !important; }
+html body .sh-theme .hv3 .trk-dot { color: #7a879f !important; -webkit-text-fill-color: #7a879f !important; }
+html body .sh-theme .hv3 .trk-dot svg { color: #fff !important; stroke: #fff !important; }
+.trk-steps li:nth-child(1) .trk-dot { animation: trk-d0 9s infinite; } .trk-steps li:nth-child(2) .trk-dot { animation: trk-d1 9s infinite; }
+.trk-steps li:nth-child(3) .trk-dot { animation: trk-d2 9s infinite; } .trk-steps li:nth-child(4) .trk-dot { animation: trk-d3 9s infinite; }
+.trk-steps li:nth-child(1)::after { animation: trk-l0 9s infinite; } .trk-steps li:nth-child(2)::after { animation: trk-l1 9s infinite; } .trk-steps li:nth-child(3)::after { animation: trk-l2 9s infinite; }
+.trk-steps li:nth-child(1) .trk-dot svg { animation: trk-c0 9s infinite; } .trk-steps li:nth-child(2) .trk-dot svg { animation: trk-c1 9s infinite; }
+.trk-steps li:nth-child(3) .trk-dot svg { animation: trk-c2 9s infinite; } .trk-steps li:nth-child(4) .trk-dot svg { animation: trk-c3 9s infinite; }
+.trk-steps li:nth-child(1) .trk-dot i { animation: trk-n0 9s infinite; } .trk-steps li:nth-child(2) .trk-dot i { animation: trk-n1 9s infinite; }
+.trk-steps li:nth-child(3) .trk-dot i { animation: trk-n2 9s infinite; } .trk-steps li:nth-child(4) .trk-dot i { animation: trk-n3 9s infinite; }
+.trk-grid > :nth-child(2) .trk-steps li .trk-dot, .trk-grid > :nth-child(2) .trk-steps li::after, .trk-grid > :nth-child(2) .trk-steps li .trk-dot svg, .trk-grid > :nth-child(2) .trk-steps li .trk-dot i { animation-delay: -1.2s; }
+
+/* done at 10% / 32% / 54% / 76% of 9s, all reset together at 96% */
+@keyframes trk-d0 { 0%, 8% { background: #fff; border-color: #c9d6ee; } 10%, 94% { background: #16a34a; border-color: #16a34a; } 98%, 100% { background: #fff; border-color: #c9d6ee; } }
+@keyframes trk-d1 { 0%, 30% { background: #fff; border-color: #c9d6ee; } 32%, 94% { background: #16a34a; border-color: #16a34a; } 98%, 100% { background: #fff; border-color: #c9d6ee; } }
+@keyframes trk-d2 { 0%, 52% { background: #fff; border-color: #c9d6ee; } 54%, 94% { background: #16a34a; border-color: #16a34a; } 98%, 100% { background: #fff; border-color: #c9d6ee; } }
+@keyframes trk-d3 { 0%, 74% { background: #fff; border-color: #c9d6ee; } 76%, 94% { background: #16a34a; border-color: #16a34a; box-shadow: 0 0 0 6px rgba(22,163,74,.2); } 98%, 100% { background: #fff; border-color: #c9d6ee; } }
+@keyframes trk-c0 { 0%, 8% { opacity: 0; } 10%, 94% { opacity: 1; } 98%, 100% { opacity: 0; } }
+@keyframes trk-c1 { 0%, 30% { opacity: 0; } 32%, 94% { opacity: 1; } 98%, 100% { opacity: 0; } }
+@keyframes trk-c2 { 0%, 52% { opacity: 0; } 54%, 94% { opacity: 1; } 98%, 100% { opacity: 0; } }
+@keyframes trk-c3 { 0%, 74% { opacity: 0; } 76%, 94% { opacity: 1; } 98%, 100% { opacity: 0; } }
+@keyframes trk-n0 { 0%, 8% { opacity: 1; } 10%, 94% { opacity: 0; } 98%, 100% { opacity: 1; } }
+@keyframes trk-n1 { 0%, 30% { opacity: 1; } 32%, 94% { opacity: 0; } 98%, 100% { opacity: 1; } }
+@keyframes trk-n2 { 0%, 52% { opacity: 1; } 54%, 94% { opacity: 0; } 98%, 100% { opacity: 1; } }
+@keyframes trk-n3 { 0%, 74% { opacity: 1; } 76%, 94% { opacity: 0; } 98%, 100% { opacity: 1; } }
+@keyframes trk-l0 { 0%, 10% { transform: scaleY(0); } 28%, 94% { transform: scaleY(1); } 98%, 100% { transform: scaleY(0); } }
+@keyframes trk-l1 { 0%, 32% { transform: scaleY(0); } 50%, 94% { transform: scaleY(1); } 98%, 100% { transform: scaleY(0); } }
+@keyframes trk-l2 { 0%, 54% { transform: scaleY(0); } 72%, 94% { transform: scaleY(1); } 98%, 100% { transform: scaleY(0); } }
+
+.trk-id { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 11px 14px; border-radius: 14px; background: #f3f7ff; border: 1px dashed #b9c9ea; font-size: 13px; font-weight: 700; }
+.trk-id svg { color: #1565ff; } .trk-id em { margin-left: auto; font-style: normal; font-weight: 600; font-size: 12.5px; }
+html body .sh-theme .hv3 .trk-id em { color: #55627a !important; -webkit-text-fill-color: #55627a !important; }
+
+.trk-extras { list-style: none; margin: 26px 0 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.trk-extras li { display: inline-flex; gap: 8px; align-items: center; padding: 9px 16px; border-radius: 999px; font-size: 14px; font-weight: 600; background: #fff; border: 1px solid #dbe5f7; }
+.trk-extras svg { color: #1565ff; }
+.hv3-trk-foot { margin-top: 24px; display: grid; justify-items: center; }
+
+@media (max-width: 960px) { .trk-grid { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .trk-card { padding: 20px; } .trk-id em { margin-left: 0; width: 100%; } }
+@media (prefers-reduced-motion: reduce) {
+  .trk-dot, .trk-dot svg, .trk-dot i, .trk-steps li::after { animation: none !important; }
+  .trk-steps li:nth-child(-n+2) .trk-dot { background: #16a34a; border-color: #16a34a; }
+  .trk-steps li:nth-child(-n+2) .trk-dot svg { opacity: 1; } .trk-steps li:nth-child(-n+2) .trk-dot i { opacity: 0; }
+}

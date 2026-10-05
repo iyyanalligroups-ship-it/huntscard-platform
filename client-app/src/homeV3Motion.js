@@ -55,6 +55,18 @@ function hero(root) {
   gsap.to(q('.hv3-hero .hv3-hero-copy'), { yPercent: 10, autoAlpha: 0.2, ease: 'none', scrollTrigger: scrub });
 }
 
+// AR showcase: as the section scrolls into view the card is 'scanned' and each panel rises above it.
+function arScene(root) {
+  const q = (sel) => root.querySelectorAll(sel);
+  if (!q('.ar-stage').length) return;
+  const tl = gsap.timeline({ scrollTrigger: { trigger: '.ar-stage', start: 'top 80%', end: 'center 50%', scrub: 0.8 } });
+  tl.from(q('.ar-viewfinder i'), { scale: 1.5, autoAlpha: 0, stagger: 0.05, duration: 0.3 }, 0)
+    .from(q('.ar-card'), { autoAlpha: 0, y: 50, duration: 0.4 }, 0.05)
+    .from(q('.ar-glow'), { autoAlpha: 0, scale: 0.6, duration: 0.4 }, 0.15)
+    .from(q('.ar-tag'), { autoAlpha: 0, y: 12, duration: 0.2 }, 0.3)
+    .from(q('.ar-panel'), { y: 110, autoAlpha: 0, scale: 0.7, stagger: 0.16, duration: 0.5, ease: 'back.out(1.5)' }, 0.5);
+}
+
 function bento(root) {
   const q = (s) => root.querySelectorAll(s);
   gsap.from(q('.bt-card'), { y: 100, autoAlpha: 0, duration: 1.1, ease: 'power3.out', scrollTrigger: once('.bt-tap') });
@@ -96,13 +108,15 @@ function how(root) {
   if (!line) return;
   gsap.set(line, { '--tl': 0 });
   const items = q('.hv3-tl-item');
-  const tl = gsap.timeline({ scrollTrigger: { trigger: line, start: 'top 78%', end: 'bottom 62%', scrub: 0.7 } });
-  tl.to(line, { '--tl': 1, ease: 'none', duration: items.length }, 0);
+  // Plays once when the section scrolls in (no scrub), so pausing mid-scroll never
+  // leaves the steps half drawn or missing.
+  const tl = gsap.timeline({ scrollTrigger: { trigger: line, start: 'top 85%', once: true } });
+  tl.to(line, { '--tl': 1, ease: 'power2.inOut', duration: 1.6 }, 0);
   items.forEach((it, i) => {
-    const at = i * 0.95;
-    tl.from(it.querySelector('.hv3-tl-num'), { clipPath: 'inset(100% 0 0 0)', yPercent: 30, duration: 0.7, ease: 'power3.out' }, at)
-      .from(it.querySelector('.hv3-tl-dot'), { scale: 0, duration: 0.35, ease: 'back.out(3)' }, at + 0.3)
-      .from(it.querySelectorAll('h3, p'), { y: 18, autoAlpha: 0, stagger: 0.1, duration: 0.45 }, at + 0.4);
+    const at = i * 0.32;
+    tl.from(it.querySelector('.hv3-tl-num'), { clipPath: 'inset(100% 0 0 0)', yPercent: 30, duration: 0.6, ease: 'power3.out' }, at)
+      .from(it.querySelector('.hv3-tl-dot'), { scale: 0, duration: 0.35, ease: 'back.out(3)' }, at + 0.2)
+      .from(it.querySelectorAll('h3, p'), { y: 16, autoAlpha: 0, stagger: 0.08, duration: 0.45 }, at + 0.3);
   });
 }
 
@@ -159,6 +173,20 @@ export function dynamicMotion(root) {
 export function planTilt(root) {
   if (!window.matchMedia('(hover: hover)').matches) return () => {};
   const off = [];
+  const scene = root.querySelector('.ar-scene');
+  const stage = root.querySelector('.ar-stage');
+  if (scene && stage) {
+    const move = (e) => {
+      const r = scene.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width - 0.5;
+      const y = (e.clientY - r.top) / r.height - 0.5;
+      gsap.to(stage, { rotationY: x * 14, rotationX: -y * 10, transformPerspective: 1100, duration: 0.6, ease: 'power2.out', overwrite: 'auto' });
+    };
+    const leave = () => gsap.to(stage, { rotationY: 0, rotationX: 0, duration: 0.8, ease: 'power3.out', overwrite: 'auto' });
+    scene.addEventListener('pointermove', move);
+    scene.addEventListener('pointerleave', leave);
+    off.push(() => { scene.removeEventListener('pointermove', move); scene.removeEventListener('pointerleave', leave); });
+  }
   root.querySelectorAll('.hv3-plan').forEach((el) => {
     const move = (e) => {
       const r = el.getBoundingClientRect();
@@ -187,6 +215,7 @@ export function initMotion(root) {
   root.classList.add('hv3-motion');
   hero(root);
   registerReveals(root);
+  arScene(root);
   bento(root);
   compare(root);
   digitalCard(root);

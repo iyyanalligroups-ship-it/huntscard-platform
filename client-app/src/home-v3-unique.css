@@ -266,3 +266,26 @@ html body .sh-theme .hv3 .hv3-profile-book b { color: #fff !important; -webkit-t
   .hv3-final-mark { width: 240px; right: -60px; margin-top: -120px; }
   .hv3-wolf { height: 210px; }
 }
+
+/* ===== hero: logged-in profile details + cards that stay readable behind the phone ===== */
+.hv3-profile-avatar { overflow: hidden; }
+.hv3-profile-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hv3-profile-avatar span { font: 800 24px 'Manrope', sans-serif; color: #fff; }
+html body .sh-theme .hv3 .hv3-profile-avatar span { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+/* long names/designations: one line with an ellipsis; the full text shows in the hover tooltip (title attr) */
+.hv3-profile-name, .hv3-profile-role { display: block; max-width: calc(100% - 36px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; cursor: default; }
+
+@media (min-width: 961px) {
+  .hv3-hero-visual { overflow: visible; }
+  .hv3-hero-card-a { left: -4%; bottom: 8%; width: 150px; transform: rotate(-12deg); }
+  .hv3-hero-card-b { right: -3%; top: 14%; width: 140px; transform: rotate(11deg); }
+  .hv3-float { left: 4%; right: auto; top: 4%; z-index: 4; }
+  .hv3-chip-a { left: 2%; top: 17%; }
+  .hv3-chip-b { left: -9%; top: 41%; }
+  .hv3-chip-c { left: auto; right: 4%; bottom: 24%; }
+  .hv3-chip-d { right: -4%; top: 59%; }
+}
+
+/* "Save Contact" badge: sit beside the phone, not under it */
+@media (min-width: 961px) { .hv3-savebadge { z-index: 4; right: -3%; bottom: 7%; } }
+.hv3-savebadge { z-index: 4; }

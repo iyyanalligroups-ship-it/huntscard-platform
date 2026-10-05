@@ -72,3 +72,22 @@ html body.hv3-active.public-site-active .sh-theme .top-nav .public-account-actio
 html body.hv3-active.public-site-active .sh-theme .top-nav .public-nav-icon-button:hover:not(#_a):not(#_b),
 html body.hv3-active.public-site-active .sh-theme .top-nav .public-nav-icon-button:focus-visible:not(#_a):not(#_b) { background: #eef4ff !important; box-shadow: none !important; }
 html body.hv3-active .sh-theme .top-nav .public-nav-icon-button:hover svg { color: #1565ff !important; stroke: #1565ff !important; }
+
+/* ---- login / register popup: no inner scrollbar ----
+   The card used to cap itself at 90vh and scroll internally. It now grows to fit its
+   content; only on a very short screen does the dimmed backdrop scroll (scrollbar hidden). */
+html body.public-site-active .sh-theme .auth-modal-backdrop { align-items: flex-start; overflow-y: auto; padding: 16px; scrollbar-width: none; -ms-overflow-style: none; }
+html body.public-site-active .sh-theme .auth-modal-backdrop::-webkit-scrollbar { display: none; }
+html body.public-site-active .sh-theme .auth-modal-card { max-height: none !important; overflow: visible !important; margin: auto; }
+/* tighter login layout so it fits normal laptop heights without scrolling at all */
+html body.public-site-active .sh-theme .auth-modal-card:not(.auth-modal-card--register) { padding: 30px 40px 26px; }
+html .sh-theme .auth-modal-card:not(.auth-modal-card--register) .brand { margin-bottom: 14px !important; }
+html .sh-theme .auth-modal-card:not(.auth-modal-card--register) > p.subtitle { margin: 0 0 14px; }
+html body.public-site-active .sh-theme .auth-modal-card:not(.auth-modal-card--register) > div[style*="flex"]:has(> button) { margin-bottom: 16px !important; }
+html .sh-theme .auth-modal-card:not(.auth-modal-card--register) .field { margin-bottom: 14px; }
+
+/* nested wrappers that were intentionally chrome-less (zero padding) must stay that way,
+   otherwise the themed card border hugs their content */
+html body.hv3-active.public-site-active .sh-theme .public-page-shell :is(.checkout-panel .card, .shop-detail-card):not(.hv3 *):not(#_a):not(#_b) {
+  border: 0 !important; box-shadow: none !important; background: transparent !important; border-radius: 0 !important;
+}
