@@ -7,7 +7,7 @@ export const colors = {
   panelRaised: '#eef3fc',
   panelBorder: '#dbe5f7',
   text: '#0b1630',
-  textDim: '#55627a',
+  textDim: '#27324d',
   holoCyan: '#1565ff',
   holoViolet: '#7c3aed',
   holoMagenta: '#ea6a12',

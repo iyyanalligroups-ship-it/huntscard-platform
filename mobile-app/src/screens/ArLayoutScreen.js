@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api, publicUrl, resolveAssetUrl } from '../api/client.js';
 import ArLayoutCanvas from '../components/ArLayoutCanvas.js';
@@ -41,6 +41,7 @@ export default function ArLayoutScreen({ navigation }) {
   const [status, setStatus] = useState('');
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [selKey, setSelKey] = useState('video');
 
   const load = useCallback(async () => {
     try {
@@ -78,6 +79,9 @@ export default function ArLayoutScreen({ navigation }) {
     ];
   }, [layout, hasVideo, hasModel, arComponents]);
 
+  const selItem = items.find((i) => i.key === selKey && !i.fixed) || items.find((i) => !i.fixed) || null;
+  const nudge = (dx, dy) => { if (selItem) setPos(selItem.key, { x: Math.max(-60, Math.min(160, selItem.pos.x + dx * 2)), y: Math.max(-60, Math.min(160, selItem.pos.y + dy * 2)) }); };
+
   async function save() {
     setStatus('Saving...'); setError('');
     try {
@@ -93,7 +97,7 @@ export default function ArLayoutScreen({ navigation }) {
 
   async function downloadQr() {
     setBusy(true); setError('');
-    try { await downloadAndShare({ url: publicUrl(`/api/public/qr/${profile.clientId}?type=ar&transparent=1&card=${selected}`), filename: `huntsTAG-ar-qr-${profile.clientId}.png`, mimeType: 'image/png', dialogTitle: 'AR QR' }); }
+    try { await downloadAndShare({ url: publicUrl(`/api/public/qr/${profile.clientId}?type=ar&transparent=1&card=${selected}`), filename: `HuntsTAG-ar-qr-${profile.clientId}.png`, mimeType: 'image/png', dialogTitle: 'AR QR' }); }
     catch (err) { setError(err.message); } finally { setBusy(false); }
   }
 
@@ -112,13 +116,27 @@ export default function ArLayoutScreen({ navigation }) {
   </Screen>;
   if (!layout) return <Screen><Title>AR Layout</Title>{picker}<Loading /></Screen>;
 
-  return <Screen>
+  return <Screen scrollEnabled={!dragging}>
     <Title subtitle={`Showing the ${card.qrSide === 'back' ? 'back' : 'front'} side where this card's QR is printed. The QR code is the anchor a phone locks onto when scanning -- its position is fixed. Drag anything else to where you want it to float relative to that QR.`}>AR Layout</Title>
     {picker}
     <Card style={{ gap: 10 }} >
       <Text style={styles.cardTitle}>Layout</Text>
       <Text style={styles.hint}>Drag an element to reposition it. Positions are percentages of the card, the same values the website editor uses.</Text>
-      <ArLayoutCanvas cardUri={card.cardDesignUrl} aspect={cardAspect(card.shape)} items={items} onDragPosition={setPos} onDragStateChange={setDragging} />
+      <ArLayoutCanvas cardUri={card.cardDesignUrl} aspect={cardAspect(card.shape)} items={items} selectedKey={selKey} onSelect={setSelKey} onDragPosition={setPos} onDragStateChange={setDragging} />
+      {selItem ? <View style={styles.nudge}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.nudgeLabel}>Selected: {selItem.label}</Text>
+          <Text style={styles.hint}>Tap a tile on the card to select it, drag it, or nudge with the arrows.</Text>
+        </View>
+        <View style={styles.pad}>
+          <Pressable onPress={() => nudge(0, -1)} style={[styles.padBtn, styles.padUp]}><Glyph name="chevronUp" size={20} color="#ffffff" /></Pressable>
+          <View style={styles.padRow}>
+            <Pressable onPress={() => nudge(-1, 0)} style={styles.padBtn}><Glyph name="chevronLeft" size={20} color="#ffffff" /></Pressable>
+            <Pressable onPress={() => nudge(1, 0)} style={styles.padBtn}><Glyph name="chevronRight" size={20} color="#ffffff" /></Pressable>
+          </View>
+          <Pressable onPress={() => nudge(0, 1)} style={[styles.padBtn, styles.padDown]}><Glyph name="chevronDown" size={20} color="#ffffff" /></Pressable>
+        </View>
+      </View> : null}
       {dragging ? <Text style={styles.hint}>Moving…</Text> : null}
       <Button kind="secondary" icon="scan" title="Open scan preview (live AR)" onPress={() => navigate('AR Experience', { clientId: profile.clientId, cardNumber: selected })} />
     </Card>
@@ -156,5 +174,7 @@ export default function ArLayoutScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   text: { color: colors.text, fontSize: 14, textAlign: 'center' }, hint: { color: colors.textDim, fontSize: 12, lineHeight: 17 }, cardTitle: { color: colors.text, fontWeight: '800', fontSize: 15 },
-  control: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 }, controlLabel: { color: colors.textDim, fontSize: 12, flex: 1 }, controlValue: { color: colors.text, fontWeight: '700', width: 48, textAlign: 'center', fontSize: 12 },
+  control: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 }, controlLabel: { color: colors.textDim, fontSize: 12, flex: 1 }, nudge: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.panelRaised, borderRadius: 14, padding: 12 }, nudgeLabel: { color: colors.text, fontWeight: '800', fontSize: 14, marginBottom: 2 },
+  pad: { alignItems: 'center', gap: 4 }, padRow: { flexDirection: 'row', gap: 40 }, padBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.holoCyan, alignItems: 'center', justifyContent: 'center' }, padUp: {}, padDown: {},
+  controlValue: { color: colors.text, fontWeight: '700', width: 48, textAlign: 'center', fontSize: 12 },
 });

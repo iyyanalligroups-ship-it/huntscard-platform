@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { WebView } from 'react-native-webview';
-import { resolveAssetUrl } from '../api/client.js';
+import { WEB_URL, resolveAssetUrl } from '../api/client.js';
 import { youtubeId } from '../lib/format.js';
 import { colors } from '../theme/colors.js';
 import { Glyph } from './Glyph.js';
@@ -17,6 +17,19 @@ export function NativeVideo({ uri, style, loop = false, muted = false, autoplay 
   return <VideoView player={player} style={style} nativeControls={nativeControls} contentFit="contain" allowsFullscreen allowsPictureInPicture />;
 }
 
+// YouTube refuses to play an embed that has no referrer ("Error 153, video player configuration error"),
+// and a bare WebView uri sends none. So the player is loaded inside a tiny HTML page whose base URL is the
+// website's own origin, with the same origin passed to the player.
+function youtubeSource(id, { autoplay = false, loop = false, controls = true } = {}) {
+  const origin = String(WEB_URL || '').startsWith('http') ? WEB_URL : 'https://huntstag.com';
+  const params = new URLSearchParams({ playsinline: '1', rel: '0', modestbranding: '1', enablejsapi: '1', origin, widget_referrer: origin });
+  if (autoplay) { params.set('autoplay', '1'); params.set('mute', '1'); }
+  if (loop) { params.set('loop', '1'); params.set('playlist', id); }
+  if (!controls) params.set('controls', '0');
+  const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;background:#000}iframe{position:absolute;inset:0;width:100%;height:100%;border:0}</style></head><body><iframe src="https://www.youtube.com/embed/${id}?${params.toString()}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></body></html>`;
+  return { html, baseUrl: origin };
+}
+
 // YouTube Shorts/watch links play through the embed player; anything else is
 // an uploaded video file.
 export function VideoClip({ url, style }) {
@@ -24,7 +37,8 @@ export function VideoClip({ url, style }) {
   if (id) {
     return <WebView
       style={[styles.clip, style]}
-      source={{ uri: `https://www.youtube.com/embed/${id}?playsinline=1&rel=0` }}
+      source={youtubeSource(id)}
+      originWhitelist={['*']}
       allowsInlineMediaPlayback
       mediaPlaybackRequiresUserAction
       allowsFullscreenVideo
@@ -42,7 +56,7 @@ export function TapToPlayMedia({ imageUrl, videoUrl, style }) {
   return (
     <View style={[styles.media, style]}>
       {playing && videoUrl ? (
-        id ? <WebView style={StyleSheet.absoluteFill} source={{ uri: `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&loop=1&playlist=${id}&controls=0&playsinline=1&rel=0` }} allowsInlineMediaPlayback mediaPlaybackRequiresUserAction={false} javaScriptEnabled />
+        id ? <WebView style={StyleSheet.absoluteFill} source={youtubeSource(id, { autoplay: true, loop: true, controls: false })} originWhitelist={['*']} allowsInlineMediaPlayback mediaPlaybackRequiresUserAction={false} javaScriptEnabled />
           : <NativeVideo uri={videoUrl} style={StyleSheet.absoluteFill} loop muted autoplay nativeControls={false} />
       ) : imageUrl ? (
         <Image source={{ uri: resolveAssetUrl(imageUrl) }} style={StyleSheet.absoluteFill} resizeMode="cover" />

@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Image, Linking, StyleSheet, Text, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
-import { createDrawerNavigator } from '@react-navigation/drawer';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, WEB_URL } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.js';
 import { useCart } from '../cart/CartContext.js';
 import { Glyph } from '../components/Glyph.js';
 import { IconButton } from '../components/ui.js';
+import SplashOverlay from '../components/SplashOverlay.js';
 import { colors } from '../theme/colors.js';
 import { navigationRef } from './navigationRef.js';
 import LoginScreen from '../screens/LoginScreen.js';
@@ -36,9 +38,10 @@ import NotificationsScreen from '../screens/NotificationsScreen.js';
 import DeviceSafetyCheckScreen from '../screens/DeviceSafetyCheckScreen.js';
 import PublicProfileScreen from '../screens/PublicProfileScreen.js';
 import OpenCardScreen from '../screens/OpenCardScreen.js';
+import MenuScreen from '../screens/MenuScreen.js';
 import { ArExperienceScreen, MagicCamera3DScreen, MagicCameraScreen } from '../screens/WebExperienceScreen.js';
 
-const Drawer = createDrawerNavigator();
+const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 const navTheme = {
@@ -46,91 +49,27 @@ const navTheme = {
   colors: { ...DefaultTheme.colors, background: colors.space, card: colors.panel, text: colors.text, border: colors.panelBorder, primary: colors.holoCyan },
 };
 
-const headerStyle = { headerStyle: { backgroundColor: colors.panel }, headerTintColor: colors.text, headerTitleStyle: { fontWeight: '800' }, contentStyle: { backgroundColor: colors.space } };
+// Native-feel stack header: white bar, bold title, platform back gesture.
+const stackOptions = {
+  headerStyle: { backgroundColor: colors.panel },
+  headerTintColor: colors.text,
+  headerTitleStyle: { fontWeight: '800', fontSize: 17 },
+  headerShadowVisible: false,
+  headerBackButtonDisplayMode: 'minimal',
+  contentStyle: { backgroundColor: colors.space },
+  animation: 'slide_from_right',
+};
 
-// Same grouping as client-app/src/components/Layout.jsx's NAV_GROUPS, plus the
-// public-site pages from PublicLayout/Footer so nothing on the website is
-// unreachable from the app.
-const DASHBOARD_ITEM = { name: 'Dashboard', icon: 'dashboard' };
-const MEMBER_GROUPS = [
-  { id: 'account', label: 'Account & connections', icon: 'user', items: [
-    { name: 'Appointment Requests', icon: 'calendar' }, { name: 'Profile', icon: 'user' }, { name: 'Profile Settings', icon: 'edit' }, { name: 'Contacts', icon: 'contacts' }] },
-  { id: 'studio', label: 'Studio & AR', icon: 'layers', items: [
-    { name: 'AR Layout', icon: 'layers' }, { name: 'Magic Camera', icon: 'magic', stack: true }, { name: 'Magic Business Card', icon: 'magic' }] },
-  { id: 'orders', label: 'Shop & orders', icon: 'bag', items: [
-    { name: 'Shop', icon: 'bag' }, { name: 'Magic Poster', icon: 'image' }, { name: 'Track Orders', icon: 'truck' }] },
-  { id: 'support', label: 'Help & settings', icon: 'chat', items: [
-    { name: 'Chat Support', icon: 'chat' }, { name: 'Settings', icon: 'settings' }, { name: 'Notifications', icon: 'bell' }, { name: 'Device Protection Check', icon: 'shield' }] },
-];
-const EXPLORE_GROUP = { id: 'explore', label: 'Explore HuntsTAG', icon: 'home', items: [
-  { name: 'Home', icon: 'home' }, { name: 'Catalog', icon: 'card' }, { name: 'Contact Us', icon: 'mail' }, { name: 'About Us', icon: 'info' },
-  { name: 'What is HuntsWorld?', icon: 'globe' }, { name: 'FAQ', icon: 'help' }, { name: 'Open a Card', icon: 'scan', stack: true }] };
-const PUBLIC_GROUPS = [
-  { id: 'shop', label: 'Shop', icon: 'bag', items: [{ name: 'Shop', icon: 'bag' }, { name: 'Magic Poster', icon: 'image' }, { name: 'Catalog', icon: 'card' }, { name: 'Magic Camera', icon: 'magic', stack: true }] },
-  { id: 'about', label: 'About', icon: 'info', items: [{ name: 'About Us', icon: 'info' }, { name: 'What is HuntsWorld?', icon: 'globe' }, { name: 'FAQ', icon: 'help' }] },
-  { id: 'support', label: 'Support', icon: 'chat', items: [{ name: 'Chat Support', icon: 'chat' }, { name: 'Contact Us', icon: 'mail' }, { name: 'Open a Card', icon: 'scan', stack: true }] },
-];
+const TAB_ICONS = { Home: 'home', Shop: 'bag', 'Magic Poster': 'image', Dashboard: 'dashboard', 'Contact Us': 'mail', Menu: 'menu' };
 
-function DrawerContent({ navigation, state, member, groups }) {
-  const { signOut } = useAuth();
-  const activeName = state.routes[state.index]?.name;
-  const [query, setQuery] = useState('');
-  const [open, setOpen] = useState(() => Object.fromEntries(groups.map((g) => [g.id, true])));
-  const all = useMemo(() => [...(member ? [DASHBOARD_ITEM] : [{ name: 'Home', icon: 'home' }]), ...groups.flatMap((g) => g.items)], [groups, member]);
-  const results = query.trim() ? all.filter((item) => item.name.toLowerCase().includes(query.trim().toLowerCase())) : [];
-
-  const go = (item) => { setQuery(''); navigation.closeDrawer(); navigation.navigate(item.name); };
-  const Item = ({ item, child }) => {
-    const active = activeName === item.name;
-    return <Pressable onPress={() => go(item)} style={[styles.link, child && styles.child, active && styles.linkActive]}>
-      <Glyph name={item.icon} size={18} color={active ? colors.holoCyan : colors.textDim} />
-      <Text style={[styles.linkText, active && { color: colors.holoCyan }]}>{item.name}</Text>
-    </Pressable>;
-  };
-
-  return <SafeAreaView style={styles.drawer} edges={['top', 'bottom']}>
-    <View style={styles.brandRow}><View style={styles.brandMark} /><View><Text style={styles.brand}>HuntsTAG</Text><Text style={styles.brandSub}>{member ? 'CLIENT PORTAL' : 'SMART CARDS'}</Text></View></View>
-    <View style={styles.search}>
-      <Glyph name="search" size={16} color={colors.textDim} />
-      <TextInputLite value={query} onChange={setQuery} />
-    </View>
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 12 }}>
-      {query.trim() ? (results.length ? results.map((item) => <Item key={item.name} item={item} />) : <Text style={styles.none}>No matching page</Text>) : <>
-        <Text style={styles.section}>Workspace</Text>
-        <Item item={member ? DASHBOARD_ITEM : { name: 'Home', icon: 'home' }} />
-        <Text style={styles.section}>{member ? 'Management' : 'Explore'}</Text>
-        {groups.map((group) => {
-          const expanded = open[group.id];
-          const groupActive = group.items.some((item) => item.name === activeName);
-          return <View key={group.id}>
-            <Pressable style={[styles.parent, groupActive && { backgroundColor: 'rgba(21,101,255,0.06)' }]} onPress={() => setOpen((o) => ({ ...o, [group.id]: !o[group.id] }))}>
-              <Glyph name={group.icon} size={18} color={groupActive ? colors.holoCyan : colors.text} />
-              <Text style={styles.parentText}>{group.label}</Text>
-              <Glyph name={expanded ? 'chevronUp' : 'chevronDown'} size={15} color={colors.textDim} />
-            </Pressable>
-            {expanded ? group.items.map((item) => <Item key={item.name} item={item} child />) : null}
-          </View>;
-        })}
-      </>}
-    </ScrollView>
-    <View style={styles.footer}>
-      {member ? <>
-        <Pressable style={styles.link} onPress={() => { navigation.closeDrawer(); navigation.navigate('Home'); }}><Glyph name="home" size={18} color={colors.textDim} /><Text style={styles.linkText}>Home</Text></Pressable>
-        <Pressable style={styles.link} onPress={signOut}><Glyph name="logout" size={18} color={colors.danger} /><Text style={[styles.linkText, { color: colors.danger }]}>Log out</Text></Pressable>
-      </> : <>
-        <Pressable style={styles.link} onPress={() => { navigation.closeDrawer(); navigationRef.navigate('Login'); }}><Glyph name="login" size={18} color={colors.holoCyan} /><Text style={[styles.linkText, { color: colors.holoCyan }]}>Log in</Text></Pressable>
-        <Pressable style={styles.link} onPress={() => { navigation.closeDrawer(); navigationRef.navigate('Register'); }}><Glyph name="user" size={18} color={colors.text} /><Text style={styles.linkText}>Create account</Text></Pressable>
-      </>}
-      <Pressable onPress={() => Linking.openURL('mailto:info@huntsworld.com')}><Text style={styles.mail}>info@huntsworld.com</Text></Pressable>
-    </View>
-  </SafeAreaView>;
+function BrandTitle() {
+  return <View style={styles.brandTitle}>
+    <Image source={require('../../assets/wolf-source.png')} style={styles.brandLogo} resizeMode="contain" />
+    <Text style={styles.brandText}>HuntsTAG</Text>
+  </View>;
 }
 
-// Minimal inline search box (kept local so the drawer has no extra deps).
-function TextInputLite({ value, onChange }) {
-  return <TextInput value={value} onChangeText={onChange} placeholder="Search pages..." placeholderTextColor={colors.textDim} style={styles.searchInput} autoCapitalize="none" />;
-}
-
+// Cart and (for members) notifications, shown in every tab header.
 function HeaderRight({ member, navigation }) {
   const cart = useCart();
   const [unread, setUnread] = useState(0);
@@ -150,51 +89,65 @@ function HeaderRight({ member, navigation }) {
   </View>;
 }
 
-function makeDrawer(member, groups) {
-  return function DrawerRoot() {
-    const content = useCallback((props) => <DrawerContent {...props} member={member} groups={groups} />, []);
-    return <Drawer.Navigator
-      drawerContent={content}
+// Bottom tabs: the five places people use most. Everything else is one tap away in "Menu",
+// which lists the same links as the website's dashboard sidebar.
+function makeTabs(member) {
+  return function Tabs() {
+    const insets = useSafeAreaInsets();
+    return <Tab.Navigator
       initialRouteName={member ? 'Dashboard' : 'Home'}
-      screenOptions={({ navigation }) => ({
-        headerStyle: { backgroundColor: colors.panel }, headerTintColor: colors.text, headerTitleStyle: { fontWeight: '800' },
-        drawerStyle: { backgroundColor: colors.panel, width: 300 }, sceneStyle: { backgroundColor: colors.space },
+      screenListeners={{ tabPress: () => { Haptics.selectionAsync().catch(() => {}); } }}
+      screenOptions={({ navigation, route }) => ({
+        headerStyle: { backgroundColor: colors.panel },
+        headerShadowVisible: false,
+        headerTitleStyle: { fontWeight: '800', fontSize: 17 },
+        headerTintColor: colors.text,
         headerRight: () => <HeaderRight member={member} navigation={navigation} />,
+        sceneStyle: { backgroundColor: colors.space },
+        tabBarActiveTintColor: colors.holoCyan,
+        tabBarInactiveTintColor: '#2a3550',
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '700', marginBottom: 2 },
+        tabBarStyle: { backgroundColor: colors.panel, borderTopColor: colors.panelBorder, height: 58 + insets.bottom, paddingTop: 6, paddingBottom: Math.max(insets.bottom, 6) },
+        tabBarIcon: ({ color, focused }) => <Glyph name={TAB_ICONS[route.name] || 'home'} size={focused ? 24 : 22} color={color} strokeWidth={focused ? 2.2 : 1.8} />,
       })}
     >
-      {member ? <>
-        <Drawer.Screen name="Dashboard" component={DashboardScreen} />
-        <Drawer.Screen name="Appointment Requests" component={AppointmentsScreen} />
-        <Drawer.Screen name="Profile" component={ProfileScreen} />
-        <Drawer.Screen name="Profile Settings" component={ProfileSettingsScreen} />
-        <Drawer.Screen name="Contacts" component={ContactsScreen} />
-        <Drawer.Screen name="AR Layout" component={ArLayoutScreen} />
-        <Drawer.Screen name="Magic Business Card" component={MagicBusinessCardScreen} />
-        <Drawer.Screen name="Track Orders" component={TrackScreen} />
-        <Drawer.Screen name="Settings" component={SettingsScreen} />
-        <Drawer.Screen name="Notifications" component={NotificationsScreen} />
-        <Drawer.Screen name="Device Protection Check" component={DeviceSafetyCheckScreen} />
-      </> : null}
-      <Drawer.Screen name="Home" component={HomeScreen} />
-      <Drawer.Screen name="Shop" component={ShopScreen} />
-      <Drawer.Screen name="Magic Poster" component={MagicArtScreen} />
-      <Drawer.Screen name="Magic Poster Cart" component={MagicPosterCartScreen} options={{ title: 'Cart' }} />
-      <Drawer.Screen name="Catalog" component={CatalogScreen} />
-      <Drawer.Screen name="Contact Us" component={ContactUsScreen} />
-      <Drawer.Screen name="About Us" component={AboutScreen} />
-      <Drawer.Screen name="What is HuntsWorld?" component={HuntsworldScreen} />
-      <Drawer.Screen name="FAQ" component={FaqScreen} />
-      <Drawer.Screen name="Chat Support" component={ChatScreen} />
-    </Drawer.Navigator>;
+      <Tab.Screen name="Home" component={HomeScreen} options={{ headerTitle: () => <BrandTitle />, headerTitleAlign: 'left' }} />
+      <Tab.Screen name="Shop" component={ShopScreen} options={{ title: 'Shop' }} />
+      <Tab.Screen name="Magic Poster" component={MagicArtScreen} options={{ title: 'Magic Poster', tabBarLabel: 'Posters' }} />
+      {member
+        ? <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
+        : <Tab.Screen name="Contact Us" component={ContactUsScreen} options={{ title: 'Contact Us', tabBarLabel: 'Contact' }} />}
+      <Tab.Screen name="Menu" component={MenuScreen} options={{ title: 'Menu' }} />
+    </Tab.Navigator>;
   };
 }
 
-const MemberDrawer = makeDrawer(true, [...MEMBER_GROUPS, EXPLORE_GROUP]);
-const PublicDrawer = makeDrawer(false, PUBLIC_GROUPS);
+const MemberTabs = makeTabs(true);
+const PublicTabs = makeTabs(false);
 
-// Screens reachable from both the public and logged-in areas (the website's
-// /c/:clientId, /magic-camera, /magic-camera-3d routes and the AR view).
-const sharedScreens = <>
+// Pages opened on top of the tabs (with a native back button). The same set the website's
+// dashboard sidebar and public menu link to.
+const memberPages = <>
+  <Stack.Screen name="Appointment Requests" component={AppointmentsScreen} />
+  <Stack.Screen name="Profile" component={ProfileScreen} />
+  <Stack.Screen name="Profile Settings" component={ProfileSettingsScreen} />
+  <Stack.Screen name="Contacts" component={ContactsScreen} />
+  <Stack.Screen name="AR Layout" component={ArLayoutScreen} />
+  <Stack.Screen name="Magic Business Card" component={MagicBusinessCardScreen} />
+  <Stack.Screen name="Track Orders" component={TrackScreen} />
+  <Stack.Screen name="Settings" component={SettingsScreen} />
+  <Stack.Screen name="Notifications" component={NotificationsScreen} />
+  <Stack.Screen name="Device Protection Check" component={DeviceSafetyCheckScreen} />
+  <Stack.Screen name="Contact Us" component={ContactUsScreen} />
+</>;
+
+const sharedPages = <>
+  <Stack.Screen name="Magic Poster Cart" component={MagicPosterCartScreen} options={{ title: 'Cart' }} />
+  <Stack.Screen name="Catalog" component={CatalogScreen} />
+  <Stack.Screen name="About Us" component={AboutScreen} />
+  <Stack.Screen name="What is HuntsWorld?" component={HuntsworldScreen} />
+  <Stack.Screen name="FAQ" component={FaqScreen} />
+  <Stack.Screen name="Chat Support" component={ChatScreen} />
   <Stack.Screen name="Card" component={PublicProfileScreen} options={{ title: 'HuntsTAG Card' }} />
   <Stack.Screen name="Open a Card" component={OpenCardScreen} />
   <Stack.Screen name="Magic Camera" component={MagicCameraScreen} />
@@ -223,36 +176,35 @@ export default function AppNavigator() {
     return () => sub.remove();
   }, [signInWithToken]);
 
-  if (restoring) return <View style={styles.splash}><Text style={styles.logo}>huntsTAG</Text><ActivityIndicator color={colors.holoCyan} /></View>;
-
-  return <NavigationContainer theme={navTheme} ref={navigationRef} linking={linking}>
-    <Stack.Navigator screenOptions={headerStyle}>
-      {!session ? <>
-        <Stack.Screen name="Public" component={PublicDrawer} options={{ headerShown: false }} />
-        <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Create account' }} />
-        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ title: 'Reset password' }} />
-        {sharedScreens}
-      </> : session.mustChangePassword ? <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ title: 'Secure your account', headerBackVisible: false }} />
-        : <>
-          <Stack.Screen name="Main" component={MemberDrawer} options={{ headerShown: false }} />
-          {sharedScreens}
-        </>}
-    </Stack.Navigator>
-  </NavigationContainer>;
+  return <View style={styles.flex}>
+    {restoring ? <View style={styles.blank} /> : (
+      <NavigationContainer theme={navTheme} ref={navigationRef} linking={linking}>
+        <Stack.Navigator screenOptions={stackOptions}>
+          {!session ? <>
+            <Stack.Screen name="Public" component={PublicTabs} options={{ headerShown: false }} />
+            <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Create account' }} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ title: 'Reset password' }} />
+            {sharedPages}
+          </> : session.mustChangePassword ? (
+            <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ title: 'Secure your account', headerBackVisible: false }} />
+          ) : <>
+            <Stack.Screen name="Main" component={MemberTabs} options={{ headerShown: false }} />
+            {memberPages}
+            {sharedPages}
+          </>}
+        </Stack.Navigator>
+      </NavigationContainer>
+    )}
+    <SplashOverlay ready={!restoring} />
+  </View>;
 }
 
 const styles = StyleSheet.create({
-  splash: { flex: 1, backgroundColor: colors.space, alignItems: 'center', justifyContent: 'center', gap: 18 }, logo: { color: colors.holoCyan, fontSize: 30, fontWeight: '900' },
-  drawer: { flex: 1, backgroundColor: colors.panel },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 18 }, brandMark: { width: 34, height: 34, borderRadius: 10, backgroundColor: colors.holoCyan },
-  brand: { color: colors.text, fontWeight: '900', fontSize: 18 }, brandSub: { color: colors.textDim, fontSize: 10, letterSpacing: 1.2, fontWeight: '700' },
-  search: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 14, marginBottom: 6, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.panelRaised, borderWidth: 1, borderColor: colors.panelBorder },
-  searchInput: { flex: 1, color: colors.text, height: 40, fontSize: 14 }, none: { color: colors.textDim, padding: 16 },
-  section: { color: colors.textDim, fontSize: 10, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase', paddingHorizontal: 18, paddingTop: 14, paddingBottom: 6 },
-  parent: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 12 }, parentText: { flex: 1, color: colors.text, fontWeight: '700', fontSize: 14 },
-  link: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 11, marginHorizontal: 8, borderRadius: 10 }, child: { paddingLeft: 34 },
-  linkActive: { backgroundColor: colors.panelRaised }, linkText: { color: colors.textDim, fontWeight: '700', fontSize: 14 },
-  footer: { borderTopWidth: 1, borderTopColor: colors.panelBorder, paddingTop: 8 }, mail: { color: colors.textDim, fontSize: 11, textAlign: 'center', paddingVertical: 8 },
+  flex: { flex: 1 },
+  blank: { flex: 1, backgroundColor: "#eaf1ff" },
+  brandTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  brandLogo: { width: 34, height: 22 },
+  brandText: { color: colors.text, fontWeight: '900', fontSize: 19, letterSpacing: -0.4 },
   headerRight: { flexDirection: 'row', gap: 10, marginRight: 12 },
 });

@@ -59,7 +59,7 @@ export default function MediaUploader({ title, description, hint, uri, type = 'i
         {extraPreview || (resolved ? (
           type === 'video' ? <NativeVideo uri={resolved} style={StyleSheet.absoluteFill} muted />
             : <Image source={{ uri: resolved }} style={StyleSheet.absoluteFill} resizeMode={contain ? 'contain' : 'cover'} />
-        ) : <View style={styles.empty}><Glyph name={kind === 'model' ? 'box' : 'image'} size={22} color={colors.textDim} /><Text style={styles.hint}>Nothing uploaded yet</Text></View>)}
+        ) : <View style={styles.empty}><Glyph name={kind === 'model' ? 'box' : 'image'} size={22} color={colors.text} /><Text style={styles.hint}>Nothing uploaded yet</Text></View>)}
       </View>
       <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
         <Button compact kind="secondary" icon="upload" title={busy ? 'Working…' : uri ? changeLabel || 'Change' : chooseLabel || 'Choose'} disabled={busy || disabled} onPress={choose} />

@@ -46,7 +46,7 @@ function Tile({ icon, tint, type, value, copyLabel, href, onCopy, copied }) {
     <View style={[styles.tileBadge, { backgroundColor: `${tint}26` }]}><Glyph name={icon} size={17} color={tint} /></View>
     <View style={{ flex: 1 }}><Text style={styles.tileType}>{type}</Text><Text style={styles.tileVal} numberOfLines={2}>{value}</Text></View>
     {onCopy ? <Pressable hitSlop={8} onPress={() => onCopy(value, copyLabel)} style={styles.tileAct}><Glyph name={copied ? 'check' : 'copy'} size={15} color={copied ? colors.holoCyan : colors.textDim} /></Pressable> : null}
-    {href ? <Pressable hitSlop={8} onPress={() => Linking.openURL(href)} style={styles.tileAct}><Glyph name="arrowUpRight" size={15} /></Pressable> : null}
+    {href ? <Pressable hitSlop={8} onPress={() => Linking.openURL(href)} style={styles.tileAct}><Glyph name="arrowUpRight" size={15} color="#edeff3" /></Pressable> : null}
   </View>;
 }
 
@@ -174,8 +174,8 @@ export default function PublicProfileScreen({ navigation, route }) {
           <View style={styles.statusChip}><View style={[styles.pulse, { backgroundColor: accentColor }]} /><Text style={styles.statusText}>HuntsTAG</Text></View>
           <View style={styles.topActions}>
             {profile.arEnabled ? <Pressable style={[styles.arBtn, { borderColor: accentColor }]} onPress={() => navigation.navigate('AR Experience', { clientId, cardNumber })}><Glyph name="layers" size={14} color={accentColor} /><Text style={[styles.arText, { color: accentColor }]}>3D AR</Text></Pressable> : null}
-            <Pressable style={styles.pillBtn} onPress={() => setThemeOpen(true)}><Glyph name="palette" size={16} /><View style={[styles.swatchDot, { backgroundColor: accentColor }]} /></Pressable>
-            <Pressable style={styles.pillBtn} onPress={() => setQrOpen(true)}><Glyph name="qr" size={16} /></Pressable>
+            <Pressable style={styles.pillBtn} onPress={() => setThemeOpen(true)}><Glyph name="palette" size={16} color="#edeff3" /><View style={[styles.swatchDot, { backgroundColor: accentColor }]} /></Pressable>
+            <Pressable style={styles.pillBtn} onPress={() => setQrOpen(true)}><Glyph name="qr" size={16} color="#edeff3" /></Pressable>
           </View>
         </View>
 
@@ -201,8 +201,8 @@ export default function PublicProfileScreen({ navigation, route }) {
 
         <View style={styles.primary}>
           <Pressable style={[styles.exchange, { backgroundColor: accentColor }]} onPress={openExchange}><Glyph name="exchange" size={18} color="#fff" /><Text style={styles.exchangeText}>Exchange Contact</Text></Pressable>
-          <Pressable style={styles.secondaryAct} onPress={saveContact}><Glyph name="download" size={17} /><Text style={styles.secondaryText}>Save</Text></Pressable>
-          <Pressable style={styles.shareAct} onPress={share}><Glyph name="share" size={18} /></Pressable>
+          <Pressable style={styles.secondaryAct} onPress={saveContact}><Glyph name="download" size={17} color="#edeff3" /><Text style={styles.secondaryText}>Save</Text></Pressable>
+          <Pressable style={styles.shareAct} onPress={share}><Glyph name="share" size={18} color="#edeff3" /></Pressable>
         </View>
 
         <Tabs tabs={tabs} value={currentKey} onChange={setTab} style={{ marginHorizontal: 16 }} />

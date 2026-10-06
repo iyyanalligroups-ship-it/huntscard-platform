@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../auth/AuthContext.js';
 import { api } from '../api/client.js';
 import { Button, Card, Field, Message, PasswordField, Screen, Title, ui } from '../components/ui.js';
@@ -39,9 +39,9 @@ export default function LoginScreen({ navigation }) {
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Screen contentStyle={styles.content}>
-        <View style={styles.brand}><Text style={styles.logo}>huntsTAG</Text><Text style={styles.tagline}>Your smart identity, in your pocket.</Text></View>
+        <View style={styles.brand}><View style={styles.logoTile}><Image source={require('../../assets/wolf-source.png')} style={styles.logoImg} resizeMode="contain" /></View><Text style={styles.logo}>HuntsTAG</Text><Text style={styles.tagline}>Your smart identity, in your pocket.</Text></View>
         <Card style={styles.form}>
-          <Title subtitle="Use the same account as the huntsTAG client website.">Welcome back</Title>
+          <Title subtitle="Use the same account as the HuntsTAG client website.">Welcome back</Title>
           <View style={styles.tabs}>
             <Button compact title="Password" kind={mode === 'password' ? 'primary' : 'secondary'} onPress={() => setMode('password')} style={styles.tab} />
             <Button compact title="Phone OTP" kind={mode === 'otp' ? 'primary' : 'secondary'} onPress={() => setMode('otp')} style={styles.tab} />
@@ -66,6 +66,8 @@ export default function LoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  logoTile: { width: 76, height: 76, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.panelBorder, marginBottom: 10 },
+  logoImg: { width: 56, height: 36 },
   flex: { flex: 1, backgroundColor: colors.space },
   content: { flexGrow: 1, justifyContent: 'center' },
   brand: { alignItems: 'center', marginBottom: 10 },

@@ -103,7 +103,7 @@ export default function TrackScreen({ navigation }) {
         </View>
         <Steps steps={isCard ? cardSteps(selected, profile) : posterSteps(selected)} />
         <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-          <Glyph name="truck" size={13} color={colors.textDim} />
+          <Glyph name="truck" size={13} color={colors.text} />
           <Text style={styles.dim}>{selected.trackingId ? `Shipment ${selected.trackingId}` : 'Shipment is being prepared'}</Text>
         </View>
         <Button kind="secondary" compact title="View purchase history" onPress={() => navigation.navigate('Shop', { tab: isCard ? 'card' : 'poster' })} style={{ alignSelf: 'flex-start' }} />

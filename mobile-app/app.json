@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "huntsTAG",
+    "name": "HuntsTAG",
     "slug": "huntstag-client",
     "version": "0.1.0",
     "extra": {
@@ -17,16 +17,27 @@
       "expo-camera",
       "expo-contacts",
       "expo-image-picker",
-      "expo-document-picker"
+      "expo-document-picker",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 240,
+          "resizeMode": "contain",
+          "backgroundColor": "#eaf1ff"
+        }
+      ]
     ],
     "scheme": "huntstag",
     "ios": {
       "infoPlist": {
-        "NSCameraUsageDescription": "huntsTAG uses the camera for Magic Camera, AR and QR scanning.",
-        "NSContactsUsageDescription": "huntsTAG imports and saves contacts.",
-        "NSPhotoLibraryUsageDescription": "huntsTAG uploads your photos, banners and card artwork."
+        "NSCameraUsageDescription": "HuntsTAG uses the camera for Magic Camera, AR and QR scanning.",
+        "NSContactsUsageDescription": "HuntsTAG imports and saves contacts.",
+        "NSPhotoLibraryUsageDescription": "HuntsTAG uploads your photos, banners and card artwork.",
+        "ITSAppUsesNonExemptEncryption": false
       },
-      "bundleIdentifier": "com.huntstag.client"
+      "bundleIdentifier": "com.huntstag.client",
+      "icon": "./assets/icon-ios.png"
     },
     "android": {
       "permissions": [
@@ -35,8 +46,18 @@
         "android.permission.WRITE_CONTACTS",
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.mobileapp"
+      "package": "com.mobileapp",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#eaf1ff"
+      }
     },
-    "owner": "charles_huntsworld"
+    "owner": "charles_huntsworld",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#f4f7fd",
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
   }
 }

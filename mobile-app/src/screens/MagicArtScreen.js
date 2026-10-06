@@ -77,7 +77,7 @@ export default function MagicArtScreen({ navigation }) {
 const styles = StyleSheet.create({
   sizeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sizeBadge: { color: '#fff', backgroundColor: '#1565ff', fontSize: 10, fontWeight: '800', letterSpacing: 0.5, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, overflow: 'hidden' },
-  sizeText: { color: '#8b93a3', fontSize: 12, fontWeight: '600' },
+  sizeText: { color: colors.textDim, fontSize: 12, fontWeight: '600' },
   head: { gap: 10 }, sub: { color: colors.textDim, lineHeight: 20, fontSize: 13 },
   name: { color: colors.text, fontWeight: '800', fontSize: 18 }, desc: { color: colors.textDim, lineHeight: 19, fontSize: 13 },
   buy: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },

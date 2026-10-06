@@ -57,7 +57,7 @@ export default function ChatScreen({ navigation }) {
       </View>)}
     </ScrollView>
     <View style={styles.composer}>
-      <TextInput value={text} onChangeText={setText} placeholder="Type a message…" placeholderTextColor={colors.textDim} style={styles.input} maxLength={4000} multiline />
+      <TextInput value={text} onChangeText={setText} placeholder="Type a message…" placeholderTextColor="#5b6783" style={styles.input} maxLength={4000} multiline />
       <Button compact title={sending ? '…' : 'Send'} onPress={send} disabled={sending || !text.trim()} />
     </View>
   </KeyboardAvoidingView>;

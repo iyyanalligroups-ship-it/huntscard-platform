@@ -12,7 +12,7 @@ function InfoRow({ icon, text, label, href, onCopy }) {
   const body = <>
     <View style={styles.rowIcon}>{text ? <Text style={styles.rowIconText}>{text}</Text> : <Glyph name={icon} size={15} color={colors.holoCyan} />}</View>
     <Text style={styles.rowLabel} numberOfLines={2}>{label}</Text>
-    {href ? <Glyph name="arrowUpRight" size={15} color={colors.textDim} /> : null}
+    {href ? <Glyph name="arrowUpRight" size={15} color={colors.text} /> : null}
   </>;
   return href ? <Pressable style={styles.row} onPress={() => Linking.openURL(href)} onLongPress={onCopy}>{body}</Pressable> : <View style={styles.row}>{body}</View>;
 }
@@ -84,7 +84,7 @@ export default function ProfileScreen({ navigation }) {
     <Card style={styles.preview}>
       <View style={styles.cover}>
         {profile.bannerUrl && !bannerFailed ? <Image source={{ uri: resolveAssetUrl(profile.bannerUrl) }} style={StyleSheet.absoluteFill} resizeMode="cover" onError={() => setBannerFailed(true)} />
-          : <Pressable style={styles.bannerEmpty} onPress={() => navigation.navigate('Profile Settings')}><Glyph name="image" size={24} color={colors.textDim} /><Text style={styles.link}>Upload a banner</Text></Pressable>}
+          : <Pressable style={styles.bannerEmpty} onPress={() => navigation.navigate('Profile Settings')}><Glyph name="image" size={24} color={colors.text} /><Text style={styles.link}>Upload a banner</Text></Pressable>}
         <View style={styles.avatarWrap}><Avatar uri={resolveAssetUrl(profile.photoUrl)} name={initialsOf(profile.fullName)} size={86} style={styles.avatar} /></View>
       </View>
       <View style={styles.head}>

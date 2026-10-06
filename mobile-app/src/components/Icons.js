@@ -12,7 +12,7 @@ function IconBase({ color, size, children }) {
   );
 }
 
-export function DashboardIcon({ color = '#edeff3', size = 22 }) {
+export function DashboardIcon({ color = '#0b1630', size = 22 }) {
   return (
     <IconBase color={color} size={size}>
       <Rect x="3" y="3" width="7" height="9" rx="1.5" />
@@ -23,7 +23,7 @@ export function DashboardIcon({ color = '#edeff3', size = 22 }) {
   );
 }
 
-export function ShieldIcon({ color = '#edeff3', size = 22 }) {
+export function ShieldIcon({ color = '#0b1630', size = 22 }) {
   return (
     <IconBase color={color} size={size}>
       <Path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6l7-3Z" />
@@ -50,7 +50,7 @@ export function WarnCircleIcon({ color = '#e8b559', size = 20 }) {
   );
 }
 
-export function UnknownCircleIcon({ color = '#8b93a3', size = 20 }) {
+export function UnknownCircleIcon({ color = '#27324d', size = 20 }) {
   return (
     <IconBase color={color} size={size}>
       <Circle cx="12" cy="12" r="9" />
@@ -60,7 +60,7 @@ export function UnknownCircleIcon({ color = '#8b93a3', size = 20 }) {
   );
 }
 
-export function ChevronRightIcon({ color = '#8b93a3', size = 18 }) {
+export function ChevronRightIcon({ color = '#27324d', size = 18 }) {
   return (
     <IconBase color={color} size={size}>
       <Path d="M9 6l6 6-6 6" />
@@ -68,7 +68,7 @@ export function ChevronRightIcon({ color = '#8b93a3', size = 18 }) {
   );
 }
 
-export function MenuIcon({ color = '#edeff3', size = 24 }) {
+export function MenuIcon({ color = '#0b1630', size = 24 }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
       <Path d="M4 6h16M4 12h16M4 18h16" />

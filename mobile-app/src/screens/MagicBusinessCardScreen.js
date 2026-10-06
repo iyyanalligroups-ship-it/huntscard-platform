@@ -134,7 +134,7 @@ export default function MagicBusinessCardScreen({ navigation }) {
   });
 
   const downloadQrOnly = guard('qr', async () => {
-    await downloadAndShare({ url: qrUrl, filename: `huntsTAG-ar-qr-${clientId}.png`, mimeType: 'image/png', dialogTitle: 'AR QR' });
+    await downloadAndShare({ url: qrUrl, filename: `HuntsTAG-ar-qr-${clientId}.png`, mimeType: 'image/png', dialogTitle: 'AR QR' });
   });
 
   const picker = cards && cards.length > 1 ? <Tabs value={selected} onChange={setSelected} tabs={cards.map((c) => ({ key: c.cardNumber, label: `Card ${c.cardNumber}${c.label ? ` · ${c.label}` : c.variantName ? ` · ${c.variantName}` : ''}` }))} /> : null;

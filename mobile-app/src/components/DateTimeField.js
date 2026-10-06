@@ -47,9 +47,9 @@ export default function DateTimeField({ label, value, onChange, mode = 'date', m
     <View style={{ gap: 7 }}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <Pressable onPress={open} style={styles.input}>
-        <Glyph name="calendar" size={16} color={colors.textDim} />
+        <Glyph name="calendar" size={16} color={colors.text} />
         <Text style={{ color: text ? colors.text : colors.textDim, fontSize: 15, flex: 1 }}>{text || placeholder}</Text>
-        {clearable && value ? <Pressable hitSlop={10} onPress={() => onChange(null)}><Glyph name="close" size={16} color={colors.textDim} /></Pressable> : null}
+        {clearable && value ? <Pressable hitSlop={10} onPress={() => onChange(null)}><Glyph name="close" size={16} color={colors.text} /></Pressable> : null}
       </Pressable>
       {Platform.OS === 'ios' ? (
         <Modal visible={iosOpen} transparent animationType="slide" onRequestClose={() => setIosOpen(false)}>

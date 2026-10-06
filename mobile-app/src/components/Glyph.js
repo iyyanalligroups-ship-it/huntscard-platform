@@ -5,6 +5,8 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 // drawn from raw path data so there is still no icon-font dependency.
 const GLYPHS = {
   home: ['M3 10.5 12 3l9 7.5', 'M5 9.5V21h14V9.5'],
+  menu: ['M4 6h16', 'M4 12h16', 'M4 18h16'],
+  grid: [{ rect: [3, 3, 7, 7, 1.5] }, { rect: [14, 3, 7, 7, 1.5] }, { rect: [3, 14, 7, 7, 1.5] }, { rect: [14, 14, 7, 7, 1.5] }],
   dashboard: [{ rect: [3, 3, 7, 9, 1.5] }, { rect: [14, 3, 7, 5, 1.5] }, { rect: [14, 12, 7, 9, 1.5] }, { rect: [3, 16, 7, 5, 1.5] }],
   user: ['M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5', { circle: [12, 8, 4] }],
   edit: ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'],
@@ -74,7 +76,7 @@ const GLYPHS = {
   clock: [{ circle: [12, 12, 10] }, 'M12 6v6l4 2'],
 };
 
-export function Glyph({ name, color = '#edeff3', size = 20, strokeWidth = 1.8 }) {
+export function Glyph({ name, color = '#0b1630', size = 20, strokeWidth = 1.8 }) {
   const glyph = GLYPHS[name] || GLYPHS.info;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">

@@ -88,7 +88,7 @@ export default function ContactsScreen({ navigation }) {
     setImportResult(await api.importContacts(mapped)); await load();
   });
 
-  const exportVcf = run('vcf', () => downloadAndShare({ path: '/api/profile/contacts/export', filename: 'huntsTAG-contacts.vcf', mimeType: 'text/vcard', dialogTitle: 'Export contacts' }));
+  const exportVcf = run('vcf', () => downloadAndShare({ path: '/api/profile/contacts/export', filename: 'HuntsTAG-contacts.vcf', mimeType: 'text/vcard', dialogTitle: 'Export contacts' }));
 
   const importExcel = run('excel', async () => {
     const result = await DocumentPicker.getDocumentAsync({ type: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'text/csv', 'text/comma-separated-values', '*/*'], copyToCacheDirectory: true });
@@ -102,12 +102,12 @@ export default function ContactsScreen({ navigation }) {
   });
 
   const exportExcel = run('xlsx', () => writeAndShare({
-    filename: 'huntsTAG-contacts.xlsx', encoding: 'base64', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', dialogTitle: 'Export contacts',
+    filename: 'HuntsTAG-contacts.xlsx', encoding: 'base64', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', dialogTitle: 'Export contacts',
     content: sheetToXlsxBase64(contacts.map((c) => ({ 'First Name': c.firstName || '', 'Last Name': c.lastName || '', Phone: c.phone, Email: c.email || '', Company: c.org || '', Address: c.address || '', Notes: c.notes || '' }))),
   }));
 
   const downloadTemplate = run('template', () => writeAndShare({
-    filename: 'huntsTAG-contacts-template.xlsx', encoding: 'base64', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', dialogTitle: 'Contacts template',
+    filename: 'HuntsTAG-contacts-template.xlsx', encoding: 'base64', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', dialogTitle: 'Contacts template',
     content: sheetToXlsxBase64([{ 'First Name': 'Jane', 'Last Name': 'Doe', Phone: '+91 98765 43210', Email: 'jane@example.com', Company: 'Acme Inc', Address: '123 Main St, Bengaluru', Notes: 'Met at HuntsTAG launch event' }]),
   }));
 

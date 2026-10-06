@@ -61,7 +61,7 @@ export function CardHistory({ requests, plans }) {
           </View>
           <View style={{ alignItems: 'flex-end', gap: 6 }}>
             <Pill>{r.status}</Pill>
-            <Glyph name={open ? 'chevronUp' : 'chevronDown'} size={16} color={colors.textDim} />
+            <Glyph name={open ? 'chevronUp' : 'chevronDown'} size={16} color={colors.text} />
           </View>
         </Pressable>
         {r.paymentStatus === 'paid' ? <Button compact kind="secondary" icon="download" title={busyId === r._id ? 'Preparing…' : 'Invoice'} disabled={busyId === r._id} onPress={() => invoice(r)} style={{ alignSelf: 'flex-start' }} /> : null}
@@ -136,7 +136,7 @@ export function PosterOrders({ onBrowse }) {
             <Text style={styles.strong}>{title}{items.length > 1 ? ` + ${items.length - 1} more` : totalQty > 1 ? ` × ${totalQty}` : ''}</Text>
             <Text style={styles.dim}>{o.orderNumber} · Paid</Text>
           </View>
-          <View style={{ alignItems: 'flex-end', gap: 6 }}><Pill>{status}</Pill><Glyph name={open ? 'chevronUp' : 'chevronDown'} size={16} color={colors.textDim} /></View>
+          <View style={{ alignItems: 'flex-end', gap: 6 }}><Pill>{status}</Pill><Glyph name={open ? 'chevronUp' : 'chevronDown'} size={16} color={colors.text} /></View>
         </Pressable>
         <Button compact kind="secondary" icon="download" title={busyId === o._id ? 'Preparing…' : 'Invoice'} disabled={busyId === o._id} onPress={() => invoice(o)} style={{ alignSelf: 'flex-start' }} />
         {open ? <View style={{ gap: 12 }}>

@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
-import { Image, PanResponder, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { resolveAssetUrl } from '../api/client.js';
 import { colors } from '../theme/colors.js';
 
@@ -8,29 +9,38 @@ export const POSITION_MAX = 160;
 const RANGE = POSITION_MAX - POSITION_MIN;
 const clamp = (v) => Math.round(Math.max(POSITION_MIN, Math.min(POSITION_MAX, v)));
 
-function Handle({ item, canvasW, canvasH, onMove, onGrant, onRelease }) {
+function Handle({ item, canvasW, canvasH, selected, onMove, onGrant, onRelease, onSelect }) {
   const start = useRef({ x: 0, y: 0 });
-  const live = useRef({ item, canvasW, canvasH, onMove });
-  live.current = { item, canvasW, canvasH, onMove };
-  const responder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => !live.current.item.fixed,
-    onMoveShouldSetPanResponder: () => !live.current.item.fixed,
-    onPanResponderTerminationRequest: () => false,
-    onPanResponderGrant: () => { start.current = { x: live.current.item.pos.x, y: live.current.item.pos.y }; onGrant?.(); },
-    onPanResponderMove: (_, g) => {
+  // The gesture is created once; everything it needs is read from this ref, so re-renders during a drag
+  // (every move updates the position) never replace it mid-gesture.
+  const live = useRef({});
+  live.current = { item, canvasW, canvasH, onMove, onGrant, onRelease, onSelect };
+  const gesture = useMemo(() => Gesture.Pan()
+    .runOnJS(true)
+    .minDistance(0)
+    .enabled(true)
+    .onBegin(() => {
+      const { item: it } = live.current;
+      if (it.fixed) return;
+      start.current = { x: it.pos.x, y: it.pos.y };
+      live.current.onSelect?.(it.key);
+      live.current.onGrant?.();
+    })
+    .onUpdate((e) => {
       const { canvasW: w, canvasH: h, onMove: move, item: it } = live.current;
-      move(it.key, { x: clamp(start.current.x + (g.dx / w) * RANGE), y: clamp(start.current.y + (g.dy / h) * RANGE) });
-    },
-    onPanResponderRelease: () => onRelease?.(),
-    onPanResponderTerminate: () => onRelease?.(),
-  }), [onGrant, onRelease]);
+      if (it.fixed) return;
+      move(it.key, { x: clamp(start.current.x + (e.translationX / w) * RANGE), y: clamp(start.current.y + (e.translationY / h) * RANGE) });
+    })
+    .onFinalize(() => live.current.onRelease?.()), []);
 
   const left = ((item.pos.x - POSITION_MIN) / RANGE) * canvasW;
   const top = ((item.pos.y - POSITION_MIN) / RANGE) * canvasH;
   return (
-    <View {...responder.panHandlers} style={[styles.handle, { left: left - 28, top: top - 14 }, item.fixed && styles.handleFixed]}>
-      <Text style={[styles.handleText, item.fixed && { color: '#ffffff' }]} numberOfLines={1}>{item.label}</Text>
-    </View>
+    <GestureDetector gesture={gesture}>
+      <View collapsable={false} style={[styles.handle, { left: left - 34, top: top - 18 }, item.fixed && styles.handleFixed, selected && styles.handleOn]}>
+        <Text style={[styles.handleText, (item.fixed || selected) && { color: '#ffffff' }]} numberOfLines={1}>{item.label}</Text>
+      </View>
+    </GestureDetector>
   );
 }
 
@@ -39,7 +49,7 @@ function Handle({ item, canvasW, canvasH, onMove, onGrant, onRelease }) {
 // and every AR element is a draggable chip. Positions are the exact same
 // {x, y} percentages the backend stores, so layouts stay interchangeable with
 // the web editor.
-export default function ArLayoutCanvas({ cardUri, aspect, items, onDragPosition, onDragStateChange }) {
+export default function ArLayoutCanvas({ cardUri, aspect, items, selectedKey, onSelect, onDragPosition, onDragStateChange }) {
   const [width, setWidth] = useState(0);
   const cardW = (width * 100) / RANGE;
   const cardH = cardW / aspect;
@@ -52,7 +62,7 @@ export default function ArLayoutCanvas({ cardUri, aspect, items, onDragPosition,
         <View style={[styles.card, { left: cardLeft, top: cardTop, width: cardW, height: cardH }]}>
           {cardUri ? <Image source={{ uri: resolveAssetUrl(cardUri) }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
         </View>
-        {items.map((item) => <Handle key={item.key} item={item} canvasW={width} canvasH={canvasH} onMove={onDragPosition} onGrant={() => onDragStateChange?.(true)} onRelease={() => onDragStateChange?.(false)} />)}
+        {items.map((item) => <Handle key={item.key} item={item} selected={item.key === selectedKey} onSelect={onSelect} canvasW={width} canvasH={canvasH} onMove={onDragPosition} onGrant={() => onDragStateChange?.(true)} onRelease={() => onDragStateChange?.(false)} />)}
       </> : null}
     </View>
   );
@@ -61,7 +71,8 @@ export default function ArLayoutCanvas({ cardUri, aspect, items, onDragPosition,
 const styles = StyleSheet.create({
   canvas: { width: '100%', backgroundColor: '#0c0f16', borderRadius: 14, borderWidth: 1, borderColor: colors.panelBorder, overflow: 'hidden' },
   card: { position: 'absolute', borderRadius: 8, overflow: 'hidden', backgroundColor: colors.panelRaised, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  handle: { position: 'absolute', minWidth: 56, height: 28, paddingHorizontal: 8, borderRadius: 14, backgroundColor: 'rgba(21,101,255,0.22)', borderWidth: 1, borderColor: colors.holoCyan, alignItems: 'center', justifyContent: 'center' },
+  handle: { position: 'absolute', minWidth: 68, height: 36, paddingHorizontal: 12, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 2, borderColor: colors.holoCyan, alignItems: 'center', justifyContent: 'center' },
   handleFixed: { backgroundColor: colors.holoCyan },
-  handleText: { color: colors.holoCyan, fontSize: 11, fontWeight: '800' },
+  handleOn: { backgroundColor: '#ea6a12', borderColor: '#ffffff' },
+  handleText: { color: colors.holoCyan, fontSize: 12, fontWeight: '800' },
 });

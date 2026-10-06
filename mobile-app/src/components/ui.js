@@ -4,14 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Glyph } from './Glyph.js';
 import { colors, radius } from '../theme/colors.js';
 
-export function Screen({ children, refreshing, onRefresh, contentStyle, scroll = true }) {
-  if (!scroll) return <SafeAreaView style={styles.safe} edges={['bottom']}>{children}</SafeAreaView>;
+export function Screen({ children, refreshing, onRefresh, contentStyle, scroll = true, scrollEnabled = true }) {
+  if (!scroll) return <SafeAreaView style={styles.safe} edges={[]}>{children}</SafeAreaView>;
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
+    <SafeAreaView style={styles.safe} edges={[]}>
       <ScrollView
         style={styles.safe}
         contentContainerStyle={[styles.screen, contentStyle]}
         keyboardShouldPersistTaps="handled"
+        scrollEnabled={scrollEnabled}
         refreshControl={onRefresh ? <RefreshControl refreshing={Boolean(refreshing)} onRefresh={onRefresh} tintColor={colors.holoCyan} colors={[colors.holoCyan]} /> : undefined}
       >
         {children}
@@ -49,7 +50,7 @@ export function Field({ label, multiline, style, hint, error, right, ...props })
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <View>
         <TextInput
-          placeholderTextColor={colors.textDim}
+          placeholderTextColor="#5b6783"
           style={[styles.input, multiline && styles.multiline, error && styles.inputError, right && { paddingRight: 46 }]}
           multiline={multiline}
           textAlignVertical={multiline ? 'top' : 'center'}
@@ -70,7 +71,7 @@ export function PasswordField({ label, ...props }) {
       secureTextEntry={!visible}
       autoCapitalize="none"
       autoCorrect={false}
-      right={<Pressable hitSlop={10} onPress={() => setVisible((v) => !v)}><Glyph name={visible ? 'eyeOff' : 'eye'} color={colors.textDim} size={18} /></Pressable>}
+      right={<Pressable hitSlop={10} onPress={() => setVisible((v) => !v)}><Glyph name={visible ? 'eyeOff' : 'eye'} color={colors.text} size={18} /></Pressable>}
       {...props}
     />
   );
@@ -125,7 +126,7 @@ export function Tabs({ tabs, value, onChange, style }) {
         const active = tab.key === value;
         return (
           <Pressable key={tab.key} onPress={() => onChange(tab.key)} style={[styles.tab, active && styles.tabActive]}>
-            {tab.icon ? <Glyph name={tab.icon} size={14} color={active ? '#ffffff' : colors.textDim} /> : null}
+            {tab.icon ? <Glyph name={tab.icon} size={14} color={active ? '#ffffff' : colors.text} /> : null}
             <Text style={[styles.tabText, active && styles.tabTextActive]}>{tab.label}</Text>
           </Pressable>
         );
@@ -186,7 +187,7 @@ export function SelectField({ label, value, options, onChange, placeholder = 'Se
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <Pressable disabled={disabled} onPress={() => { setQuery(''); setOpen(true); }} style={[styles.input, styles.select, disabled && styles.disabled]}>
         <Text style={{ color: current ? colors.text : colors.textDim, fontSize: 15, flex: 1 }} numberOfLines={1}>{current ? current.label : placeholder}</Text>
-        <Glyph name="chevronDown" size={16} color={colors.textDim} />
+        <Glyph name="chevronDown" size={16} color={colors.text} />
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <View style={styles.overlay}>
@@ -220,7 +221,7 @@ export function Accordion({ title, children, defaultOpen = false, index }) {
       <Pressable onPress={() => setOpen((v) => !v)} style={styles.accordionHead}>
         {index != null ? <Text style={styles.accordionIndex}>{String(index + 1).padStart(2, '0')}</Text> : null}
         <Text style={[styles.accordionTitle, { flex: 1 }]}>{title}</Text>
-        <Glyph name={open ? 'chevronUp' : 'chevronDown'} size={16} color={colors.textDim} />
+        <Glyph name={open ? 'chevronUp' : 'chevronDown'} size={16} color={colors.text} />
       </Pressable>
       {open ? <View style={{ paddingTop: 10 }}>{children}</View> : null}
     </View>

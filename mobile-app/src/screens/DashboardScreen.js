@@ -147,7 +147,7 @@ export default function DashboardScreen({ navigation }) {
       </View>
       {cards.length > 1 ? <SelectField value={selectedCardNumber ?? ''} onChange={(value) => setSelectedCardNumber(Number(value))} options={cards.map((card) => ({ value: card.cardNumber, label: `Card ${card.cardNumber} · ${card.label || card.variantName || card.planName || 'Untitled'}` }))} /> : null}
       {designUri ? <CardPreview uri={designUri} aspect={aspect} style={{ maxHeight: 320 }} qrUri={magicCard?.imageUrl && profile?.clientId ? publicUrl(`/api/public/qr/${profile.clientId}?type=ar&card=${selectedCardNumber}&fg=000000&bg=ffffff`) : null} qrPos={qrPos} />
-        : <View style={[styles.preview, { aspectRatio: aspect }]}><View style={styles.previewEmpty}><Text style={styles.brand}>huntsTAG</Text><Text style={styles.dim}>Your card design will appear here</Text></View></View>}
+        : <View style={[styles.preview, { aspectRatio: aspect }]}><View style={styles.previewEmpty}><Text style={styles.brand}>HuntsTAG</Text><Text style={styles.dim}>Your card design will appear here</Text></View></View>}
     </Card>
 
     <Card style={styles.zing}>

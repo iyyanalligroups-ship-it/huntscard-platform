@@ -66,7 +66,7 @@ async function request(path, { method = 'GET', body, auth = true, form = false }
       body: form ? body : body == null ? undefined : JSON.stringify(body),
     });
   } catch {
-    throw new Error(`Cannot reach the huntsTAG API at ${API_URL}. Check EXPO_PUBLIC_API_URL and that the backend is running.`);
+    throw new Error(`Cannot reach the HuntsTAG API at ${API_URL}. Check EXPO_PUBLIC_API_URL and that the backend is running.`);
   }
 
   const text = await response.text();

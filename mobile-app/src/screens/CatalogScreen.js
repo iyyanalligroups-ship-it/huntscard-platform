@@ -20,7 +20,7 @@ function EntryCard({ entry, onShop }) {
         {entry.frontImageUrl ? <TapToPlayMedia imageUrl={entry.frontImageUrl} videoUrl={entry.videoUrl} style={vertical ? { flex: 1, aspectRatio: 3 / 4.24 } : { aspectRatio: 8 / 5 }} /> : null}
         {entry.backImageUrl ? <Image source={{ uri: resolveAssetUrl(entry.backImageUrl) }} style={[{ borderRadius: 12, backgroundColor: colors.panelRaised }, vertical ? { flex: 1, aspectRatio: 3 / 4.24 } : { width: '100%', aspectRatio: 8 / 5 }]} resizeMode="cover" /> : null}
       </View>
-    ) : <View style={styles.nophoto}><Glyph name="card" size={32} color={colors.textDim} /><Text style={styles.note}>No photo yet</Text></View>}
+    ) : <View style={styles.nophoto}><Glyph name="card" size={32} color={colors.text} /><Text style={styles.note}>No photo yet</Text></View>}
     {specs.length ? <View style={{ gap: 4 }}>
       <Text style={styles.label}>Printing & Material Details:</Text>
       {specs.map(([label, value]) => <Text key={label} style={styles.spec}><Text style={{ color: colors.textDim }}>{label}: </Text>{value}</Text>)}
