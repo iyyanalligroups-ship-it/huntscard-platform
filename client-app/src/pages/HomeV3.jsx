@@ -6,7 +6,6 @@ import {
   FileText, PackageSearch, Send, CreditCard, Image as ImageIcon, Cloud, FileSpreadsheet, Download, StickyNote, Frame, Upload, Volume2, Crown, Bug, Settings, ShieldCheck, Zap, MessageSquare, Radio, UserPlus, Headphones, Video, Box, Move, ScanLine, Users, Palette, Quote, Phone, Mail, Globe, Stethoscope,
   Store, Building2, Scissors, Calculator, Camera, Sparkles,
 } from 'lucide-react';
-import ArModelViewer from '../components/ArModelViewer.jsx';
 import { api, isLoggedIn, API_URL } from '../api.js';
 import { createMotion as gsap_context, dynamicMotion, planTilt, audienceSwap, motionAllowed } from '../homeV3Motion.js';
 import { SITE, TESTIMONIALS, DEMO_PROFILE_URL, whatsappLink, trackEvent } from '../siteConfig.js';
@@ -523,8 +522,10 @@ export default function HomeV3() {
                 <i className="hv3-tone-blue"><CalendarCheck size={16} /></i>
               </div></div>
               <div className="ar-panel ar-p-model"><div className="ar-float">
-                <ArModelViewer src="/assets/models/ar-demo.glb" poster="/assets/huntsTAG-wolf-logo.png" />
-                <small>Drag to rotate</small>
+                <div className="ar-spin"><div className="ar-spin-cube">
+                  <i className="f1" /><i className="f2" /><i className="f3" /><i className="f4" /><i className="f5" /><i className="f6" />
+                </div></div>
+                <small>3D model</small>
               </div></div>
               <div className="ar-cardwrap">
                 <img className="ar-card" src="/assets/photos/card-black.jpg" alt="" loading="lazy" decoding="async" />

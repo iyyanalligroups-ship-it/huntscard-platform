@@ -188,3 +188,15 @@ html body .sh-theme .hv3 .hv3-ar-steps span { color: #b9c8e6 !important; -webkit
 .ar-mv { height: 200px; }
 @media (max-width: 560px) { .ar-p-model { top: 22%; } .ar-mv { height: 150px; } }
 .ar-p-model small { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); margin: 0; white-space: nowrap; }
+
+/* Infinite rotating 3D cube (replaces the avatar model) */
+.ar-spin { width: 100%; height: 130px; display: grid; place-items: center; perspective: 600px; }
+.ar-spin-cube { position: relative; width: 64px; height: 64px; transform-style: preserve-3d; animation: ar-spin-cube 9s linear infinite; }
+.ar-spin-cube i { position: absolute; inset: 0; border: 1.5px solid rgba(160,200,255,.9); background: linear-gradient(135deg, rgba(80,130,255,.45), rgba(150,90,255,.35)); box-shadow: inset 0 0 14px rgba(120,170,255,.5), 0 0 12px rgba(100,150,255,.35); }
+.ar-spin-cube .f1 { transform: translateZ(32px); }
+.ar-spin-cube .f2 { transform: rotateY(180deg) translateZ(32px); }
+.ar-spin-cube .f3 { transform: rotateY(90deg) translateZ(32px); }
+.ar-spin-cube .f4 { transform: rotateY(-90deg) translateZ(32px); }
+.ar-spin-cube .f5 { transform: rotateX(90deg) translateZ(32px); }
+.ar-spin-cube .f6 { transform: rotateX(-90deg) translateZ(32px); }
+@keyframes ar-spin-cube { from { transform: rotateX(-22deg) rotateY(0deg); } to { transform: rotateX(-22deg) rotateY(360deg); } }
