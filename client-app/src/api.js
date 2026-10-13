@@ -286,7 +286,10 @@ export const api = {
 
   // Chat Support -- two-way conversation with admin (ChatSupport.jsx).
   getChat: () => request('/api/profile/chat'),
-  sendChatMessage: (text) => request('/api/profile/chat', { method: 'POST', body: { text } }),
+  sendChatMessage: (text, replyTo) => request('/api/profile/chat', { method: 'POST', body: { text, replyTo: replyTo || undefined } }),
+  editChatMessage: (id, text) => request(`/api/profile/chat/${id}`, { method: 'PATCH', body: { text } }),
+  // mode: 'everyone' (own messages; leaves "This message was deleted") or 'me' (hides it from this client only).
+  deleteChatMessage: (id, mode = 'everyone') => request(`/api/profile/chat/${id}?mode=${mode}`, { method: 'DELETE' }),
 
   // `variants` (only for a plan that has any): array of {variantId,
   // quantity} for a mixed order (e.g. 1x "White Night" + 1x "Revenge

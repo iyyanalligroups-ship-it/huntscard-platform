@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Box, Film, Minus, Plus, Save } from 'lucide-react';
 import { api, API_URL } from '../api.js';
 import ArScanPreview from '../components/ArScanPreview.jsx';
 import ArModelPreview from '../components/ArModelPreview.jsx';
@@ -364,15 +365,17 @@ export default function ArLayout() {
   // height/scale control below so they all read the same way.
   function ControlRow({ label, value, onDecrement, onIncrement, decrementDisabled, incrementDisabled }) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-        <span style={{ fontSize: 12, color: 'var(--text-dim)', width: 90, flexShrink: 0 }}>{label}</span>
-        <button type="button" onClick={onDecrement} disabled={decrementDisabled} style={panelBtnStyle}>
-          −
-        </button>
-        <span style={{ fontSize: 12, width: 44, textAlign: 'center' }}>{value}</span>
-        <button type="button" onClick={onIncrement} disabled={incrementDisabled} style={panelBtnStyle}>
-          +
-        </button>
+      <div className="mbc-ctrl-card">
+        <span className="mbc-ctrl-label" title={label}>{label}</span>
+        <div className="mbc-stepper">
+          <button type="button" className="mbc-step-btn" onClick={onDecrement} disabled={decrementDisabled} aria-label={`Decrease ${label}`}>
+            <Minus size={15} strokeWidth={2.5} />
+          </button>
+          <span className="mbc-step-value">{value}</span>
+          <button type="button" className="mbc-step-btn" onClick={onIncrement} disabled={incrementDisabled} aria-label={`Increase ${label}`}>
+            <Plus size={15} strokeWidth={2.5} />
+          </button>
+        </div>
       </div>
     );
   }
@@ -438,10 +441,10 @@ export default function ArLayout() {
       </ul>
 
       {(hasModel || hasVideoContent) && (
-        <div className="card" style={{ marginTop: 20, padding: '16px 18px', display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+        <div className="card mbc-ctrl-panel" style={{ marginTop: 20 }}>
           {hasModel && (
-            <div style={{ minWidth: 200 }}>
-              <h3 style={{ fontSize: 14, margin: '0 0 10px' }}>3D Model controls</h3>
+            <div className="mbc-ctrl-section">
+              <h4 className="mbc-ctrl-title"><Box size={16} /> 3D Model controls</h4>
               <ControlRow
                 label="Rotate left/right"
                 value={`${Math.round(layout.modelRotationY ?? 0)}°`}
@@ -482,8 +485,8 @@ export default function ArLayout() {
           )}
 
           {hasVideoContent && (
-            <div style={{ minWidth: 200 }}>
-              <h3 style={{ fontSize: 14, margin: '0 0 10px' }}>AR Video / Photo controls</h3>
+            <div className="mbc-ctrl-section">
+              <h4 className="mbc-ctrl-title"><Film size={16} /> AR Video / Photo controls</h4>
               <ControlRow
                 label="Rotate left/right"
                 value={`${Math.round(layout.videoRotationY ?? 0)}°`}
@@ -553,8 +556,8 @@ export default function ArLayout() {
       )}
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 24, marginBottom: 24 }}>
-        <button onClick={handleSave} style={{ width: 'auto' }}>
-          Save layout
+        <button type="button" className="mbc-save-btn" onClick={handleSave}>
+          <Save size={15} /> Save layout
         </button>
         {saveStatus && <span style={{ color: 'var(--holo-cyan)', fontSize: 13 }}>{saveStatus}</span>}
         {error && <span style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</span>}

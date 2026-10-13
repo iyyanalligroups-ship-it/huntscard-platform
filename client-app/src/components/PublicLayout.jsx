@@ -24,6 +24,7 @@ export default function PublicLayout() {
     setAuthRedirect(redirectTo);
   }
   const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false); // header shows its bottom border only once the page has scrolled
   // Same admin-toggled setting HomeSwitch reads for which hero to render
   // -- here it adds/removes .theme-orange on the header and (via a prop)
   // the footer. Deliberately NOT toggled on <body> for orange -- its
@@ -56,6 +57,17 @@ export default function PublicLayout() {
   // directly, but this also covers back/forward browser navigation) and on
   // any click outside the header itself.
   useEffect(() => setMenuOpen(false), [location.pathname]);
+
+  useEffect(() => {
+    function onScroll() {
+      // The login/register popup pins <body> with position:fixed, which makes scrollY read 0 -- keep the current state then.
+      if (document.body.style.position === 'fixed') return;
+      setScrolled(window.scrollY > 4);
+    }
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -96,7 +108,7 @@ export default function PublicLayout() {
     <div className="app-shell sh-theme">
       <PublicMotion />
       <header
-        className={`top-nav${homeTheme === 'orange' ? ' theme-orange' : homeTheme === 'cyber' ? ' theme-cyber' : ''}`}
+        className={`top-nav${homeTheme === 'orange' ? ' theme-orange' : homeTheme === 'cyber' ? ' theme-cyber' : ''}${scrolled ? ' is-scrolled' : ''}`}
         ref={navRef}
         onMouseMove={handleNavMouseMove}
       >
@@ -109,7 +121,7 @@ export default function PublicLayout() {
         <div className="top-nav-row">
           <Link to="/" className="brand" aria-label="HuntsTAG home" onClick={() => { setMenuOpen(false); if (location.pathname === "/") window.scrollTo({ top: 0, left: 0, behavior: "smooth" }); }}>
             <div className="brand-mark" />
-            <span className="brand-name">HuntsTAG</span>
+            <span className="brand-name"><span className="bn-hunts">Hunts</span><span className="bn-tag">TAG</span></span>
           </Link>
 
           <div className={`nav-menu${menuOpen ? ' open' : ''}`}>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Layers, Minus, Plus, RotateCw, Save } from 'lucide-react';
 import { api, API_URL } from '../api.js';
 import CropBox from '../components/CropBox.jsx';
 import MagicHoverPreview from '../components/MagicHoverPreview.jsx';
@@ -978,69 +979,85 @@ export default function MagicBusinessCard() {
             })}
           </div>
 
-          <p className="hint" style={{ margin: '16px 0 6px' }}>Height (toward the viewer)</p>
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-            {allComponentDefs.map(({ key, label }) => {
-              const z = getComponentPosition(key)?.z ?? 0;
-              return (
-                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-dim)', width: 60 }}>{label}</span>
-                  <button
-                    type="button"
-                    className="secondary"
-                    disabled={z <= 0}
-                    style={{ width: 26, height: 26, borderRadius: '50%', padding: 0, fontSize: 12 }}
-                    onClick={() => adjustComponentHeight(key, -5)}
-                  >
-                    −
-                  </button>
-                  <span style={{ fontSize: 12, width: 36, textAlign: 'center' }}>{z}%</span>
-                  <button
-                    type="button"
-                    className="secondary"
-                    disabled={z >= 100}
-                    style={{ width: 26, height: 26, borderRadius: '50%', padding: 0, fontSize: 12 }}
-                    onClick={() => adjustComponentHeight(key, 5)}
-                  >
-                    +
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+          <div className="mbc-controls">
+            <section className="mbc-ctrl-group">
+              <h4 className="mbc-ctrl-title">
+                <Layers size={16} /> Height <small>toward the viewer</small>
+              </h4>
+              <div className="mbc-ctrl-grid">
+                {allComponentDefs.map(({ key, label }) => {
+                  const z = getComponentPosition(key)?.z ?? 0;
+                  return (
+                    <div key={key} className="mbc-ctrl-card">
+                      <span className="mbc-ctrl-label" title={label}>{label}</span>
+                      <div className="mbc-stepper">
+                        <button
+                          type="button"
+                          className="mbc-step-btn"
+                          disabled={z <= 0}
+                          aria-label={`Lower ${label}`}
+                          onClick={() => adjustComponentHeight(key, -5)}
+                        >
+                          <Minus size={15} strokeWidth={2.5} />
+                        </button>
+                        <span className="mbc-step-value">{z}%</span>
+                        <button
+                          type="button"
+                          className="mbc-step-btn"
+                          disabled={z >= 100}
+                          aria-label={`Raise ${label}`}
+                          onClick={() => adjustComponentHeight(key, 5)}
+                        >
+                          <Plus size={15} strokeWidth={2.5} />
+                        </button>
+                      </div>
+                      <div className="mbc-meter" aria-hidden="true"><i style={{ width: `${Math.min(100, Math.max(0, z))}%` }} /></div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
 
-          <p className="hint" style={{ margin: '16px 0 6px' }}>Rotation</p>
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-            {allComponentDefs.map(({ key, label }) => {
-              const rotation = getComponentPosition(key)?.rotation ?? 0;
-              return (
-                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-dim)', width: 60 }}>{label}</span>
-                  <button
-                    type="button"
-                    className="secondary"
-                    style={{ width: 26, height: 26, borderRadius: '50%', padding: 0, fontSize: 12 }}
-                    onClick={() => adjustComponentRotation(key, -15)}
-                  >
-                    −
-                  </button>
-                  <span style={{ fontSize: 12, width: 36, textAlign: 'center' }}>{rotation}°</span>
-                  <button
-                    type="button"
-                    className="secondary"
-                    style={{ width: 26, height: 26, borderRadius: '50%', padding: 0, fontSize: 12 }}
-                    onClick={() => adjustComponentRotation(key, 15)}
-                  >
-                    +
-                  </button>
-                </div>
-              );
-            })}
+            <section className="mbc-ctrl-group">
+              <h4 className="mbc-ctrl-title">
+                <RotateCw size={16} /> Rotation <small>15° per step</small>
+              </h4>
+              <div className="mbc-ctrl-grid">
+                {allComponentDefs.map(({ key, label }) => {
+                  const rotation = getComponentPosition(key)?.rotation ?? 0;
+                  return (
+                    <div key={key} className="mbc-ctrl-card">
+                      <span className="mbc-ctrl-label" title={label}>{label}</span>
+                      <div className="mbc-stepper">
+                        <button
+                          type="button"
+                          className="mbc-step-btn"
+                          aria-label={`Rotate ${label} left`}
+                          onClick={() => adjustComponentRotation(key, -15)}
+                        >
+                          <Minus size={15} strokeWidth={2.5} />
+                        </button>
+                        <span className="mbc-step-value">{rotation}°</span>
+                        <button
+                          type="button"
+                          className="mbc-step-btn"
+                          aria-label={`Rotate ${label} right`}
+                          onClick={() => adjustComponentRotation(key, 15)}
+                        >
+                          <Plus size={15} strokeWidth={2.5} />
+                        </button>
+                      </div>
+                      <div className="mbc-dial" aria-hidden="true"><RotateCw size={13} style={{ transform: `rotate(${rotation}deg)` }} /></div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16 }}>
-            <button type="button" className="secondary" disabled={busy} style={{ width: 'auto', fontSize: 12, padding: '6px 14px' }} onClick={handleSaveComponentPositions}>
-              Save component positions
+            <button type="button" className="mbc-save-btn" disabled={busy} onClick={handleSaveComponentPositions}>
+              <Save size={15} /> Save component positions
             </button>
             {componentSaveStatus && <span className="hint" style={{ margin: 0 }}>{componentSaveStatus}</span>}
           </div>

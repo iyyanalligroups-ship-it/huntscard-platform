@@ -328,7 +328,10 @@ export default function HomeV3() {
   const spotTimer = useRef(null);
   // FAQ shown on the homepage: the first 6, plus the Zing entry if the admin put it further down.
   const zingFaq = (faqs || []).find((f) => /zing/i.test(f.question));
-  const shownFaqs = (faqs || []).slice(0, 6).concat(zingFaq && !(faqs || []).slice(0, 6).includes(zingFaq) ? [zingFaq] : []);
+  // Likewise the "How does AR work?" entry behind the AR section's "How AR works" button.
+  const arFaq = (faqs || []).find((f) => /AR.*work|how.*AR/i.test(f.question));
+  const firstSix = (faqs || []).slice(0, 6);
+  const shownFaqs = firstSix.concat([zingFaq, arFaq].filter((f, i, all) => f && !firstSix.includes(f) && all.indexOf(f) === i));
 
   // "What is Zing?": glide to the FAQ and open the Zing question (answer comes from the admin panel).
   function showZingFaq(e) {
@@ -339,6 +342,21 @@ export default function HomeV3() {
     // Opening the answer adds DOM nodes, and PublicMotion's observer refreshes ScrollTrigger ~120ms
     // later, which cancels a smooth scroll already under way. Start scrolling after that refresh.
     window.setTimeout(() => document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 380);
+  }
+
+  // "How AR works": same idea -- glide to the FAQ and open the AR question.
+  function showArFaq(e) {
+    e.preventDefault();
+    trackEvent('ar_faq_click');
+    // Resolved here (not from the render-time arFaq above) so it always reads the loaded list.
+    const target = (faqs || []).find((f) => /AR.*work|how.*AR/i.test(f.question));
+    if (!target) { navigate('/faq'); return; }
+    setFaqSignal((s) => ({ id: target._id || target.question, n: s.n + 1 }));
+    // Scroll to the opened question itself (after the open/ScrollTrigger refresh, same as Zing above).
+    window.setTimeout(() => {
+      const item = [...document.querySelectorAll('#faq .hv3-faq-item')].find((el) => el.querySelector('.hv3-faq-q span')?.textContent === target.question);
+      (item || document.getElementById('faq'))?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 380);
   }
 
   // "Get a Zing-ready card": glide to the plans and spotlight the cards that include the feature for ~2.5s.
@@ -493,7 +511,7 @@ export default function HomeV3() {
               <a href="#plans" className="hv3-btn hv3-btn-primary" onClick={spotlight('ar')}>
                 See AR-ready cards <ArrowRight size={18} aria-hidden="true" />
               </a>
-              <Link to="/faq" className="hv3-btn hv3-btn-ghost">How AR works</Link>
+              <a href="#faq" className="hv3-btn hv3-btn-ghost" onClick={showArFaq}>How AR works</a>
             </R>
             <R as="p" className="hv3-ar-note">Included on selected plans. You arrange every element yourself in AR Layout.</R>
           </div>
@@ -507,7 +525,7 @@ export default function HomeV3() {
                 <b>Intro reel</b><small>0:24</small>
               </div></div>
               <div className="ar-panel ar-p-contact"><div className="ar-float">
-                <span><Phone size={14} />+91 98765 43210</span>
+                <span><Phone size={14} />+91 99999 99999</span>
                 <span><Mail size={14} />you@yourbrand.com</span>
                 <span><Globe size={14} />yourbrand.com</span>
               </div></div>
@@ -1111,9 +1129,9 @@ export default function HomeV3() {
             <h3>Send us a message</h3>
             <p>Fill in a short form and we will get back to you. No account needed.</p>
             <div className="ct-mock" aria-hidden="true">
-              <span><i>Name</i><em>Priya Sharma</em></span>
-              <span><i>Phone</i><em>9876543210</em></span>
-              <span className="ct-msg"><i>Message</i><em>Which card suits a clinic?<b /></em></span>
+              <span><i>Name</i><em className="ct-ph">Your full name</em></span>
+              <span><i>Phone</i><em className="ct-ph">e.g. 9876543210</em></span>
+              <span className="ct-msg"><i>Message</i><em className="ct-ph">How can we help you?<b /></em></span>
               <span className="ct-send"><Send size={14} />Send message</span>
             </div>
             <ul className="ct-list"><li><Check size={14} strokeWidth={3} />Open to everyone, no login</li><li><Check size={14} strokeWidth={3} />We get back to you on the details you share</li></ul>

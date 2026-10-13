@@ -15,8 +15,10 @@ import {
   Minus,
   Palette,
   Plus,
+  Receipt,
   ScanLine,
   ShoppingBag,
+  ShieldCheck,
   Sparkles,
   Ticket,
   Truck,
@@ -1219,6 +1221,15 @@ export default function Shop() {
                   ? 'Choose delivery address'
                   : `Pay ₹${loggedIn ? checkoutTotal : cardSubtotal}`}</span>
               </button>
+              {/* Sits in the otherwise empty left column beside checkout when there are many card styles. */}
+              <aside className="shop-assurance" aria-label="Before you buy">
+                <h3>Before you buy</h3>
+                <ul>
+                  <li><ShieldCheck size={20} aria-hidden="true" /><span><strong>Secure payment</strong>Pay online through Razorpay.</span></li>
+                  <li><Truck size={20} aria-hidden="true" /><span><strong>Delivered across India</strong>Add your address at checkout.</span></li>
+                  <li><Receipt size={20} aria-hidden="true" /><span><strong>No surprises</strong>GST and delivery are shown before you pay.</span></li>
+                </ul>
+              </aside>
             </form>
             {!couponMode && !selectedPlan.chargeAmount && (
               <p className="hint" style={{ marginTop: 10 }}>

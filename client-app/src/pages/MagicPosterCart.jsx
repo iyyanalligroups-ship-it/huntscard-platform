@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
+import { Minus, PartyPopper, Plus, Trash2 } from 'lucide-react';
 import { api, isLoggedIn } from '../api.js';
 import { loadRazorpayScript } from '../razorpay.js';
 import { useCart } from '../cart.jsx';
@@ -259,7 +260,7 @@ export default function MagicPosterCart() {
   if (placed) {
     return (
       <div className="card cart-gate">
-        <h1>Order placed 🎉</h1>
+        <h1 className="mp-ico">Order placed <PartyPopper size={24} /></h1>
         <p className="subtitle">
           Thanks! Your payment of ₹{placed.amount} went through and your order is now <b>Pending</b>. We'll get it
           on its way soon.
@@ -299,8 +300,9 @@ export default function MagicPosterCart() {
                     className="secondary cart-qty-btn"
                     style={{ width: 28, height: 28, padding: 0 }}
                     onClick={() => cart.updateQuantity(item.magicArtId, item.quantity - 1)}
+                    aria-label="Decrease quantity"
                   >
-                    −
+                    <Minus size={14} />
                   </button>
                   <span className="cart-qty-value">{item.quantity}</span>
                   <button
@@ -308,18 +310,19 @@ export default function MagicPosterCart() {
                     className="secondary cart-qty-btn"
                     style={{ width: 28, height: 28, padding: 0 }}
                     onClick={() => cart.updateQuantity(item.magicArtId, item.quantity + 1)}
+                    aria-label="Increase quantity"
                   >
-                    +
+                    <Plus size={14} />
                   </button>
                 </div>
                 <div className="cart-item-total">₹{item.unitPrice * item.quantity}</div>
                 <button
                   type="button"
-                  className="secondary cart-remove"
+                  className="secondary cart-remove mp-ico"
                   style={{ width: 'auto', padding: '4px 10px' }}
                   onClick={() => cart.removeItem(item.magicArtId)}
                 >
-                  Remove
+                  <Trash2 size={14} /> Remove
                 </button>
               </div>
             ))}

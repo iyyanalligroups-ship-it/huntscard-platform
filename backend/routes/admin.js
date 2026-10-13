@@ -5,6 +5,9 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
+const ExcelJS = require('exceljs'); // required up front (not inside the backup job) so `node --watch` doesn't restart mid-backup when it first sees these files
+const { ZipArchive } = require('archiver'); // archiver v8 exports classes, not a factory function
+const { PassThrough } = require('stream');
 const { nanoid } = require('nanoid');
 const { requireAdmin, requireSeniorAdmin, requireEncodeAccess, requireAdminPrime } = require('../middleware/auth');
 const Client = require('../models/Client');
@@ -1220,6 +1223,12 @@ router.get('/clients', requireAdmin, async (req, res) => {
     filter.paid = true;
     filter.chipEncoded = false;
   }
+  // ?q= -- case-insensitive "contains" match on the fields the admin search box covers.
+  const q = String(req.query.q || '').trim().slice(0, 100);
+  if (q) {
+    const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.$or = ['fullName', 'clientId', 'loginEmail', 'phone', 'cardType'].map((f) => ({ [f]: rx }));
+  }
   const clients = await Client.find(filter)
     .select('clientId fullName loginEmail phone gender dateOfBirth cardType logoUrl paid blocked chipEncoded encodedAt encodedBy createdAt')
     .sort({ createdAt: -1 });
@@ -2222,50 +2231,109 @@ router.delete('/contact-messages/:id', requireAdmin, async (req, res) => {
 // "group by shared key" approach CardTicket.clientId already uses.
 // -----------------------------------------------------------------------
 
-// GET /api/admin/chats -- one row per client with an unread-first
-// ordering, newest activity first within that.
+// GET /api/admin/chats?q=&skip=0&limit=20 -- one page of conversations
+// (unread first, then newest activity). Returns { threads, hasMore,
+// totalUnread } -- totalUnread covers every conversation, not just this page.
 router.get('/chats', requireAdmin, async (req, res) => {
-  const threads = await ChatMessage.aggregate([
-    { $sort: { createdAt: -1 } },
-    {
-      $group: {
-        _id: '$clientId',
-        lastMessage: { $first: '$text' },
-        lastSender: { $first: '$sender' },
-        lastAt: { $first: '$createdAt' },
-        unread: { $sum: { $cond: [{ $and: [{ $eq: ['$sender', 'client'] }, { $eq: ['$read', false] }] }, 1, 0] } },
+  try {
+    const skip = Math.max(0, parseInt(req.query.skip, 10) || 0);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const q = String(req.query.q || '').trim().slice(0, 100);
+    const rx = q ? new RegExp(q.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\$&'), 'i') : null;
+
+    const pipeline = [
+      { $match: { hiddenFor: { $ne: 'admin' } } }, // skip messages the admin deleted "for me"
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: '$clientId',
+          lastMessage: { $first: '$text' },
+          lastSender: { $first: '$sender' },
+          lastDeleted: { $first: '$deleted' },
+          lastAt: { $first: '$createdAt' },
+          unread: { $sum: { $cond: [{ $and: [{ $eq: ['$sender', 'client'] }, { $eq: ['$read', false] }] }, 1, 0] } },
+        },
       },
-    },
-    { $sort: { unread: -1, lastAt: -1 } },
-  ]);
+      { $lookup: { from: Client.collection.name, localField: '_id', foreignField: 'clientId', as: 'client' } },
+      {
+        $project: {
+          clientId: '$_id',
+          lastMessage: { $cond: [{ $eq: ['$lastDeleted', true] }, 'This message was deleted', '$lastMessage'] },
+          lastSender: 1,
+          lastAt: 1,
+          unread: 1,
+          fullName: { $ifNull: [{ $arrayElemAt: ['$client.fullName', 0] }, '$_id'] },
+          loginEmail: { $ifNull: [{ $arrayElemAt: ['$client.loginEmail', 0] }, ''] },
+          cardType: { $ifNull: [{ $arrayElemAt: ['$client.cardType', 0] }, null] },
+        },
+      },
+    ];
+    if (rx) pipeline.push({ $match: { $or: [{ fullName: rx }, { loginEmail: rx }, { lastMessage: rx }] } });
+    pipeline.push(
+      { $sort: { unread: -1, lastAt: -1, clientId: 1 } },
+      { $skip: skip },
+      { $limit: limit + 1 } // one extra row tells us whether another page exists
+    );
 
-  const clients = await Client.find({ clientId: { $in: threads.map((t) => t._id) } }).select('clientId fullName loginEmail cardType');
-  const clientById = Object.fromEntries(clients.map((c) => [c.clientId, c]));
-
-  res.json(
-    threads.map((t) => ({
-      clientId: t._id,
-      fullName: clientById[t._id]?.fullName || t._id,
-      loginEmail: clientById[t._id]?.loginEmail || '',
-      cardType: clientById[t._id]?.cardType || null,
-      lastMessage: t.lastMessage,
-      lastSender: t.lastSender,
-      lastAt: t.lastAt,
-      unread: t.unread,
-    }))
-  );
+    const [rows, totalUnread] = await Promise.all([
+      ChatMessage.aggregate(pipeline),
+      ChatMessage.countDocuments({ sender: 'client', read: false, hiddenFor: { $ne: 'admin' } }),
+    ]);
+    const hasMore = rows.length > limit;
+    const threads = rows.slice(0, limit).map(({ _id, ...t }) => t);
+    res.json({ threads, hasMore, totalUnread });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// GET /api/admin/chats/:clientId -- full conversation, oldest first.
-// Marks every client message in it as read, since fetching the thread IS
-// admin viewing it.
+// GET /api/admin/chats/:clientId -- one page of a conversation, oldest
+// first within the page. No params: the latest 20. ?before=<messageId>:
+// the 20 messages older than that one (scroll-up). ?after=<messageId>:
+// every message newer than that one (live polling, up to 100). Loading the
+// latest page or newer messages marks the client's messages read, since
+// fetching them IS the admin viewing them.
 router.get('/chats/:clientId', requireAdmin, async (req, res) => {
-  const messages = await ChatMessage.find({ clientId: req.params.clientId }).sort({ createdAt: 1 });
-  await ChatMessage.updateMany(
-    { clientId: req.params.clientId, sender: 'client', read: false },
-    { $set: { read: true } }
-  );
-  res.json(messages);
+  try {
+    const mongoose = require('mongoose');
+    const { before, after, since } = req.query;
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const filter = { clientId: req.params.clientId, hiddenFor: { $ne: 'admin' } };
+    if (before && !mongoose.isValidObjectId(before)) return res.status(400).json({ error: 'Invalid before id' });
+    if (after && !mongoose.isValidObjectId(after)) return res.status(400).json({ error: 'Invalid after id' });
+
+    let messages;
+    let hasMore = false;
+    if (after) {
+      messages = await ChatMessage.find({ ...filter, _id: { $gt: after } }).sort({ _id: 1 }).limit(100);
+    } else {
+      if (before) filter._id = { $lt: before };
+      const page = await ChatMessage.find(filter).sort({ _id: -1 }).limit(limit + 1);
+      hasMore = page.length > limit;
+      messages = page.slice(0, limit).reverse();
+    }
+
+    if (!before) {
+      await ChatMessage.updateMany(
+        { clientId: req.params.clientId, sender: 'client', read: false },
+        { $set: { read: true } }
+      );
+    }
+    // Polling (?after=): also report messages edited/deleted since the last poll,
+    // so a change made elsewhere shows up without reloading the conversation.
+    let changed = [];
+    if (after && since && !Number.isNaN(Date.parse(since))) {
+      const sinceDate = new Date(since);
+      changed = await ChatMessage.find({
+        ...filter,
+        _id: { $lte: after },
+        $or: [{ editedAt: { $gt: sinceDate } }, { deletedAt: { $gt: sinceDate } }],
+      });
+    }
+    res.json({ messages, changed, hasMore, now: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/admin/chats/:clientId { text } -- admin's reply.
@@ -2276,8 +2344,72 @@ router.post('/chats/:clientId', requireAdmin, async (req, res) => {
   const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId');
   if (!client) return res.status(404).json({ error: 'Client not found' });
 
-  const message = await ChatMessage.create({ clientId: req.params.clientId, sender: 'admin', text, read: false });
+  const doc = { clientId: req.params.clientId, sender: 'admin', text, read: false };
+  // Optional reply: quote a message from this same conversation.
+  if (req.body.replyTo && require('mongoose').isValidObjectId(req.body.replyTo)) {
+    const quoted = await ChatMessage.findOne({ _id: req.body.replyTo, clientId: req.params.clientId });
+    if (quoted) {
+      doc.replyTo = {
+        messageId: quoted._id,
+        sender: quoted.sender,
+        text: quoted.deleted ? '' : quoted.text.slice(0, 160),
+        deleted: quoted.deleted || undefined,
+      };
+    }
+  }
+  const message = await ChatMessage.create(doc);
   res.status(201).json(message);
+});
+
+// PATCH /api/admin/chats/:clientId/messages/:id { text } -- edit one of the
+// admin's own (not deleted) messages.
+router.patch('/chats/:clientId/messages/:id', requireAdmin, async (req, res) => {
+  try {
+    const text = (req.body.text || '').toString().trim();
+    if (!text) return res.status(400).json({ error: 'Message cannot be empty.' });
+    if (text.length > 4000) return res.status(400).json({ error: 'Message is too long.' });
+    const message = await ChatMessage.findOne({ _id: req.params.id, clientId: req.params.clientId });
+    if (!message) return res.status(404).json({ error: 'Message not found' });
+    if (message.sender !== 'admin') return res.status(403).json({ error: 'Only your own messages can be edited.' });
+    if (message.deleted) return res.status(400).json({ error: 'A deleted message cannot be edited.' });
+    message.text = text;
+    message.editedAt = new Date();
+    await message.save();
+    // Keep quotes of this message in sync.
+    await ChatMessage.updateMany(
+      { 'replyTo.messageId': message._id, 'replyTo.deleted': { $ne: true } },
+      { $set: { 'replyTo.text': text.slice(0, 160) } }
+    );
+    res.json(message);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/chats/:clientId/messages/:id -- "delete for everyone":
+// the row stays (shown as "This message was deleted") but its text is wiped,
+// including inside any reply that quoted it.
+router.delete('/chats/:clientId/messages/:id', requireAdmin, async (req, res) => {
+  try {
+    const message = await ChatMessage.findOne({ _id: req.params.id, clientId: req.params.clientId });
+    if (!message) return res.status(404).json({ error: 'Message not found' });
+    // ?mode=me -- hide it from this admin view only; anyone's message can be hidden.
+    if (req.query.mode === 'me') {
+      await ChatMessage.updateOne({ _id: message._id }, { $addToSet: { hiddenFor: 'admin' } });
+      return res.json({ _id: message._id, hidden: true });
+    }
+    if (message.sender !== 'admin') return res.status(403).json({ error: 'Only your own messages can be deleted for everyone.' });
+    if (!message.deleted) {
+      await ChatMessage.updateOne({ _id: message._id }, { $set: { deleted: true, deletedAt: new Date(), text: '' } });
+      await ChatMessage.updateMany(
+        { 'replyTo.messageId': message._id },
+        { $set: { 'replyTo.text': '', 'replyTo.deleted': true } }
+      );
+    }
+    res.json(await ChatMessage.findById(message._id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // -----------------------------------------------------------------------
@@ -4364,6 +4496,213 @@ router.delete('/inventory/:id', requireAdminPrime, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ---------------------------------------------------------------------
+// Data backup -- a job so the admin UI can show real progress:
+//   POST /backup/start {type: clients|contacts|both, month: all|YYYY-MM} -> {jobId}
+//   GET  /backup/status/:id  -> {state, clients:{done,total}, contacts:{done,total}, size}
+//   GET  /backup/download/:id -> the zip (Content-Length set, so the browser can show %)
+// Each zip holds one .xlsx per dataset, filtered by createdAt month when
+// given. Credentials/OTP/reset fields are never exported. Jobs live in
+// memory only (10 min) -- fine for a single backend process.
+// ---------------------------------------------------------------------
+const backupJobs = new Map();
+const BACKUP_TTL_MS = 10 * 60 * 1000;
+
+const CLIENT_BACKUP_COLUMNS = [
+  ['Client ID', 'clientId'], ['Full Name', 'fullName'], ['Login Email', 'loginEmail'],
+  ['Job Title', 'jobTitle'], ['Bio', 'bio'], ['Highlights', 'highlights'],
+  ['Gender', 'gender'], ['Date of Birth', 'dateOfBirth'], ['Phone', 'phone'],
+  ['WhatsApp', 'whatsapp'], ['Public Email', 'publicEmail'], ['Instagram', 'instagramUrl'],
+  ['Twitter', 'twitterUrl'], ['Portfolio', 'portfolioUrl'], ['Huntsworld', 'huntsworldUrl'],
+  ['Card Type', 'cardType'], ['Paid', 'paid'], ['Blocked', 'blocked'],
+  ['Chip Encoded', 'chipEncoded'], ['Custom Attributes', 'customAttributes'],
+  ['Created At', 'createdAt'], ['Updated At', 'updatedAt'],
+];
+const CONTACT_BACKUP_COLUMNS = [
+  ['Owner Client ID', 'clientId'], ['Owner Name', 'ownerName'], ['Name', 'name'],
+  ['First Name', 'firstName'], ['Last Name', 'lastName'], ['Phone', 'phone'],
+  ['Email', 'email'], ['Company', 'org'], ['Address', 'address'], ['Notes', 'notes'],
+  ['Source', 'source'], ['Created At', 'createdAt'],
+];
+
+function backupMonthFilter(month) {
+  if (month === 'all') return {};
+  const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(month);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  return { createdAt: { $gte: new Date(Date.UTC(y, mo - 1, 1)), $lt: new Date(Date.UTC(y, mo, 1)) } };
+}
+
+async function runBackupJob(job, type, month, filter) {
+  const fmt = (v) => (v instanceof Date ? v.toISOString() : v == null ? '' : v);
+
+  // Builds one sheet row by row off a cursor, bumping job progress as it
+  // goes and yielding to the event loop so status polls keep being served.
+  async function buildSheet(name, columns, cursor, progress, mapRow) {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet(name);
+    ws.columns = columns.map(([header, key]) => ({ header, key, width: Math.max(14, header.length + 4) }));
+    ws.getRow(1).font = { bold: true };
+    for await (const doc of cursor) {
+      const r = mapRow(doc);
+      ws.addRow(Object.fromEntries(columns.map(([, key]) => [key, fmt(r[key])])));
+      progress.done += 1;
+      if (progress.done % 100 === 0) await new Promise((resolve) => setImmediate(resolve));
+    }
+    return Buffer.from(await wb.xlsx.writeBuffer());
+  }
+
+  try {
+    const files = [];
+    if (job.clients) {
+      const buf = await buildSheet(
+        'Clients',
+        CLIENT_BACKUP_COLUMNS,
+        Client.find(filter).select('-passwordHash').sort({ createdAt: 1 }).lean().cursor(),
+        job.clients,
+        (c) => ({
+          ...c,
+          customAttributes: c.customAttributes ? JSON.stringify(c.customAttributes) : '',
+          highlights: (c.highlights || []).join(', '),
+        })
+      );
+      files.push([`clients_${month}.xlsx`, buf]);
+    }
+    if (job.contacts) {
+      const ownerIds = await Contact.distinct('clientId', filter);
+      const owners = await Client.find({ clientId: { $in: ownerIds } }).select('clientId fullName').lean();
+      const ownerName = Object.fromEntries(owners.map((o) => [o.clientId, o.fullName]));
+      const buf = await buildSheet(
+        'Contacts',
+        CONTACT_BACKUP_COLUMNS,
+        Contact.find(filter).sort({ createdAt: 1 }).lean().cursor(),
+        job.contacts,
+        (c) => ({ ...c, ownerName: ownerName[c.clientId] || '' })
+      );
+      files.push([`contacts_${month}.xlsx`, buf]);
+    }
+
+    job.state = 'zipping';
+    const out = new PassThrough();
+    const chunks = [];
+    out.on('data', (c) => chunks.push(c));
+    const zip = new ZipArchive({ zlib: { level: 6 } });
+    const finished = new Promise((resolve, reject) => {
+      out.on('end', resolve);
+      zip.on('error', reject);
+    });
+    zip.pipe(out);
+    files.forEach(([name, buf]) => zip.append(buf, { name }));
+    await zip.finalize();
+    await finished;
+    job.buffer = Buffer.concat(chunks);
+    job.size = job.buffer.length;
+    job.filename = `huntscard-backup-${type}-${month}.zip`;
+    job.state = 'done';
+  } catch (err) {
+    job.state = 'error';
+    job.error = err.message;
+  }
+}
+
+router.post('/backup/start', requireSeniorAdmin, async (req, res) => {
+  try {
+    const type = ['clients', 'contacts', 'both'].includes(req.body?.type) ? req.body.type : 'both';
+    const month = String(req.body?.month || 'all');
+    const filter = backupMonthFilter(month);
+    if (!filter) return res.status(400).json({ error: 'month must be "all" or YYYY-MM' });
+
+    for (const [id, j] of backupJobs) if (Date.now() - j.createdAt > BACKUP_TTL_MS) backupJobs.delete(id);
+
+    const job = { id: nanoid(16), createdAt: Date.now(), state: 'running', clients: null, contacts: null };
+    if (type !== 'contacts') job.clients = { done: 0, total: await Client.countDocuments(filter) };
+    if (type !== 'clients') job.contacts = { done: 0, total: await Contact.countDocuments(filter) };
+    backupJobs.set(job.id, job);
+    runBackupJob(job, type, month, filter); // not awaited -- the client polls /status
+    res.json({ jobId: job.id, clients: job.clients, contacts: job.contacts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Overview numbers shown on the Data Backup page: totals, month-wise
+// sign-ups/contacts (each bar is a selectable backup period), plan split
+// and the biggest contact owners.
+router.get('/backup/analytics', requireSeniorAdmin, async (req, res) => {
+  try {
+    // Optional ?from=YYYY-MM-DD&to=YYYY-MM-DD (inclusive, UTC) narrows every number;
+    // ?group=day buckets the timeline by day instead of month.
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    const range = {};
+    if (dateRe.test(req.query.from || '')) range.$gte = new Date(`${req.query.from}T00:00:00.000Z`);
+    if (dateRe.test(req.query.to || '')) range.$lt = new Date(new Date(`${req.query.to}T00:00:00.000Z`).getTime() + 86400000);
+    const dateFilter = Object.keys(range).length ? { createdAt: range } : {};
+    const fmtKey = req.query.group === 'day' ? '%Y-%m-%d' : '%Y-%m';
+    const byPeriod = () => [
+      { $match: dateFilter },
+      { $group: { _id: { $dateToString: { format: fmtKey, date: '$createdAt' } }, count: { $sum: 1 } } },
+    ];
+    const [
+      clients, paid, blocked, chipEncoded, contacts, tapLeads,
+      clientMonths, contactMonths, plans, topOwners, clientRange, contactRange,
+    ] = await Promise.all([
+      Client.countDocuments(dateFilter),
+      Client.countDocuments({ ...dateFilter, paid: true }),
+      Client.countDocuments({ ...dateFilter, blocked: true }),
+      Client.countDocuments({ ...dateFilter, chipEncoded: true }),
+      Contact.countDocuments(dateFilter),
+      Contact.countDocuments({ ...dateFilter, source: 'tap' }),
+      Client.aggregate(byPeriod()),
+      Contact.aggregate(byPeriod()),
+      Client.aggregate([{ $match: dateFilter }, { $group: { _id: { $ifNull: ['$cardType', 'none'] }, count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+      Contact.aggregate([{ $match: dateFilter }, { $group: { _id: '$clientId', count: { $sum: 1 } } }, { $sort: { count: -1 } }, { $limit: 5 }]),
+      Client.aggregate([{ $match: dateFilter }, { $group: { _id: null, first: { $min: '$createdAt' }, last: { $max: '$createdAt' } } }]),
+      Contact.aggregate([{ $match: dateFilter }, { $group: { _id: null, first: { $min: '$createdAt' }, last: { $max: '$createdAt' } } }]),
+    ]);
+
+    const months = {};
+    clientMonths.forEach((m) => { months[m._id] = { month: m._id, clients: m.count, contacts: 0 }; });
+    contactMonths.forEach((m) => {
+      months[m._id] = months[m._id] || { month: m._id, clients: 0, contacts: 0 };
+      months[m._id].contacts = m.count;
+    });
+
+    const owners = await Client.find({ clientId: { $in: topOwners.map((o) => o._id) } }).select('clientId fullName').lean();
+    const ownerName = Object.fromEntries(owners.map((o) => [o.clientId, o.fullName]));
+
+    res.json({
+      totals: { clients, paid, blocked, chipEncoded, contacts, tapLeads, manualContacts: contacts - tapLeads },
+      months: Object.values(months).sort((a, b) => (a.month < b.month ? 1 : -1)),
+      plans: plans.map((p) => ({ plan: p._id, count: p.count })),
+      topOwners: topOwners.map((o) => ({ clientId: o._id, name: ownerName[o._id] || o._id, count: o.count })),
+      range: {
+        clientsFirst: clientRange[0]?.first || null,
+        clientsLast: clientRange[0]?.last || null,
+        contactsFirst: contactRange[0]?.first || null,
+        contactsLast: contactRange[0]?.last || null,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/backup/status/:id', requireSeniorAdmin, (req, res) => {
+  const job = backupJobs.get(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Backup job not found or expired' });
+  res.json({ state: job.state, clients: job.clients, contacts: job.contacts, size: job.size || 0, error: job.error || null });
+});
+
+router.get('/backup/download/:id', requireSeniorAdmin, (req, res) => {
+  const job = backupJobs.get(req.params.id);
+  if (!job || job.state !== 'done') return res.status(404).json({ error: 'Backup not ready or expired' });
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Length', job.buffer.length);
+  res.setHeader('Content-Disposition', `attachment; filename="${job.filename}"`);
+  res.end(job.buffer, () => backupJobs.delete(job.id));
 });
 
 module.exports = router;

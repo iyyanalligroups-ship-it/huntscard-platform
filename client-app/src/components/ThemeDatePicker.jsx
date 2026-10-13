@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function parseDate(value) {
   if (!value) return null;
@@ -27,6 +28,9 @@ export default function ThemeDatePicker({ id, value, onChange, min, max, ariaLab
   const [open, setOpen] = useState(false);
   const [viewDate, setViewDate] = useState(() => selectedDate || new Date());
   const [panelRect, setPanelRect] = useState(null);
+  // 'days' | 'months' | 'years' -- clicking the month or year in the header drills up so either
+  // can be jumped to directly (essential for a date of birth) instead of paging month by month.
+  const [mode, setMode] = useState('days');
   const rootRef = useRef(null);
   const triggerRef = useRef(null);
   const panelRef = useRef(null);
@@ -87,8 +91,27 @@ export default function ThemeDatePicker({ id, value, onChange, min, max, ariaLab
   const maxDate = parseDate(max);
   const todayValue = toValue(new Date());
 
+  const yearStart = Math.floor(year / 12) * 12; // the 12-year page shown in 'years' mode
+
   function changeMonth(delta) {
     setViewDate((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
+  }
+
+  // Header arrows step by month, year or 12-year page depending on the mode.
+  function step(delta) {
+    if (mode === 'days') changeMonth(delta);
+    else setViewDate((current) => new Date(current.getFullYear() + delta * (mode === 'years' ? 12 : 1), current.getMonth(), 1));
+  }
+
+  // min/max can rule out whole months or years -- grey those out in the pickers.
+  const monthOutOfRange = (y, m) =>
+    Boolean((minDate && new Date(y, m + 1, 0) < minDate) || (maxDate && new Date(y, m, 1) > maxDate));
+  const yearOutOfRange = (y) =>
+    Boolean((minDate && new Date(y, 11, 31) < minDate) || (maxDate && new Date(y, 0, 1) > maxDate));
+
+  function toggleOpen() {
+    setMode('days');
+    setOpen((current) => !current);
   }
 
   function selectDate(date) {
@@ -104,7 +127,7 @@ export default function ThemeDatePicker({ id, value, onChange, min, max, ariaLab
         ref={triggerRef}
         type="button"
         className={`theme-date-trigger${open ? ' open' : ''}`}
-        onClick={() => setOpen((current) => !current)}
+        onClick={toggleOpen}
         aria-label={ariaLabel}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -117,12 +140,53 @@ export default function ThemeDatePicker({ id, value, onChange, min, max, ariaLab
       {open && panelRect && createPortal(
         <div ref={panelRef} className="theme-date-panel" role="dialog" aria-label={`${ariaLabel} calendar`} style={{ position: 'fixed', left: panelRect.left, top: panelRect.top, width: panelRect.width }}>
           <div className="theme-date-header">
-            <button type="button" aria-label="Previous month" onClick={() => changeMonth(-1)}><ChevronLeft size={17} /></button>
-            <strong>{viewDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</strong>
-            <button type="button" aria-label="Next month" onClick={() => changeMonth(1)}><ChevronRight size={17} /></button>
+            <button type="button" aria-label={mode === 'days' ? 'Previous month' : mode === 'months' ? 'Previous year' : 'Previous years'} onClick={() => step(-1)}><ChevronLeft size={17} /></button>
+            {mode === 'days' ? (
+              <span className="theme-date-title">
+                <button type="button" onClick={() => setMode('months')}>{viewDate.toLocaleDateString(undefined, { month: 'long' })}</button>
+                <button type="button" onClick={() => setMode('years')}>{year}</button>
+              </span>
+            ) : (
+              <span className="theme-date-title">
+                <button type="button" onClick={() => setMode(mode === 'months' ? 'years' : 'days')}>
+                  {mode === 'months' ? year : `${yearStart} – ${yearStart + 11}`}
+                </button>
+              </span>
+            )}
+            <button type="button" aria-label={mode === 'days' ? 'Next month' : mode === 'months' ? 'Next year' : 'Next years'} onClick={() => step(1)}><ChevronRight size={17} /></button>
           </div>
-          <div className="theme-date-weekdays">{WEEKDAYS.map((day) => <span key={day}>{day}</span>)}</div>
-          <div className="theme-date-grid">
+          {mode === 'months' && (
+            <div className="theme-date-grid theme-date-grid--picker">
+              {MONTHS.map((name, index) => (
+                <button
+                  key={name}
+                  type="button"
+                  className={index === month ? 'selected' : ''}
+                  disabled={monthOutOfRange(year, index)}
+                  onClick={() => { setViewDate(new Date(year, index, 1)); setMode('days'); }}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
+          {mode === 'years' && (
+            <div className="theme-date-grid theme-date-grid--picker">
+              {Array.from({ length: 12 }, (_, i) => yearStart + i).map((y) => (
+                <button
+                  key={y}
+                  type="button"
+                  className={y === year ? 'selected' : ''}
+                  disabled={yearOutOfRange(y)}
+                  onClick={() => { setViewDate(new Date(y, month, 1)); setMode('months'); }}
+                >
+                  {y}
+                </button>
+              ))}
+            </div>
+          )}
+          {mode === 'days' && <div className="theme-date-weekdays">{WEEKDAYS.map((day) => <span key={day}>{day}</span>)}</div>}
+          {mode === 'days' && <div className="theme-date-grid">
             {days.map((date) => {
               const dateValue = toValue(date);
               const disabled = (minDate && date < minDate) || (maxDate && date > maxDate);
@@ -133,9 +197,9 @@ export default function ThemeDatePicker({ id, value, onChange, min, max, ariaLab
                 </button>
               );
             })}
-          </div>
+          </div>}
           <div className="theme-date-footer">
-            <button type="button" onClick={() => setViewDate(new Date())}>This month</button>
+            <button type="button" onClick={() => { setViewDate(new Date()); setMode('days'); }}>This month</button>
             {value && <button type="button" onClick={() => { onChange(''); setOpen(false); }}>Clear</button>}
           </div>
         </div>,

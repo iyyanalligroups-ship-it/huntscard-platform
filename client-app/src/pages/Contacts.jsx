@@ -112,6 +112,7 @@ export default function Contacts() {
   const [importResult, setImportResult] = useState(null);
   const [exporting, setExporting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null); // contact awaiting delete confirmation
   const [excelImporting, setExcelImporting] = useState(false);
   const excelInputRef = useRef(null);
   // Properties the Contact Picker API can actually return on this device --
@@ -281,15 +282,17 @@ export default function Contacts() {
     XLSX.writeFile(workbook, 'huntsTAG-contacts-template.xlsx');
   }
 
+  // Runs after the user confirms in the delete popup (see deleteTarget below).
   async function handleDelete(id) {
-    if (!window.confirm('Remove this contact from your HuntsTAG backup?')) return;
     setError('');
     setDeletingId(id);
     try {
       await api.deleteContact(id);
       setContacts((list) => list.filter((c) => c._id !== id));
+      setDeleteTarget(null);
     } catch (err) {
       setError(err.message);
+      setDeleteTarget(null);
     } finally {
       setDeletingId(null);
     }
@@ -564,27 +567,27 @@ export default function Contacts() {
             <div className="field-grid">
               <div className="field">
                 <label htmlFor="cFirstName">First name</label>
-                <input id="cFirstName" value={form.firstName} onChange={(e) => updateFormField('firstName', e.target.value)} />
+                <input id="cFirstName" placeholder="e.g. Rahul" value={form.firstName} onChange={(e) => updateFormField('firstName', e.target.value)} />
               </div>
               <div className="field">
                 <label htmlFor="cLastName">Last name</label>
-                <input id="cLastName" value={form.lastName} onChange={(e) => updateFormField('lastName', e.target.value)} />
+                <input id="cLastName" placeholder="e.g. Sharma" value={form.lastName} onChange={(e) => updateFormField('lastName', e.target.value)} />
               </div>
               <div className="field">
                 <label htmlFor="cPhone">Phone number</label>
-                <input id="cPhone" type="tel" required value={form.phone} onChange={(e) => updateFormField('phone', e.target.value)} />
+                <input id="cPhone" type="tel" required placeholder="e.g. +91 98765 43210" value={form.phone} onChange={(e) => updateFormField('phone', e.target.value)} />
               </div>
               <div className="field">
                 <label htmlFor="cEmail">Email</label>
-                <input id="cEmail" type="email" value={form.email} onChange={(e) => updateFormField('email', e.target.value)} />
+                <input id="cEmail" type="email" placeholder="name@example.com" value={form.email} onChange={(e) => updateFormField('email', e.target.value)} />
               </div>
               <div className="field">
                 <label htmlFor="cOrg">Company</label>
-                <input id="cOrg" value={form.org} onChange={(e) => updateFormField('org', e.target.value)} />
+                <input id="cOrg" placeholder="e.g. HuntsTAG Pvt Ltd" value={form.org} onChange={(e) => updateFormField('org', e.target.value)} />
               </div>
               <div className="field">
                 <label htmlFor="cAddress">Address</label>
-                <input id="cAddress" value={form.address} onChange={(e) => updateFormField('address', e.target.value)} />
+                <input id="cAddress" placeholder="Street, city, state, PIN code" value={form.address} onChange={(e) => updateFormField('address', e.target.value)} />
               </div>
             </div>
             <div className="field">
@@ -592,6 +595,7 @@ export default function Contacts() {
               <textarea
                 id="cNotes"
                 rows={3}
+                placeholder="Where you met, what to follow up on…"
                 value={form.notes}
                 onChange={(e) => updateFormField('notes', e.target.value)}
                 style={{
@@ -687,7 +691,7 @@ export default function Contacts() {
                     type="button"
                     className="secondary"
                     style={{ width: 'auto' }}
-                    onClick={() => handleDelete(c._id)}
+                    onClick={() => setDeleteTarget(c)}
                     disabled={deletingId === c._id}
                   >
                     {deletingId === c._id ? 'Removing…' : 'Delete'}
@@ -698,6 +702,47 @@ export default function Contacts() {
           </div>
         )}
       </div>
+
+      {deleteTarget && (
+        <div
+          className="auth-modal-backdrop"
+          onClick={(e) => e.target === e.currentTarget && deletingId !== deleteTarget._id && setDeleteTarget(null)}
+        >
+          <div className="auth-modal-card" role="dialog" aria-modal="true" aria-labelledby="deleteContactTitle">
+            <button
+              type="button"
+              className="auth-modal-close"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deletingId === deleteTarget._id}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <h1 id="deleteContactTitle" style={{ fontSize: 18 }}>Delete contact?</h1>
+            <p className="subtitle" style={{ marginBottom: 20 }}>
+              Remove <strong>{deleteTarget.name}</strong> from your HuntsTAG backup? This can't be undone.
+            </p>
+            <div className="contact-confirm-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deletingId === deleteTarget._id}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="contact-confirm-danger"
+                onClick={() => handleDelete(deleteTarget._id)}
+                disabled={deletingId === deleteTarget._id}
+              >
+                {deletingId === deleteTarget._id ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {appointmentTarget && (
         <div className="auth-modal-backdrop" onClick={(e) => e.target === e.currentTarget && setAppointmentTarget(null)}>

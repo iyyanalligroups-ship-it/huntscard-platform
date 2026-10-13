@@ -563,6 +563,14 @@ export default function PublicProfile() {
     }
   }
 
+  // Opens a Gmail compose window addressed to the profile's email. On phones the
+  // mailto: link is kept, since it opens the Gmail (or default mail) app directly.
+  function openEmail(e, address) {
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return; // let the mailto: link work
+    e.preventDefault();
+    window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(address)}`, '_blank', 'noopener,noreferrer');
+  }
+
   async function saveContact() {
     try {
       const res = await fetch(`${API_URL}/api/public/vcard/${clientId}${cardNumber ? `?card=${cardNumber}` : ''}`);
@@ -934,6 +942,7 @@ export default function PublicProfile() {
             {profile.publicEmail && (
               <a
                 href={`mailto:${profile.publicEmail}`}
+                onClick={(e) => openEmail(e, profile.publicEmail)}
                 className="ht-social-circle-btn email"
                 title="Send Email"
               >
@@ -1067,7 +1076,7 @@ export default function PublicProfile() {
                     >
                       {copiedKey === 'email' ? <Icons.Check /> : <Icons.Copy />}
                     </button>
-                    <a href={`mailto:${profile.publicEmail}`} className="ht-tile-action-icon" title="Send email">
+                    <a href={`mailto:${profile.publicEmail}`} onClick={(e) => openEmail(e, profile.publicEmail)} className="ht-tile-action-icon" title="Send email">
                       <Icons.ArrowUpRight />
                     </a>
                   </div>

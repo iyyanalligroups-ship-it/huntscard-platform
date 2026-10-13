@@ -7357,3 +7357,151 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
 }
+
+/* Chat message actions (theme-neutral so every site theme inherits them) */
+.cm-bubble { position: relative; }
+.cm-menu-btn {
+  position: absolute; top: 3px; right: 4px; width: 22px; height: 22px; padding: 0 !important;
+  display: flex; align-items: center; justify-content: center;
+  border: 0 !important; border-radius: 6px; background: transparent !important; color: inherit !important;
+  box-shadow: none !important; opacity: 0; transition: opacity 0.12s; min-height: 0; height: 22px !important;
+}
+.cm-bubble:hover .cm-menu-btn, .cm-menu-btn:focus-visible { opacity: 0.75; }
+.cm-menu-btn:hover { opacity: 1; background: rgba(128,128,128,0.25) !important; }
+@media (hover: none) { .cm-menu-btn { opacity: 0.6; } }
+.cm-menu {
+  position: absolute; top: 26px; left: 6px; z-index: 20; min-width: 140px; padding: 5px;
+  display: grid; gap: 2px; border: 1px solid rgba(0,0,0,0.12); border-radius: 10px;
+  background: #fff; color: #111; box-shadow: 0 10px 28px rgba(0,0,0,0.22);
+}
+.cm-menu.align-right { left: auto; right: 6px; }
+.cm-menu button {
+  display: flex; align-items: center; justify-content: flex-start; gap: 9px; width: 100%; height: auto !important; padding: 8px 10px !important;
+  border: 0 !important; border-radius: 7px; background: transparent !important; color: #111 !important;
+  font-size: 13px; font-weight: 600; text-align: left; letter-spacing: 0; text-transform: none; box-shadow: none !important;
+}
+.cm-menu button:hover { background: rgba(0,0,0,0.07) !important; }
+.cm-menu button.danger, .cm-menu button.danger:hover { color: #d63031 !important; }
+.cm-bubble.is-deleted { opacity: 0.8; }
+.cm-deleted { display: inline-flex; align-items: center; gap: 6px; font-style: italic; opacity: 0.85; }
+.cm-quote {
+  display: grid; gap: 1px; width: 100%; height: auto !important; margin-bottom: 6px; padding: 6px 9px !important; text-align: left;
+  border: 0 !important; border-left: 3px solid currentColor !important; border-radius: 6px;
+  background: rgba(128,128,128,0.18) !important; color: inherit !important; box-shadow: none !important;
+  font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none;
+}
+.cm-quote strong { font-size: 11.5px; }
+.cm-quote span { opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.chat-bubble-row.cm-flash .chat-bubble { animation: cm-flash 1.2s ease; }
+@keyframes cm-flash { 0%, 60% { box-shadow: 0 0 0 3px rgba(120,120,255,0.55); } 100% { box-shadow: none; } }
+.cm-banner {
+  display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-top: 1px solid rgba(128,128,128,0.25); font-size: 13px;
+}
+.cm-banner-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.cm-banner-text span { opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-banner button { width: 28px !important; height: 28px !important; padding: 0 !important; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: transparent !important; color: inherit !important; border: 0 !important; box-shadow: none !important; }
+.cm-toast {
+  position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 6;
+  padding: 7px 14px; border-radius: 999px; background: rgba(20,20,28,0.92); color: #fff; font-size: 12px;
+}
+.chat-card { position: relative; }
+
+/* Chat menu -- beat the per-theme "html .x-theme button" rules so items stay light */
+html body .cm-menu { background: #fff; color: #111; }
+html body .cm-menu .cm-menu-item {
+  display: flex; align-items: center; justify-content: flex-start; gap: 9px; width: 100%; height: auto; min-height: 0;
+  padding: 8px 10px; border: 0; border-radius: 7px; background: transparent !important; color: #111 !important;
+  box-shadow: none !important; font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; text-align: left;
+}
+html body .cm-menu .cm-menu-item:hover { background: rgba(0,0,0,0.07) !important; }
+html body .cm-menu .cm-menu-item.danger, html body .cm-menu .cm-menu-item.danger:hover { color: #d63031 !important; }
+html body .cm-menu .cm-menu-title { padding: 6px 10px 4px; font-size: 11.5px; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.06em; }
+html body .cm-bubble .cm-menu-btn { background: rgba(128,128,128,0.22) !important; color: inherit !important; box-shadow: none !important; }
+html body .cm-bubble .cm-menu-btn:hover { background: rgba(128,128,128,0.4) !important; }
+
+/* Magic Business Card -- component height / rotation controls.
+   Selectors are prefixed with "html body" so the per-site-theme button rules can't override them. */
+.mbc-controls { display: grid; gap: 22px; margin-top: 22px; }
+.mbc-ctrl-title {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 12px;
+  font-size: 14px; font-weight: 700; color: var(--text);
+}
+.mbc-ctrl-title svg { color: var(--brand-accent, #7367f0); flex: none; }
+.mbc-ctrl-title small { font-size: 12px; font-weight: 500; color: var(--text-dim); }
+.mbc-ctrl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.mbc-ctrl-card {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px 12px;
+  padding: 12px 14px; border-radius: 14px;
+  border: 1px solid var(--brand-accent-border, rgba(115,103,240,0.22));
+  background: var(--brand-accent-soft, rgba(115,103,240,0.07));
+}
+.mbc-ctrl-label { font-size: 13px; font-weight: 650; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mbc-stepper { display: inline-flex; align-items: center; gap: 6px; }
+.mbc-step-value { min-width: 42px; text-align: center; font-size: 13px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+html body .mbc-ctrl-card .mbc-step-btn {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 30px; height: 30px; min-height: 0; padding: 0; border-radius: 50%;
+  border: 1px solid var(--brand-accent-border, rgba(115,103,240,0.35));
+  background: #fff !important; color: var(--brand-accent, #7367f0) !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08); cursor: pointer; transition: background 0.12s, color 0.12s, transform 0.08s;
+}
+html body .mbc-ctrl-card .mbc-step-btn svg { display: block; stroke: currentColor; opacity: 1; }
+html body .mbc-ctrl-card .mbc-step-btn:hover:not(:disabled) { background: var(--brand-accent, #7367f0) !important; color: #fff !important; }
+html body .mbc-ctrl-card .mbc-step-btn:active:not(:disabled) { transform: scale(0.92); }
+html body .mbc-ctrl-card .mbc-step-btn:disabled { opacity: 0.38; cursor: not-allowed; box-shadow: none; }
+.mbc-meter { grid-column: 1 / -1; height: 5px; border-radius: 999px; background: rgba(128,128,128,0.2); overflow: hidden; }
+.mbc-meter i { display: block; height: 100%; border-radius: inherit; background: var(--brand-accent, #7367f0); transition: width 0.15s ease-out; }
+.mbc-dial { grid-column: 1 / -1; display: flex; justify-content: center; color: var(--brand-accent, #7367f0); }
+.mbc-dial svg { transition: transform 0.15s ease-out; }
+html body .mbc-save-btn {
+  display: inline-flex; align-items: center; gap: 8px; width: auto; height: auto; min-height: 0;
+  padding: 10px 18px; border: 0; border-radius: 10px; font-size: 13px; font-weight: 700; letter-spacing: 0; text-transform: none;
+  background: var(--brand-accent, #7367f0) !important; color: #fff !important;
+  box-shadow: 0 6px 16px var(--brand-accent-shadow, rgba(115,103,240,0.3)); cursor: pointer;
+}
+html body .mbc-save-btn:hover:not(:disabled) { filter: brightness(1.08); }
+html body .mbc-save-btn:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+
+/* AR Layout controls reuse the .mbc-ctrl-card / .mbc-stepper look defined above */
+.mbc-ctrl-panel { display: grid; gap: 26px; padding: 18px 20px; }
+.mbc-ctrl-section { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.mbc-ctrl-section .mbc-ctrl-title { grid-column: 1 / -1; margin-bottom: 0; }
+
+/* Contacts -- delete confirmation popup */
+.contact-confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.contact-confirm-actions button { width: auto; min-width: 96px; }
+html body .contact-confirm-actions .contact-confirm-danger {
+  background: #e5484d !important; color: #fff !important; border: 0; box-shadow: 0 6px 16px rgba(229,72,77,0.3);
+}
+html body .contact-confirm-actions .contact-confirm-danger:hover:not(:disabled) { filter: brightness(1.08); }
+
+/* Date picker -- clickable month/year title and the month / year pickers.
+   The picker grids reuse .theme-date-grid so every site theme's day-button colors apply to them too. */
+.theme-date-header .theme-date-title { display: flex; justify-content: center; align-items: center; gap: 2px; white-space: nowrap; }
+.theme-date-header .theme-date-title button {
+  width: auto !important; height: 34px; padding: 0 8px !important; display: inline-flex; place-items: unset;
+  font-size: 13px; font-weight: 750; border-radius: 9px !important; cursor: pointer;
+}
+.theme-date-header .theme-date-title button:hover { color: var(--brand-accent) !important; background: var(--brand-accent-soft) !important; }
+.theme-date-grid.theme-date-grid--picker { grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px 0 6px; }
+.theme-date-grid.theme-date-grid--picker button { aspect-ratio: auto !important; height: 44px; font-size: 12.5px !important; }
+
+/* Password show/hide eye: it is centred with translateY(-50%). The global `button:active { transform: scale() }`
+   and the site themes' `button:...:hover { transform: none }` replaced that transform, so the icon jumped
+   downwards on hover/click. Pin it in every state. */
+html body .password-eye-btn,
+html body .password-eye-btn:hover,
+html body .password-eye-btn:focus,
+html body .password-eye-btn:focus-visible,
+html body .password-eye-btn:active {
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  animation: none !important;
+  filter: none !important;
+}
+
+/* Magic Poster pages -- lucide icons sitting beside text */
+.mp-ico { display: inline-flex; align-items: center; gap: 6px; }
+.mp-ico svg { flex: none; }
+.magic-art-qty-btn, .cart-qty-btn { display: inline-flex; align-items: center; justify-content: center; }
+.magic-art-qty-btn svg, .cart-qty-btn svg { display: block; stroke: currentColor; }

@@ -1,5 +1,5 @@
-import { Component, lazy, Suspense, useLayoutEffect } from 'react';
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Component, lazy, Suspense, useLayoutEffect, useRef } from 'react';
+import { Navigate, Route, Routes, useLocation, useNavigationType } from 'react-router-dom';
 import { isLoggedIn } from './api.js';
 import PublicLayout from './components/PublicLayout.jsx';
 import Home from './pages/HomeSwitch.jsx'; // renders Home.jsx or HomeD1.jsx per the admin-toggled theme setting
@@ -106,19 +106,27 @@ function RequireAuth({ children }) {
   return children;
 }
 
-// React Router keeps the browser's current scroll position during client-side
-// navigation. Reset it before paint so links near the footer open the next
-// page at its header instead of carrying the visitor's footer position across.
-function ScrollToTop() {
-  const { pathname } = useLocation();
+// Scroll behaviour between pages:
+//  - opening a page by a link / navigate() (PUSH or REPLACE) starts it at the top, instead of carrying
+//    the previous page's scroll position across;
+//  - going Back / Forward (POP) puts the visitor back at the exact spot they left that page, tracked
+//    per history entry (location.key). Content that loads late (images, data) is waited for.
+// Positions live in memory only, so a full reload still starts at the top.
+const savedScroll = new Map();
 
-  // Browsers restore the previous scroll position on a page refresh (and on
-  // back/forward). Turn that off so every reload starts at the top.
+function ScrollToTop() {
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  const keyRef = useRef(location.key);
+  const lastYRef = useRef(0);
+  const prevPathRef = useRef(null);
+
+  // Browsers restore scroll on their own (and on reload); handle it ourselves instead.
   useLayoutEffect(() => {
     if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    // Layout can still be growing (images, lazy sections) when the browser
-    // applies its own restore, so re-assert the top once the page has loaded.
+    // Layout can still be growing (images, lazy sections) when the browser applies its own
+    // restore, so re-assert the top once the page has loaded.
     const toTop = () => window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     window.addEventListener('load', toTop);
     const timer = setTimeout(toTop, 150);
@@ -128,9 +136,69 @@ function ScrollToTop() {
     };
   }, []);
 
+  // Keep track of where the visitor is on the current history entry.
   useLayoutEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-  }, [pathname]);
+    let frame = 0;
+    function onScroll() {
+      // The login/register popup pins <body> with position:fixed, which makes scrollY read 0 -- ignore it.
+      if (document.body.style.position === 'fixed') return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        lastYRef.current = window.scrollY;
+        savedScroll.set(keyRef.current, window.scrollY);
+      });
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    // Remember where we were on the entry we are leaving.
+    if (keyRef.current !== location.key && document.body.style.position !== 'fixed') {
+      savedScroll.set(keyRef.current, lastYRef.current);
+    }
+    keyRef.current = location.key;
+
+    const pathChanged = prevPathRef.current !== null && prevPathRef.current !== location.pathname;
+    prevPathRef.current = location.pathname;
+
+    if (navigationType === 'POP') {
+      // Back / Forward: return to the saved spot, retrying while the page is still growing.
+      const target = savedScroll.get(location.key) ?? 0;
+      lastYRef.current = target;
+      window.scrollTo({ top: target, left: 0, behavior: 'instant' });
+      if (target <= 0) return undefined;
+      let tries = 0;
+      let cancelled = false;
+      const cancel = () => { cancelled = true; };
+      // A deliberate scroll by the visitor wins over the restore.
+      window.addEventListener('wheel', cancel, { passive: true, once: true });
+      window.addEventListener('touchstart', cancel, { passive: true, once: true });
+      window.addEventListener('keydown', cancel, { once: true });
+      const timer = setInterval(() => {
+        tries += 1;
+        if (cancelled || tries > 25) { clearInterval(timer); return; }
+        if (Math.abs(window.scrollY - target) < 2) { if (tries > 3) clearInterval(timer); return; }
+        window.scrollTo({ top: target, left: 0, behavior: 'instant' });
+      }, 80);
+      return () => {
+        clearInterval(timer);
+        window.removeEventListener('wheel', cancel);
+        window.removeEventListener('touchstart', cancel);
+        window.removeEventListener('keydown', cancel);
+      };
+    }
+
+    // New page via link: start at the top. Same page with only a query/hash change (tabs, filters): stay put.
+    if (pathChanged) {
+      lastYRef.current = 0;
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+    return undefined;
+  }, [location.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return null;
 }

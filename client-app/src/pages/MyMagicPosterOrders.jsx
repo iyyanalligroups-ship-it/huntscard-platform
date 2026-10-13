@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, Clock3, CreditCard, Download, Image, MapPin, ShoppingBag, Truck } from 'lucide-react';
+import { ArrowRight, ChevronDown, Clock3, CreditCard, Download, Image, MapPin, ShoppingBag, Truck } from 'lucide-react';
 import { api } from '../api.js';
 
 const PAGE_SIZE = 10;
@@ -75,7 +75,7 @@ export default function MyMagicPosterOrders({ embedded = false }) {
       ) : orders.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '12px 0' }}>
           <p className="subtitle" style={{ margin: '0 0 12px' }}>You haven't ordered a Magic Poster yet.</p>
-          <Link to="/magic-art" className="link-out">Browse Magic Posters →</Link>
+          <Link to="/magic-art" className="link-out mp-ico">Browse Magic Posters <ArrowRight size={14} /></Link>
         </div>
       ) : (
         <>

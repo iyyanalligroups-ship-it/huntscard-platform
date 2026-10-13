@@ -109,3 +109,142 @@ html body .sh-theme .plan-variant-card:not(#_a):not(#_b) { background-color: #ff
 .plan-variant-card > * { position: relative; z-index: 1; }
 .plan-variant-card .plan-variant-price { text-align: center; font-size: 22px; font-weight: 800; color: #1565ff; letter-spacing: -.02em; }
 .plan-variant-card .plan-variant-price small { font-size: 12px; font-weight: 600; color: #55627a; }
+
+
+/* =====================================================================
+   Shop plan page redesign -- use the whole width instead of leaving the right half empty.
+   ===================================================================== */
+
+/* 1. Header: title / price / description on the left, the feature explanations as tiles on the right. */
+.plan-feature-notes { margin-top: 12px; }
+@media (min-width: 900px) {
+  .shop-detail-card .plan-detail-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+    column-gap: 40px;
+    align-items: start;
+  }
+  .shop-detail-card .plan-detail-header > * { grid-column: 1; }
+  .shop-detail-card .plan-detail-header > .plan-feature-notes {
+    grid-column: 2;
+    grid-row: 1 / span 8;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .shop-detail-card .plan-feature-notes li {
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: rgba(128, 128, 128, 0.09);
+    border: 1px solid rgba(128, 128, 128, 0.22);
+    font-size: 12.5px;
+  }
+  .shop-detail-card .plan-feature-notes li > svg { width: 22px; height: 22px; }
+}
+
+/* 2. Card styles beside checkout. With up to 3 styles the tiles fill the left column and checkout sits
+      to their right, so nothing is left empty (public shop only; the dashboard keeps its narrower layout). */
+.shop-assurance { display: none; }
+@media (min-width: 1200px) {
+  body.public-site-active .plan-detail-panel .checkout-modal-form-col > form > .field:has(.plan-variant-grid):not(:has(.plan-variant-card:nth-child(4))) {
+    grid-column: 1;
+    grid-row: 1 / span 30;
+  }
+  body.public-site-active .plan-detail-panel .checkout-modal-form-col > form:not(:has(.plan-variant-card:nth-child(4))) .plan-variant-grid {
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)) !important;
+  }
+
+  /* One style only: lay the tile out sideways (picture left, details right) so it fills its column. */
+  body.public-site-active .plan-variant-grid:has(.plan-variant-card:only-child) .plan-variant-card {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    grid-auto-rows: min-content;
+    align-content: center;
+    column-gap: 36px;
+    row-gap: 10px;
+    padding: 28px !important;
+    text-align: left;
+  }
+  body.public-site-active .plan-variant-grid:has(.plan-variant-card:only-child) .plan-variant-card > .vm { grid-column: 1; grid-row: 1 / span 5; }
+  body.public-site-active .plan-variant-grid:has(.plan-variant-card:only-child) .plan-variant-card > :not(.vm) { grid-column: 2; }
+  body.public-site-active .plan-variant-grid:has(.plan-variant-card:only-child) .plan-variant-name,
+  body.public-site-active .plan-variant-grid:has(.plan-variant-card:only-child) .plan-variant-price,
+  body.public-site-active .plan-variant-grid:has(.plan-variant-card:only-child) .plan-variant-shape { text-align: left; }
+  body.public-site-active .plan-variant-grid:has(.plan-variant-card:only-child) .plan-variant-name { font-size: 24px; align-self: end; }
+  body.public-site-active .plan-variant-grid:has(.plan-variant-card:only-child) .plan-variant-price { font-size: 30px; }
+  body.public-site-active .plan-variant-grid:has(.plan-variant-card:only-child) .plan-variant-stepper { align-self: start; justify-self: start; margin-top: 10px; }
+
+  /* Many styles: the grid spans the full width, so the empty column beside checkout gets a trust panel. */
+  .plan-detail-panel .checkout-modal-form-col > form:has(.plan-variant-card:nth-child(4)) > .shop-assurance {
+    display: block;
+    grid-column: 1;
+    grid-row: 2 / span 30;
+    align-self: start;
+    padding: 24px 26px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid #b9c8e4;
+    box-shadow: 0 6px 18px rgba(11, 22, 48, 0.08);
+  }
+}
+.shop-assurance h3 { margin: 0 0 14px; font-size: 18px; font-weight: 800; color: #0b1630; }
+.shop-assurance ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
+.shop-assurance li { display: flex; gap: 14px; align-items: flex-start; font-size: 14px; color: #3d4a63; }
+.shop-assurance li svg { flex: none; color: #1565ff; margin-top: 2px; }
+.shop-assurance li strong { display: block; color: #0b1630; font-size: 15px; margin-bottom: 2px; }
+
+/* Feature tiles: plain white cards (matches the card-style tiles below) */
+@media (min-width: 900px) {
+  html body .shop-detail-card .plan-feature-notes li {
+    background: #ffffff;
+    border: 1px solid #e3e8f2;
+    box-shadow: 0 4px 14px rgba(11, 22, 48, 0.07);
+  }
+}
+
+/* Each feature gets its own accent color: tinted icon badge, colored top edge and heading */
+@media (min-width: 900px) {
+  html body .shop-detail-card .plan-feature-notes li { --fc: #1565ff; border-top: 3px solid var(--fc); }
+  html body .shop-detail-card .plan-feature-notes li:nth-child(6n + 2) { --fc: #f59e0b; }
+  html body .shop-detail-card .plan-feature-notes li:nth-child(6n + 3) { --fc: #7c3aed; }
+  html body .shop-detail-card .plan-feature-notes li:nth-child(6n + 4) { --fc: #0d9488; }
+  html body .shop-detail-card .plan-feature-notes li:nth-child(6n + 5) { --fc: #e11d48; }
+  html body .shop-detail-card .plan-feature-notes li:nth-child(6n + 6) { --fc: #ea580c; }
+  html body .shop-detail-card .plan-feature-notes li > svg {
+    box-sizing: border-box;
+    width: 40px;
+    height: 40px;
+    padding: 9px;
+    border-radius: 12px;
+    color: var(--fc);
+    background: color-mix(in srgb, var(--fc) 14%, #ffffff);
+  }
+  html body .shop-detail-card .plan-feature-notes li strong { color: var(--fc); }
+}
+
+/* Simpler look: the feature color outlines the whole tile, and the icon is drawn bare (no tinted badge) */
+@media (min-width: 900px) {
+  html body .shop-detail-card .plan-feature-notes li {
+    border: 1.5px solid var(--fc);
+    border-radius: 12px;
+    box-shadow: none;
+  }
+  html body .shop-detail-card .plan-feature-notes li > svg {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    stroke-width: 1.8;
+  }
+}
+
+/* ===== Header: two-tone "Hunts" + "TAG" wordmark and a bottom border in the primary button blue ===== */
+html body.hv3-active .sh-theme .top-nav .brand-name .bn-hunts { color: #0b1630 !important; -webkit-text-fill-color: #0b1630 !important; }
+html body.hv3-active .sh-theme .top-nav .brand-name .bn-tag { color: #1565ff !important; -webkit-text-fill-color: #1565ff !important; }
+/* invisible (but space-reserving) until the page scrolls, then the blue line fades in */
+html body.hv3-active .sh-theme .top-nav:not(#_a):not(#_b) { border-bottom: 3px solid transparent !important; transition: border-color 0.2s ease; }
+html body.hv3-active .sh-theme .top-nav.is-scrolled:not(#_a):not(#_b) { border-bottom-color: #1565ff !important; }

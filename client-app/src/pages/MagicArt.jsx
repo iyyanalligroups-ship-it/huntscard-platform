@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
+import { ArrowRight, Check, Minus, Plus, ShoppingCart, Sparkles, X } from 'lucide-react';
 import { api, API_URL } from '../api.js';
 import { useCart } from '../cart.jsx';
 import MagicHoverPreview from '../components/MagicHoverPreview.jsx';
@@ -80,8 +81,8 @@ export default function MagicArt({ embedded = false }) {
           </p>
         </div>
         {cart.totalCount > 0 && (
-          <Link to="/magic-poster-cart" className="pill-outline" style={{ whiteSpace: 'nowrap' }}>
-            🛒 Cart ({cart.totalCount}) · ₹{cart.totalAmount}
+          <Link to="/magic-poster-cart" className="pill-outline mp-ico" style={{ whiteSpace: 'nowrap' }}>
+            <ShoppingCart size={16} /> Cart ({cart.totalCount}) · ₹{cart.totalAmount}
           </Link>
         )}
       </div>
@@ -99,7 +100,7 @@ export default function MagicArt({ embedded = false }) {
           {pieces.map((piece, i) => (
             <div key={piece._id} className={`magic-art-card card is-${posterOrientation(piece)}`}>
               <div className="magic-art-card-media" style={piece.imageWidth && piece.imageHeight ? { aspectRatio: `${piece.imageWidth} / ${piece.imageHeight}` } : undefined}>
-                <span className="magic-art-badge">✨ Scan with Magic Camera</span>
+                <span className="magic-art-badge mp-ico"><Sparkles size={13} /> Scan with Magic Camera</span>
                 <MagicHoverPreview
                   className="magic-art-lightbox-trigger"
                   imageUrl={piece.imageUrl}
@@ -123,11 +124,11 @@ export default function MagicArt({ embedded = false }) {
               <div className="magic-art-meta-row">
                 <button
                   type="button"
-                  className="magic-art-card-camera-link"
+                  className="magic-art-card-camera-link mp-ico"
                   style={{ width: 'auto', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
                   onClick={() => setQrTarget(piece)}
                 >
-                  Open Magic Camera →
+                  Open Magic Camera <ArrowRight size={14} />
                 </button>
 
                 {piece.description && <p className="magic-art-card-description" title={piece.description}>{piece.description}</p>}
@@ -149,8 +150,9 @@ export default function MagicArt({ embedded = false }) {
                       className="secondary magic-art-qty-btn"
                       style={{ width: 28, height: 28, padding: 0 }}
                       onClick={() => setQty((q) => ({ ...q, [piece._id]: Math.max(1, getQty(piece._id) - 1) }))}
+                      aria-label="Decrease quantity"
                     >
-                      −
+                      <Minus size={14} />
                     </button>
                     <span style={{ minWidth: 18, textAlign: 'center' }}>{getQty(piece._id)}</span>
                     <button
@@ -158,17 +160,18 @@ export default function MagicArt({ embedded = false }) {
                       className="secondary magic-art-qty-btn"
                       style={{ width: 28, height: 28, padding: 0 }}
                       onClick={() => setQty((q) => ({ ...q, [piece._id]: getQty(piece._id) + 1 }))}
+                      aria-label="Increase quantity"
                     >
-                      +
+                      <Plus size={14} />
                     </button>
                   </div>
                   <button
                     type="button"
-                    className="secondary magic-art-add"
+                    className="secondary magic-art-add mp-ico"
                     style={{ width: 'auto', padding: '6px 14px' }}
                     onClick={() => handleAddToCart(piece)}
                   >
-                    {addedId === piece._id ? 'Added ✓' : 'Add to cart'}
+                    {addedId === piece._id ? <><Check size={14} /> Added</> : <><ShoppingCart size={14} /> Add to cart</>}
                   </button>
                 </div>
               ) : null}
@@ -192,9 +195,9 @@ export default function MagicArt({ embedded = false }) {
             <div className="auth-modal-backdrop magic-qr-backdrop" onClick={(e) => e.target === e.currentTarget && setQrTarget(null)}>
               <div className="auth-modal-card magic-qr-modal" role="dialog" aria-modal="true" aria-label="Scan the image with Magic Camera">
                 <button className="auth-modal-close" onClick={() => setQrTarget(null)} aria-label="Close">
-                  ×
+                  <X size={18} />
                 </button>
-                <span className="magic-qr-eyebrow">✨ Magic Camera</span>
+                <span className="magic-qr-eyebrow mp-ico"><Sparkles size={14} /> Magic Camera</span>
                 <h2 className="magic-qr-title">Scan the image with Magic Camera</h2>
                 <div className="magic-qr-body">
                   <img className="magic-qr-art" src={qrTarget.imageUrl} alt={qrTarget.name || 'Magic Art'} />
@@ -204,8 +207,8 @@ export default function MagicArt({ embedded = false }) {
                     <p className="magic-qr-hint">No app to install -- it opens straight in your phone's browser.</p>
                   </div>
                 </div>
-                <Link to="/magic-camera" className="magic-qr-open">
-                  Already on your phone? Open Magic Camera directly →
+                <Link to="/magic-camera" className="magic-qr-open mp-ico">
+                  Already on your phone? Open Magic Camera directly <ArrowRight size={14} />
                 </Link>
               </div>
             </div>

@@ -59,3 +59,6 @@ html body .sh-theme .hv3 .ct-list li { color: #dbe6fa !important; -webkit-text-f
   .ct-msg em b, .ct-send, .ct-bubbles .b, .ct-bubbles .typing u { animation: none; }
   .ct-bubbles .b { opacity: 1; } .ct-bubbles .typing { display: none; }
 }
+
+/* The mock form shows placeholder-style dummy text (same wording as the real /contact form), not real-looking entries. */
+html body .sh-theme .hv3 .ct-mock em.ct-ph { color: #7f93b8 !important; -webkit-text-fill-color: #7f93b8 !important; font-weight: 400; }
