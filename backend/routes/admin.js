@@ -4410,6 +4410,109 @@ router.post('/app-downloads/ios', requireAdmin, (req, res) => {
   });
 });
 
+// ---- Chunked upload for the app files -------------------------------------------------
+// A large .apk/.ipa in one request is rejected by many proxies ("request entity too large"),
+// so the admin page sends it in small pieces and then asks us to stitch them together:
+//   POST /app-downloads/:platform/chunk?uploadId=..&index=..   (raw bytes of one piece)
+//   POST /app-downloads/:platform/complete {uploadId, total, size, version, bundleId}
+// Pieces live in uploads/app-downloads/.tmp/<uploadId>/ until completed (stale ones are swept).
+const APP_TMP_DIR = path.join(APP_DL_DIR, '.tmp');
+const APP_MAX_BYTES = 500 * 1024 * 1024;
+const APP_MAX_CHUNKS = 2000;
+const APP_PLATFORMS = {
+  android: { ext: '.apk', name: 'HuntsTAG.apk' },
+  ios: { ext: '.ipa', name: 'HuntsTAG.ipa' },
+};
+const validUploadId = (v) => /^[A-Za-z0-9_-]{8,64}$/.test(String(v || ''));
+
+function sweepStaleUploads() {
+  try {
+    for (const dir of fs.readdirSync(APP_TMP_DIR)) {
+      const full = path.join(APP_TMP_DIR, dir);
+      if (Date.now() - fs.statSync(full).mtimeMs > 60 * 60 * 1000) fs.rmSync(full, { recursive: true, force: true });
+    }
+  } catch { /* nothing to sweep */ }
+}
+
+router.post(
+  '/app-downloads/:platform/chunk',
+  requireAdmin,
+  express.raw({ type: 'application/octet-stream', limit: '4mb' }),
+  (req, res) => {
+    try {
+      if (!APP_PLATFORMS[req.params.platform]) return res.status(400).json({ error: 'platform must be android or ios' });
+      const { uploadId } = req.query;
+      const index = Number(req.query.index);
+      if (!validUploadId(uploadId)) return res.status(400).json({ error: 'Invalid upload id' });
+      if (!Number.isInteger(index) || index < 0 || index >= APP_MAX_CHUNKS) return res.status(400).json({ error: 'Invalid chunk index' });
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ error: 'Empty chunk' });
+
+      const dir = path.join(APP_TMP_DIR, String(uploadId));
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, index + '.part'), req.body);
+      if (index === 0) sweepStaleUploads();
+      res.json({ ok: true, index, size: req.body.length });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+router.post('/app-downloads/:platform/complete', requireAdmin, async (req, res) => {
+  const platform = APP_PLATFORMS[req.params.platform];
+  if (!platform) return res.status(400).json({ error: 'platform must be android or ios' });
+  const { uploadId, total, size, filename, version, bundleId } = req.body || {};
+  const dir = path.join(APP_TMP_DIR, String(uploadId || ''));
+  try {
+    if (!validUploadId(uploadId)) return res.status(400).json({ error: 'Invalid upload id' });
+    if (path.extname(String(filename || '')).toLowerCase() !== platform.ext) {
+      return res.status(400).json({ error: 'Only a ' + platform.ext + ' file is allowed' });
+    }
+    const count = Number(total);
+    if (!Number.isInteger(count) || count < 1 || count > APP_MAX_CHUNKS) return res.status(400).json({ error: 'Invalid chunk count' });
+    if (!fs.existsSync(dir)) return res.status(400).json({ error: 'Upload not found -- please try again' });
+
+    // Stitch the pieces together, in order, into a temporary file first.
+    const assembled = path.join(APP_DL_DIR, platform.name + '.uploading');
+    fs.writeFileSync(assembled, '');
+    let bytes = 0;
+    for (let i = 0; i < count; i += 1) {
+      const part = path.join(dir, i + '.part');
+      if (!fs.existsSync(part)) throw new Error('Chunk ' + (i + 1) + ' of ' + count + ' is missing -- please upload again');
+      const buf = fs.readFileSync(part);
+      bytes += buf.length;
+      if (bytes > APP_MAX_BYTES) throw new Error('File is larger than ' + APP_MAX_BYTES / 1048576 + ' MB');
+      fs.appendFileSync(assembled, buf);
+    }
+    if (Number(size) && Number(size) !== bytes) throw new Error('Upload was incomplete (' + bytes + ' of ' + size + ' bytes) -- please try again');
+
+    fs.renameSync(assembled, path.join(APP_DL_DIR, platform.name));
+    fs.rmSync(dir, { recursive: true, force: true });
+
+    const prefix = req.params.platform === 'android' ? 'android' : 'ios';
+    const update = {
+      ['appDownloads.' + prefix + 'File']: platform.name,
+      ['appDownloads.' + prefix + 'Size']: bytes,
+      updatedBy: req.admin?.email || 'unknown',
+    };
+    if (prefix === 'android') update['appDownloads.androidUpdatedAt'] = new Date();
+    if (version) update['appDownloads.' + prefix + 'Version'] = String(version).trim();
+    if (prefix === 'ios' && bundleId) update['appDownloads.iosBundleId'] = String(bundleId).trim();
+    await SiteSetting.findOneAndUpdate({ key: 'global' }, update, { upsert: true });
+    res.json(await appDownloadsDoc());
+  } catch (err) {
+    fs.rmSync(path.join(APP_DL_DIR, platform.name + '.uploading'), { force: true });
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Called when the admin cancels, so the half-uploaded pieces are not left behind.
+router.delete('/app-downloads/upload/:uploadId', requireAdmin, (req, res) => {
+  if (!validUploadId(req.params.uploadId)) return res.status(400).json({ error: 'Invalid upload id' });
+  fs.rmSync(path.join(APP_TMP_DIR, req.params.uploadId), { recursive: true, force: true });
+  res.json({ ok: true });
+});
+
 // Text fields: iOS store / TestFlight link, versions, bundle id.
 router.patch('/app-downloads', requireAdmin, async (req, res) => {
   try {
