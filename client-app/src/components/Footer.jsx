@@ -69,6 +69,8 @@ export default function Footer({ homeTheme }) {
           <div className="site-footer-heading">Company</div>
           <Link to="/about">About Us</Link>
           <Link to="/huntsworld">What is HuntsWorld?</Link>
+          <Link to="/privacy-policy">Privacy Policy</Link>
+          <Link to="/terms-condition">Terms &amp; Conditions</Link>
         </div>
 
         <div className="site-footer-col">

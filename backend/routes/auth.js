@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const { nanoid } = require('nanoid');
 const { requireAuth } = require('../middleware/auth');
+const { str } = require('../utils/upload');
 const Client = require('../models/Client');
 const { sendSms } = require('../utils/sms');
 const { sendEmail } = require('../utils/email');
@@ -44,6 +45,14 @@ const otpLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: { error: 'Too many refresh attempts. Try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const LOGIN_OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const LOGIN_OTP_MAX_ATTEMPTS = 5;
 const LOGIN_OTP_RESEND_COOLDOWN_MS = 45 * 1000; // matches the Resend button's own countdown in AuthModal.jsx
@@ -73,7 +82,11 @@ function signToken(client) {
 // see routes/profile.js upgrade-confirm).
 router.post('/register', registerLimiter, async (req, res) => {
   try {
-    const { fullName, phone, loginEmail, password, gender, dateOfBirth } = req.body;
+    const { gender, dateOfBirth } = req.body;
+    const fullName = str(req.body.fullName);
+    const phone = str(req.body.phone);
+    const loginEmail = str(req.body.loginEmail);
+    const password = str(req.body.password);
     if (!fullName || !phone || !loginEmail || !password) {
       return res.status(400).json({ error: 'Full name, phone number, email, and password are required.' });
     }
@@ -132,7 +145,8 @@ router.post('/register', registerLimiter, async (req, res) => {
 // same shared password either way.
 router.post('/login', loginLimiter, async (req, res) => {
   try {
-    const { identifier, password } = req.body;
+    const identifier = str(req.body.identifier);
+    const password = str(req.body.password);
     if (!identifier || !password) {
       return res.status(400).json({ error: 'identifier and password are required' });
     }
@@ -177,7 +191,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 // used to enumerate registered phone numbers.
 router.post('/login-otp/request', otpLimiter, async (req, res) => {
   try {
-    const { phone } = req.body;
+    const phone = str(req.body.phone);
     if (!phone) return res.status(400).json({ error: 'phone is required' });
 
     const client = await Client.findOne({ phone });
@@ -214,7 +228,8 @@ router.post('/login-otp/request', otpLimiter, async (req, res) => {
 // handling works unchanged regardless of which method logged the client in.
 router.post('/login-otp/verify', otpLimiter, async (req, res) => {
   try {
-    const { phone, otp } = req.body;
+    const phone = str(req.body.phone);
+    const otp = str(req.body.otp);
     if (!phone || !otp) {
       return res.status(400).json({ error: 'phone and otp are required' });
     }
@@ -300,7 +315,7 @@ router.post('/change-password', requireAuth, async (req, res) => {
 // instead of erroring, for the same enumeration-safety reason.
 router.post('/forgot-password', otpLimiter, async (req, res) => {
   try {
-    const { loginEmail } = req.body;
+    const loginEmail = str(req.body.loginEmail);
     if (!loginEmail) return res.status(400).json({ error: 'loginEmail is required' });
 
     const client = await Client.findOne({ loginEmail: loginEmail.toLowerCase() });
@@ -335,7 +350,8 @@ router.post('/forgot-password', otpLimiter, async (req, res) => {
 // fields immediately on success so the code can't be reused.
 router.post('/forgot-password/verify-otp', otpLimiter, async (req, res) => {
   try {
-    const { loginEmail, otp } = req.body;
+    const loginEmail = str(req.body.loginEmail);
+    const otp = str(req.body.otp);
     if (!loginEmail || !otp) {
       return res.status(400).json({ error: 'loginEmail and otp are required' });
     }
@@ -380,7 +396,8 @@ router.post('/forgot-password/verify-otp', otpLimiter, async (req, res) => {
 // applies for general abuse protection.
 router.post('/reset-password', otpLimiter, async (req, res) => {
   try {
-    const { token, newPassword } = req.body;
+    const token = str(req.body.token);
+    const newPassword = str(req.body.newPassword);
     if (!token || !newPassword) {
       return res.status(400).json({ error: 'token and newPassword are required' });
     }
@@ -407,6 +424,33 @@ router.post('/reset-password', otpLimiter, async (req, res) => {
   } catch (err) {
     console.error('[auth/reset-password]', err);
     res.status(500).json({ error: 'Password reset failed' });
+  }
+});
+
+// POST /api/auth/refresh { token }
+// Swaps a client token that expired recently for a fresh one, so a session doesn't end at the
+// 1-hour mark. The signature must still be valid; only the expiry is waived, and only up to
+// TOKEN_REFRESH_GRACE_DAYS after it. Blocked accounts and deleted accounts are refused.
+const REFRESH_GRACE_SECONDS = Number(process.env.TOKEN_REFRESH_GRACE_DAYS || 30) * 24 * 60 * 60;
+router.post('/refresh', refreshLimiter, async (req, res) => {
+  try {
+    const old = str(req.body.token) || (req.headers.authorization || '').replace(/^Bearer /, '');
+    let payload;
+    try {
+      payload = jwt.verify(old, process.env.JWT_SECRET, { ignoreExpiration: true });
+    } catch {
+      return res.status(401).json({ error: 'Invalid token', code: 'TOKEN_INVALID' });
+    }
+    if (payload.type !== 'client' || payload.impersonatedBy || !payload.exp || Date.now() / 1000 > payload.exp + REFRESH_GRACE_SECONDS) {
+      return res.status(401).json({ error: 'Session is too old. Please log in again.', code: 'TOKEN_INVALID' });
+    }
+    const client = await Client.findOne({ clientId: payload.clientId });
+    if (!client) return res.status(401).json({ error: 'Account not found', code: 'TOKEN_INVALID' });
+    if (client.blocked) return res.status(403).json({ error: 'This account has been blocked. Contact support.' });
+    res.json({ token: signToken(client), clientId: client.clientId });
+  } catch (err) {
+    console.error('[auth/refresh]', err);
+    res.status(500).json({ error: 'Refresh failed' });
   }
 });
 

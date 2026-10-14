@@ -25,14 +25,15 @@ export const MEMBER_MENU = [
   { id: 'explore', label: 'Explore HuntsTAG', items: [
     { name: 'Home', icon: 'home' }, { name: 'Catalog', icon: 'card' }, { name: 'Contact Us', icon: 'mail' },
     { name: 'About Us', icon: 'info' }, { name: 'What is HuntsWorld?', icon: 'globe' }, { name: 'FAQ', icon: 'help' },
-    { name: 'Open a Card', icon: 'scan' }] },
+    { name: 'Privacy Policy', icon: 'shield' }, { name: 'Terms & Conditions', icon: 'info' }, { name: 'Open a Card', icon: 'scan' }] },
 ];
 
 export const PUBLIC_MENU = [
   { id: 'shop', label: 'Shop', items: [
     { name: 'Shop', icon: 'bag' }, { name: 'Magic Poster', icon: 'image' }, { name: 'Catalog', icon: 'card' }, { name: 'Magic Camera', icon: 'magic' }] },
   { id: 'about', label: 'About', items: [
-    { name: 'About Us', icon: 'info' }, { name: 'What is HuntsWorld?', icon: 'globe' }, { name: 'FAQ', icon: 'help' }] },
+    { name: 'About Us', icon: 'info' }, { name: 'What is HuntsWorld?', icon: 'globe' }, { name: 'FAQ', icon: 'help' },
+    { name: 'Privacy Policy', icon: 'shield' }, { name: 'Terms & Conditions', icon: 'info' }] },
   { id: 'support', label: 'Support', items: [
     { name: 'Chat Support', icon: 'chat' }, { name: 'Contact Us', icon: 'mail' }, { name: 'Open a Card', icon: 'scan' }] },
 ];

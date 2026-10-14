@@ -1588,15 +1588,19 @@ router.patch('/fulfillment/cards/:cardId/assign', requireSeniorAdmin, async (req
     const { subadminEmail } = req.body;
     if (!subadminEmail) return res.status(400).json({ error: 'subadminEmail is required' });
 
-    const subadmin = await Admin.findOne({ email: subadminEmail.toLowerCase() });
-    if (!subadmin) return res.status(400).json({ error: 'No admin account with that email' });
+    // Any dashboard account can be given the card -- admin, subadmin or Admin Prime (not encode-only employees).
+    const subadmin = await Admin.findOne({ email: String(subadminEmail).toLowerCase() });
+    if (!subadmin || subadmin.role === 'employee') return res.status(400).json({ error: 'Choose an admin or subadmin account' });
 
     const card = await Card.findById(req.params.cardId);
     if (!card) return res.status(404).json({ error: 'Card not found' });
-    if (!card.claimedBy) {
-      return res.status(400).json({ error: 'Claim this card before assigning it.' });
-    }
+    if (card.delivered) return res.status(400).json({ error: 'This card is already delivered.' });
 
+    // Assigning an unclaimed card claims it for whoever is assigning; assigning again is a reassign.
+    if (!card.claimedBy) {
+      card.claimedBy = req.admin.email;
+      await mirrorCardOneToClient(card, { claimedBy: card.claimedBy });
+    }
     card.assignedTo = subadmin.email;
     await card.save();
     await mirrorCardOneToClient(card, { assignedTo: card.assignedTo });
@@ -1604,6 +1608,22 @@ router.patch('/fulfillment/cards/:cardId/assign', requireSeniorAdmin, async (req
   } catch (err) {
     console.error('[admin/fulfillment assign]', err);
     res.status(500).json({ error: 'Failed to assign' });
+  }
+});
+
+// PATCH /api/admin/fulfillment/cards/:cardId/unassign -- revoke the assignment (the card stays claimed).
+router.patch('/fulfillment/cards/:cardId/unassign', requireSeniorAdmin, async (req, res) => {
+  try {
+    const card = await Card.findById(req.params.cardId);
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+    if (!card.assignedTo) return res.status(400).json({ error: 'This card is not assigned.' });
+    card.assignedTo = null;
+    await card.save();
+    await mirrorCardOneToClient(card, { assignedTo: null });
+    res.json(card);
+  } catch (err) {
+    console.error('[admin/fulfillment unassign]', err);
+    res.status(500).json({ error: 'Failed to revoke assignment' });
   }
 });
 
@@ -4485,6 +4505,13 @@ router.post('/app-downloads/:platform/complete', requireAdmin, async (req, res) 
       fs.appendFileSync(assembled, buf);
     }
     if (Number(size) && Number(size) !== bytes) throw new Error('Upload was incomplete (' + bytes + ' of ' + size + ' bytes) -- please try again');
+
+    // .apk and .ipa are both zip archives -- reject anything else renamed to the right extension.
+    const fd = fs.openSync(assembled, 'r');
+    const head = Buffer.alloc(4);
+    fs.readSync(fd, head, 0, 4, 0);
+    fs.closeSync(fd);
+    if (!head.equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) throw new Error('This is not a valid ' + platform.ext + ' file (not a zip archive)');
 
     fs.renameSync(assembled, path.join(APP_DL_DIR, platform.name));
     fs.rmSync(dir, { recursive: true, force: true });

@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import * as Contacts from 'expo-contacts';
+import * as Contacts from 'expo-contacts/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as XLSX from 'xlsx';
 import { api, resolveAssetUrl } from '../api/client.js';
@@ -40,7 +40,10 @@ const sheetToXlsxBase64 = (rows) => {
 };
 
 export default function ContactsScreen({ navigation }) {
-  const [contacts, setContacts] = useState([]);
+  const [contacts, setContacts] = useState([]); // only the pages loaded so far (10 at a time)
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
@@ -61,8 +64,21 @@ export default function ContactsScreen({ navigation }) {
   const [sentIds, setSentIds] = useState(new Set());
 
   const load = useCallback(async () => {
-    try { setContacts(await api.listContacts()); } catch (err) { setError(err.message); } finally { setLoading(false); }
+    try {
+      const page = await api.listContactsPage(0);
+      setContacts(page.contacts); setTotal(page.total); setHasMore(page.hasMore);
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   }, []);
+  // Infinite scroll: the next 10, appended below what is already shown.
+  const loadMore = useCallback(async () => {
+    if (loading || loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await api.listContactsPage(contacts.length);
+      setContacts((list) => { const seen = new Set(list.map((c) => c._id)); return [...list, ...page.contacts.filter((c) => !seen.has(c._id))]; });
+      setTotal(page.total); setHasMore(page.hasMore);
+    } catch (err) { setError(err.message); } finally { setLoadingMore(false); }
+  }, [loading, loadingMore, hasMore, contacts.length]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const run = (key, fn) => async () => {
@@ -101,9 +117,9 @@ export default function ContactsScreen({ navigation }) {
     setImportResult(await api.importContacts(rows.map(rowToContact))); await load();
   });
 
-  const exportExcel = run('xlsx', () => writeAndShare({
+  const exportExcel = run('xlsx', async () => writeAndShare({
     filename: 'HuntsTAG-contacts.xlsx', encoding: 'base64', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', dialogTitle: 'Export contacts',
-    content: sheetToXlsxBase64(contacts.map((c) => ({ 'First Name': c.firstName || '', 'Last Name': c.lastName || '', Phone: c.phone, Email: c.email || '', Company: c.org || '', Address: c.address || '', Notes: c.notes || '' }))),
+    content: sheetToXlsxBase64((await api.listContacts()).map((c) => ({ 'First Name': c.firstName || '', 'Last Name': c.lastName || '', Phone: c.phone, Email: c.email || '', Company: c.org || '', Address: c.address || '', Notes: c.notes || '' }))),
   }));
 
   const downloadTemplate = run('template', () => writeAndShare({
@@ -135,7 +151,7 @@ export default function ContactsScreen({ navigation }) {
   function removeContact(contact) {
     Alert.alert('Remove contact?', 'Remove this contact from your HuntsTAG backup?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => { try { await api.deleteContact(contact._id); setContacts((list) => list.filter((c) => c._id !== contact._id)); } catch (err) { setError(err.message); } } },
+      { text: 'Delete', style: 'destructive', onPress: async () => { try { await api.deleteContact(contact._id); setContacts((list) => list.filter((c) => c._id !== contact._id)); setTotal((n) => Math.max(0, n - 1)); } catch (err) { setError(err.message); } } },
     ]);
   }
 
@@ -159,7 +175,7 @@ export default function ContactsScreen({ navigation }) {
     ? `Hi ${appt.name.split(' ')[0]}, I just sent you an appointment request on HuntsTAG${apptSent.proposedAt ? ` for ${formatDateTime(apptSent.proposedAt, { dateStyle: 'medium', timeStyle: 'short' })}` : ''}. Open the HuntsTAG app and check your Appointment Requests.`
     : `Hi, I'd like to schedule an appointment with you${apptSent.proposedAt ? ` for ${formatDateTime(apptSent.proposedAt, { dateStyle: 'medium', timeStyle: 'short' })}` : ''}. Create your free HuntsTAG account to see my request.`) : '';
 
-  return <Screen refreshing={false} onRefresh={load}>
+  return <Screen refreshing={false} onRefresh={load} onEndReached={loadMore}>
     <Title subtitle="Back up your phone's contacts to your HuntsTAG account. If you switch phones, log in here and export to restore them.">Contacts</Title>
     <Message>{error}</Message>
     {importResult ? <Message tone="success">Imported {importResult.imported}, skipped {importResult.skipped} already saved.</Message> : null}
@@ -167,13 +183,13 @@ export default function ContactsScreen({ navigation }) {
     <Card style={{ gap: 12 }}>
       <View style={styles.btnRow}>
         <Button compact kind="secondary" icon="download" title={busy === 'phone' ? 'Importing…' : 'Import from this phone'} disabled={Boolean(busy)} onPress={importFromPhone} />
-        <Button compact kind="secondary" icon="upload" title={busy === 'vcf' ? 'Preparing…' : 'Export contacts'} disabled={Boolean(busy) || !contacts.length} onPress={exportVcf} />
+        <Button compact kind="secondary" icon="upload" title={busy === 'vcf' ? 'Preparing…' : 'Export contacts'} disabled={Boolean(busy) || !total} onPress={exportVcf} />
       </View>
       <Text style={styles.hint}>Import picks contacts from this phone and adds any that aren't already saved here. Export gives you a file you can open on any phone to add them to its contacts app.</Text>
       <View style={styles.divider} />
       <View style={styles.btnRow}>
         <Button compact kind="secondary" icon="file" title={busy === 'excel' ? 'Importing…' : 'Upload Excel sheet'} disabled={Boolean(busy)} onPress={importExcel} />
-        <Button compact kind="secondary" icon="download" title="Export to Excel" disabled={Boolean(busy) || !contacts.length} onPress={exportExcel} />
+        <Button compact kind="secondary" icon="download" title="Export to Excel" disabled={Boolean(busy) || !total} onPress={exportExcel} />
         <Button compact kind="secondary" icon="file" title="Download template" disabled={Boolean(busy)} onPress={downloadTemplate} />
       </View>
       <Text style={styles.hint}>Columns: First Name, Last Name, Phone, Email, Company, Address, Notes (header names are flexible, but if you're not sure, grab the template above and fill it in). Export gives you a spreadsheet you can re-upload on any device.</Text>
@@ -202,6 +218,7 @@ export default function ContactsScreen({ navigation }) {
         </View>
       </Card>
     ))}
+    {loadingMore ? <Loading /> : null}
 
     <Sheet visible={Boolean(formMode)} onClose={closeForm} title={formMode === 'edit' ? 'Edit contact' : 'Add contact'}>
       <Message>{formError}</Message>

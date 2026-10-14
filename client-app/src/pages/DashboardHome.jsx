@@ -285,7 +285,7 @@ export default function DashboardHome() {
 
   const stage = orderStage(profile);
   const planLabel = profile?.cardType
-    ? profile.cardType.charAt(0).toUpperCase() + profile.cardType.slice(1)
+    ? profile.planName || profile.cardType.charAt(0).toUpperCase() + profile.cardType.slice(1)
     : 'No card yet';
   const statusLabel = stage === -1 ? 'No order yet' : ORDER_STAGES[stage];
 
@@ -430,7 +430,7 @@ export default function DashboardHome() {
               <p className="zing-sub">
                 {profile?.zingEnabled
                   ? 'No card on you? Zing your contact straight to their phone.'
-                  : `Zing isn't included in your current plan${profile?.cardType ? ` (${profile.cardType})` : ''}.`}
+                  : `Zing isn't included in your current plan${profile?.cardType ? ` (${profile.planName || profile.cardType})` : ''}.`}
               </p>
             </div>
             {profile?.zingEnabled ? (

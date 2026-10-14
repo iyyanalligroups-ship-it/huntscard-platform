@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const multer = require('multer');
+const mongoose = require('mongoose');
+const { safeExt } = require('../utils/upload');
 const { requireAuth } = require('../middleware/auth');
 const Contact = require('../models/Contact');
 
@@ -34,6 +36,19 @@ function splitName(fullName) {
 // GET /api/profile/contacts -- list everything saved for this client.
 router.get('/contacts', requireAuth, async (req, res) => {
   try {
+    // ?limit=10&skip=0 -> one page as { contacts, total, hasMore } (the mobile list scrolls through
+    // pages). Without ?limit the whole list comes back as a plain array, as the web app expects.
+    if (req.query.limit !== undefined) {
+      const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
+      const skip = Math.max(0, parseInt(req.query.skip, 10) || 0);
+      const filter = { clientId: req.user.clientId };
+      const [page, total] = await Promise.all([
+        Contact.find(filter).sort({ name: 1, _id: 1 }).skip(skip).limit(limit),
+        Contact.countDocuments(filter),
+      ]);
+      return res.json({ contacts: page, total, hasMore: skip + page.length < total });
+    }
+
     const contacts = await Contact.find({ clientId: req.user.clientId }).sort({ name: 1 });
 
     // Self-healing backfill for contacts saved before firstName/lastName
@@ -198,9 +213,9 @@ const contactPhotoUpload = multer({
   storage: multer.diskStorage({
     destination: CONTACT_PHOTOS_DIR,
     filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname) || '.jpg';
-      const unique = crypto.randomBytes(6).toString('hex');
-      cb(null, `${req.params.id}-${unique}${ext}`);
+      // Never put anything from the URL in the stored name -- :id is attacker-controlled ("..%2F..") and path.join would follow it out of this folder.
+      const unique = crypto.randomBytes(8).toString('hex');
+      cb(null, `contact-${unique}${safeExt(file)}`);
     },
   }),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
@@ -221,6 +236,7 @@ function uploadErrorMessage(err) {
 
 // POST /api/profile/contacts/:id/photo
 router.post('/contacts/:id/photo', requireAuth, (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Contact not found' });
   contactPhotoUpload.single('photo')(req, res, async (err) => {
     if (err) return res.status(400).json({ error: uploadErrorMessage(err) });
     if (!req.file) return res.status(400).json({ error: 'No photo file received' });
@@ -232,7 +248,10 @@ router.post('/contacts/:id/photo', requireAuth, (req, res) => {
         { $set: { photoUrl } },
         { new: true }
       );
-      if (!contact) return res.status(404).json({ error: 'Contact not found' });
+      if (!contact) {
+        fs.unlink(req.file.path, () => {}); // don't keep an upload nobody owns
+        return res.status(404).json({ error: 'Contact not found' });
+      }
       res.json(contact);
     } catch (err2) {
       console.error('[contacts photo POST]', err2);

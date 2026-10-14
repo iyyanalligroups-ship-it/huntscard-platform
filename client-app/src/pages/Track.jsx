@@ -87,7 +87,10 @@ function TrackingSteps({ steps }) {
 function TrackingResult({ type, order, profile }) {
   const isCard = type === 'card';
   const Icon = isCard ? CreditCard : Image;
-  const title = isCard ? order.requestedPlan || 'Physical card' : 'Magic Poster';
+  // requestedPlan is the plan's internal key, which keeps its old value if the plan is later renamed;
+  // the invoice items carry the name the customer actually bought ("Elite card - Dark Night").
+  const planName = (order.invoiceItems?.[0]?.name || '').split(' - ')[0].trim();
+  const title = isCard ? planName || order.requestedPlan || 'Physical card' : 'Magic Poster';
   const items = isCard
     ? (order.invoiceItems || []).map((item) => `${item.quantity}× ${item.name}`).join(', ')
     : (order.items || []).map((item) => `${item.quantity}× ${item.name || 'Poster'}`).join(', ');

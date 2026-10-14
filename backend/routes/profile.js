@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const multer = require('multer');
+const { safeExt } = require('../utils/upload');
 const bcrypt = require('bcryptjs');
 const { nanoid } = require('nanoid');
 const Razorpay = require('razorpay');
@@ -122,7 +123,7 @@ function makeStorage(dir) {
       // Unique filename per upload -- clientId + random suffix, so a
       // re-upload doesn't collide with (or silently overwrite in a way
       // that could race with) an in-flight request for the old one.
-      const ext = path.extname(file.originalname) || '.jpg';
+      const ext = safeExt(file);
       const unique = crypto.randomBytes(6).toString('hex');
       cb(null, `${req.user.clientId}-${unique}${ext}`);
     },
@@ -219,9 +220,11 @@ function uploadErrorMessage(err, maxSizeLabel) {
 // /me's own computation exactly, including the customAttributes Map fix
 // (see that route for why).
 async function withPlanFlags(client) {
-  const plan = await CardPlan.findOne({ key: client.cardType }).select('arEnabled zingEnabled variants requiresDesignUpload');
+  const plan = await CardPlan.findOne({ key: client.cardType }).select('name arEnabled zingEnabled variants requiresDesignUpload');
   const clientObj = client.toObject();
   clientObj.arEnabled = !!plan?.arEnabled;
+  // cardType is the plan's internal key (it keeps its old value if the plan is renamed); planName is what to show.
+  clientObj.planName = plan?.name || null;
   clientObj.zingEnabled = !!plan?.zingEnabled;
 
   // Client.cardType/cardVariantId are a legacy mirror of whichever card
@@ -466,7 +469,7 @@ router.post('/ar-model', requireAuth, (req, res) => {
       }
 
       const arModelUrl = `${process.env.BACKEND_URL}/uploads/ar-models/${req.file.filename}`;
-      const ext = path.extname(req.file.originalname).toLowerCase();
+      const ext = path.extname(req.file.filename).toLowerCase();
       const arModelType = ext === '.glb' ? 'glb' : ext === '.fbx' ? 'fbx' : 'image';
       const client = await Client.findOneAndUpdate(
         { clientId: req.user.clientId },
@@ -1387,6 +1390,10 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
     // claim a bigger quantity/breakdown here to get free spare cards. The
     // order's notes are the source of truth for what was actually paid for.
     const order = await getRazorpay().orders.fetch(razorpay_order_id);
+    // The signature only proves *an* order was paid. Make sure it was THIS client's order for THIS plan.
+    if (order?.notes?.clientId !== req.user.clientId || order?.notes?.requestedPlan !== plan.key) {
+      return res.status(400).json({ error: 'Payment order does not match the selected card plan.' });
+    }
     const quantity = parseQuantity(order?.notes?.quantity);
     let variantBreakdown = [];
     if (order?.notes?.variantBreakdown) {
@@ -1940,6 +1947,13 @@ router.post('/new-card-confirm', requireAuth, async (req, res) => {
     // both come from the order WE created, never trusted from this
     // request body directly.
     const order = await getRazorpay().orders.fetch(razorpay_order_id);
+    if (
+      order?.notes?.purchasedBy !== req.user.clientId ||
+      order?.notes?.requestedPlan !== plan.key ||
+      order?.notes?.recipientEmail !== recipientEmail.toLowerCase()
+    ) {
+      return res.status(400).json({ error: 'Payment order does not match this purchase.' });
+    }
     const quantity = parseQuantity(order?.notes?.quantity);
     let variantBreakdown = [];
     if (order?.notes?.variantBreakdown) {

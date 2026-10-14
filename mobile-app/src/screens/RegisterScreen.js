@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text } from 'react-native';
 import { useAuth } from '../auth/AuthContext.js';
 import DateTimeField from '../components/DateTimeField.js';
 import { Button, Card, Field, Message, PasswordField, Screen, SelectField, Title } from '../components/ui.js';
@@ -34,6 +34,7 @@ export default function RegisterScreen({ navigation }) {
       <PasswordField label="Password" placeholder="Create a password" value={form.password} onChangeText={set('password')} hint="At least 8 characters." />
       <Message>{error}</Message>
       <Button title={busy ? 'Creating account…' : 'Create account'} disabled={busy || !form.fullName || form.phone.length !== 10 || !form.loginEmail || form.password.length < 8} onPress={submit} />
+      <Text style={{ color: colors.textDim, fontSize: 12, textAlign: 'center' }}>By creating an account you agree to our <Text style={{ fontWeight: '700' }} onPress={() => navigation.navigate('Terms & Conditions')}>Terms</Text> and <Text style={{ fontWeight: '700' }} onPress={() => navigation.navigate('Privacy Policy')}>Privacy Policy</Text>.</Text>
       <Button kind="ghost" title="Already have an account? Log in" onPress={() => navigation.navigate('Login')} />
     </Card></Screen>
   </KeyboardAvoidingView>;

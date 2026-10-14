@@ -540,7 +540,7 @@ export default function Profile() {
         <div className="card" style={{ marginBottom: 16, textAlign: 'center' }}>
           <p style={{ fontSize: 14, marginBottom: 8 }}>
             3D model isn't included in your current plan
-            {profile?.cardType ? ` (${profile.cardType})` : ''}.
+            {profile?.cardType ? ` (${profile.planName || profile.cardType})` : ''}.
           </p>
           <p className="hint" style={{ marginBottom: 16 }}>
             Upgrade to a plan with AR to add a real 3D model to your HuntsAR World panel.

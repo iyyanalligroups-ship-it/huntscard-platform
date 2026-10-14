@@ -6,7 +6,19 @@ const AppointmentRequest = require('../models/AppointmentRequest');
 const { sendSms } = require('../utils/sms');
 const { sendEmail } = require('../utils/email');
 
+const rateLimit = require('express-rate-limit');
+
 const router = express.Router();
+
+// Each request can send a paid SMS to an arbitrary saved number, so cap it per account.
+const smsLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  keyGenerator: (req) => req.user.clientId,
+  message: { error: 'Too many appointment requests. Try again in an hour.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // ---------------------------------------------------------------------
 // Appointment requests -- sent from a client's own Contacts list (see
@@ -45,7 +57,7 @@ async function claimAppointmentRequests(client) {
 // POST /api/profile/appointments -- body: { contactId, note? }. Sends a
 // request to that contact's saved phone number -- in-app if it matches a
 // registered account, an SMS invite otherwise.
-router.post('/appointments', requireAuth, async (req, res) => {
+router.post('/appointments', requireAuth, smsLimiter, async (req, res) => {
   try {
     const { contactId, note, proposedAt } = req.body || {};
     if (!contactId) return res.status(400).json({ error: 'contactId is required' });

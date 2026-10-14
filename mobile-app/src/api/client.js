@@ -50,7 +50,33 @@ export function resolveAssetUrl(url) {
   return `${API_URL}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
-async function request(path, { method = 'GET', body, auth = true, form = false } = {}) {
+// Swaps a recently expired token for a new one (POST /api/auth/refresh). True if a new token was
+// stored; false if the server refused (session too old / blocked) -- then the caller logs out.
+let refreshing = null;
+function refreshSession() {
+  if (!refreshing) {
+    refreshing = (async () => {
+      const token = await SecureStore.getItemAsync(TOKEN_KEY);
+      if (!token) return false;
+      try {
+        const res = await fetch(`${API_URL}/api/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+        if (!res.ok) return false;
+        const data = await res.json();
+        await SecureStore.setItemAsync(TOKEN_KEY, data.token);
+        return true;
+      } catch {
+        return false;
+      }
+    })().finally(() => { refreshing = null; });
+  }
+  return refreshing;
+}
+
+async function request(path, { method = 'GET', body, auth = true, form = false, retried = false } = {}) {
   const headers = {};
   if (!form) headers['Content-Type'] = 'application/json';
   if (auth) {
@@ -80,6 +106,9 @@ async function request(path, { method = 'GET', body, auth = true, form = false }
   }
 
   if (!response.ok) {
+    if (response.status === 401 && auth && data.code === 'TOKEN_EXPIRED' && !retried && (await refreshSession())) {
+      return request(path, { method, body, auth, form, retried: true });
+    }
     if (response.status === 401 && auth) {
       await clearSession();
       unauthorizedHandler?.();
@@ -147,6 +176,7 @@ export const api = {
   listMyRequests: () => request('/api/profile/requests'),
   listMyMagicPosterOrders: () => request('/api/profile/magic-poster/orders?limit=50'),
   listContacts: () => request('/api/profile/contacts'),
+  listContactsPage: (skip, limit = 10) => request(`/api/profile/contacts${qs({ skip, limit })}`),
   createContact: (payload) => request('/api/profile/contacts', { method: 'POST', body: payload }),
   updateContact: (id, payload) => request(`/api/profile/contacts/${id}`, { method: 'PUT', body: payload }),
   deleteContact: (id) => request(`/api/profile/contacts/${id}`, { method: 'DELETE' }),

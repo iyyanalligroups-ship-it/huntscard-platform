@@ -184,6 +184,10 @@ export default function Register() {
               </button>
             </form>
 
+            <p style={{ fontSize: 12, textAlign: 'center', margin: '12px 0 0', opacity: 0.8 }}>
+              By creating an account you agree to our <Link to="/terms-condition">Terms</Link> and <Link to="/privacy-policy">Privacy Policy</Link>.
+            </p>
+
             <div className="login-auth__footer">
               <span>Already have an account? <Link to="/login">Log in</Link></span>
             </div>

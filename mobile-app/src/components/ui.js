@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Glyph } from './Glyph.js';
 import { colors, radius } from '../theme/colors.js';
 
-export function Screen({ children, refreshing, onRefresh, contentStyle, scroll = true, scrollEnabled = true }) {
+// onEndReached fires when the user scrolls within ~300px of the bottom (infinite scroll).
+export function Screen({ children, refreshing, onRefresh, onEndReached, contentStyle, scroll = true, scrollEnabled = true }) {
   if (!scroll) return <SafeAreaView style={styles.safe} edges={[]}>{children}</SafeAreaView>;
   return (
     <SafeAreaView style={styles.safe} edges={[]}>
@@ -13,6 +14,10 @@ export function Screen({ children, refreshing, onRefresh, contentStyle, scroll =
         contentContainerStyle={[styles.screen, contentStyle]}
         keyboardShouldPersistTaps="handled"
         scrollEnabled={scrollEnabled}
+        scrollEventThrottle={200}
+        onScroll={onEndReached ? ({ nativeEvent: { layoutMeasurement, contentOffset, contentSize } }) => {
+          if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 300) onEndReached();
+        } : undefined}
         refreshControl={onRefresh ? <RefreshControl refreshing={Boolean(refreshing)} onRefresh={onRefresh} tintColor={colors.holoCyan} colors={[colors.holoCyan]} /> : undefined}
       >
         {children}

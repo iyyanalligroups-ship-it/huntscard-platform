@@ -1,0 +1,31 @@
+/* Privacy Policy / Terms pages. Own colours (not the dark dashboard theme) so long text stays readable. */
+.legal-page { max-width: 1100px; margin: 0 auto; padding: 40px 20px 72px; color: #1f2937; background: #fff; line-height: 1.7; }
+.legal-page h1 { font-size: 34px; margin: 8px 0 4px; color: #0c1f4d; }
+.legal-crumbs { font-size: 13px; color: #6b7280; }
+.legal-crumbs a { color: #6b7280; text-decoration: none; }
+.legal-crumbs a:hover { color: var(--brand-accent, #0d9394); }
+.legal-crumbs span { color: var(--brand-accent, #0d9394); }
+.legal-updated { font-size: 13px; color: #6b7280; margin: 0 0 16px; }
+.legal-intro { font-size: 16px; margin: 0 0 28px; max-width: 760px; }
+.legal-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 40px; align-items: start; }
+.legal-toc { position: sticky; top: 90px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; padding: 14px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f9fafb; max-height: calc(100vh - 120px); overflow: auto; }
+.legal-toc strong { margin-bottom: 4px; color: #0c1f4d; }
+.legal-toc a { color: #4b5563; text-decoration: none; padding: 3px 0; }
+.legal-toc a:hover { color: var(--brand-accent, #0d9394); }
+.legal-body section { margin-bottom: 30px; scroll-margin-top: 90px; }
+.legal-body h2 { font-size: 21px; margin: 0 0 10px; color: #0c1f4d; }
+.legal-body h3 { font-size: 16px; margin: 14px 0 6px; color: #1f2937; }
+.legal-body p { margin: 0 0 10px; color: #374151; }
+.legal-body ul { margin: 0 0 10px; padding-left: 22px; color: #374151; }
+.legal-body li { margin-bottom: 6px; }
+.legal-body a { color: var(--brand-accent, #0d9394); }
+.legal-contact { padding: 18px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f9fafb; }
+@media (max-width: 860px) {
+  .legal-layout { grid-template-columns: 1fr; gap: 20px; }
+  .legal-toc { position: static; max-height: none; }
+  .legal-page h1 { font-size: 28px; }
+}
+.legal-page h1, .legal-page h2, .legal-page h3 { letter-spacing: 0; }
+.legal-body h2 { font-weight: 700; }
+.legal-body h3 { font-weight: 700; font-size: 16px; }
+.legal-toc a { text-decoration: none; }

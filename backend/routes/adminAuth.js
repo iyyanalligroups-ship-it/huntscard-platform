@@ -3,6 +3,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { requireAdmin } = require('../middleware/auth');
 const Admin = require('../models/Admin');
+const { str, limiter } = require('../utils/upload');
+
+// Generous on purpose (admins retype passwords on the encode tool), but not unlimited.
+const adminLoginLimiter = limiter(60, 15, 'Too many login attempts. Try again in 15 minutes.');
 
 const router = express.Router();
 
@@ -16,9 +20,10 @@ const router = express.Router();
 // This route is shared by both the web admin dashboard and the encode
 // tool, so the change applies to both.
 // POST /api/admin/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', adminLoginLimiter, async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = str(req.body.email);
+    const password = str(req.body.password);
     if (!email || !password) {
       return res.status(400).json({ error: 'email and password are required' });
     }
@@ -49,6 +54,36 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     console.error('[admin/auth/login]', err);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// POST /api/admin/auth/refresh { token } -- same idea as the client refresh in routes/auth.js:
+// an admin token that expired within the grace period is swapped for a fresh one. The admin
+// must still exist; role is read from the DB, not the old token.
+const REFRESH_GRACE_SECONDS = Number(process.env.TOKEN_REFRESH_GRACE_DAYS || 30) * 24 * 60 * 60;
+router.post('/refresh', limiter(60, 15), async (req, res) => {
+  try {
+    const old = str(req.body.token) || (req.headers.authorization || '').replace(/^Bearer /, '');
+    let payload;
+    try {
+      payload = jwt.verify(old, process.env.JWT_SECRET, { ignoreExpiration: true });
+    } catch {
+      return res.status(401).json({ error: 'Invalid token', code: 'TOKEN_INVALID' });
+    }
+    if (payload.type !== 'admin' || !payload.exp || Date.now() / 1000 > payload.exp + REFRESH_GRACE_SECONDS) {
+      return res.status(401).json({ error: 'Session is too old. Please log in again.', code: 'TOKEN_INVALID' });
+    }
+    const admin = await Admin.findById(payload.adminId);
+    if (!admin) return res.status(401).json({ error: 'This admin account no longer exists', code: 'TOKEN_INVALID' });
+    const token = jwt.sign(
+      { type: 'admin', adminId: admin._id.toString(), email: admin.email, role: admin.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.ADMIN_JWT_EXPIRES_IN || '2h' }
+    );
+    res.json({ token, role: admin.role });
+  } catch (err) {
+    console.error('[admin/auth/refresh]', err);
+    res.status(500).json({ error: 'Refresh failed' });
   }
 });
 

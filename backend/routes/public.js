@@ -26,6 +26,10 @@ const AttributeDefinition = require('../models/AttributeDefinition');
 const SiteSetting = require('../models/SiteSetting');
 const FaqEntry = require('../models/FaqEntry');
 const { getChargeAmount, getMagicArtChargeAmount } = require('../utils/pricing');
+const { safeExt, str, limiter } = require('../utils/upload');
+
+// Unauthenticated writes (orders, contact form, leads): bounded per IP so they can't be used to spam or fill the DB.
+const publicWriteLimiter = limiter(40, 15);
 const { Country, State, City } = require('country-state-city');
 const { getGlobalMagicLayoutDefault, mergeMagicLayout } = require('../utils/magicLayout');
 const { buildVariantMap, resolveCardVariant } = require('../utils/cardVariant');
@@ -130,12 +134,14 @@ router.get('/catalog-entries', async (req, res) => {
 // -----------------------------------------------------------------------
 
 // POST /api/public/shop-order
-router.post('/shop-order', async (req, res) => {
+router.post('/shop-order', publicWriteLimiter, async (req, res) => {
   try {
     const razorpay = getRazorpay();
     if (!razorpay) return res.status(503).json({ error: 'Payments are not configured yet.' });
 
-    const { requestedPlan, fullName, loginEmail } = req.body;
+    const requestedPlan = str(req.body.requestedPlan);
+    const fullName = str(req.body.fullName);
+    const loginEmail = str(req.body.loginEmail);
     if (!requestedPlan || !fullName || !loginEmail) {
       return res.status(400).json({ error: 'requestedPlan, fullName, and loginEmail are required' });
     }
@@ -173,14 +179,17 @@ router.post('/shop-order', async (req, res) => {
 });
 
 // POST /api/public/shop-confirm
-router.post('/shop-confirm', async (req, res) => {
+router.post('/shop-confirm', publicWriteLimiter, async (req, res) => {
   try {
     if (!process.env.RAZORPAY_KEY_SECRET) return res.status(503).json({ error: 'Payments are not configured yet.' });
 
-    const {
-      requestedPlan, fullName, loginEmail, razorpay_order_id, razorpay_payment_id, razorpay_signature,
-      cardVariantId, designFrontUrl, designBackUrl,
-    } = req.body;
+    const { cardVariantId, designFrontUrl, designBackUrl } = req.body;
+    const requestedPlan = str(req.body.requestedPlan);
+    const fullName = str(req.body.fullName);
+    const loginEmail = str(req.body.loginEmail);
+    const razorpay_order_id = str(req.body.razorpay_order_id);
+    const razorpay_payment_id = str(req.body.razorpay_payment_id);
+    const razorpay_signature = str(req.body.razorpay_signature);
     if (!requestedPlan || !fullName || !loginEmail || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -194,8 +203,21 @@ router.post('/shop-confirm', async (req, res) => {
       return res.status(400).json({ error: 'Payment verification failed -- signature mismatch.' });
     }
 
+    // One payment buys one account. Without this a single paid order could be replayed for any number of emails.
+    if (await CardRequest.findOne({ razorpayPaymentId: razorpay_payment_id })) {
+      return res.status(409).json({ error: 'This payment has already been used.' });
+    }
+
     const plan = await CardPlan.findOne({ key: requestedPlan.toLowerCase() });
     if (!plan) return res.status(400).json({ error: 'requestedPlan must match an existing card plan' });
+
+    // The signature only proves an order was paid, not which plan it was for. Check the order we created.
+    const razorpay = getRazorpay();
+    if (!razorpay) return res.status(503).json({ error: 'Payments are not configured yet.' });
+    const order = await razorpay.orders.fetch(razorpay_order_id);
+    if (order?.notes?.requestedPlan !== plan.key || order?.notes?.loginEmail !== loginEmail.toLowerCase()) {
+      return res.status(400).json({ error: 'Payment order does not match this purchase.' });
+    }
     if (plan.variants.length > 0) {
       if (!cardVariantId || !plan.variants.some((v) => v._id.toString() === cardVariantId)) {
         return res.status(400).json({ error: 'A valid card variant must be selected for this plan.' });
@@ -272,8 +294,7 @@ const DESIGN_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const designStorage = multer.diskStorage({
   destination: DESIGN_UPLOADS_DIR,
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.jpg';
-    cb(null, `design-${crypto.randomBytes(8).toString('hex')}${ext}`);
+    cb(null, `design-${crypto.randomBytes(8).toString('hex')}${safeExt(file)}`);
   },
 });
 const uploadDesign = multer({
@@ -288,7 +309,7 @@ const uploadDesign = multer({
 });
 
 // POST /api/public/design-upload -- multipart/form-data, field "design"
-router.post('/design-upload', (req, res) => {
+router.post('/design-upload', limiter(30, 60, 'Too many uploads. Try again later.'), (req, res) => {
   uploadDesign.single('design')(req, res, (err) => {
     if (err) {
       return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'File is too large -- max 10MB.' : err.message });
@@ -306,7 +327,7 @@ router.post('/design-upload', (req, res) => {
 // -----------------------------------------------------------------------
 
 // POST /api/public/contact
-router.post('/contact', async (req, res) => {
+router.post('/contact', publicWriteLimiter, async (req, res) => {
   try {
     const { name, phone, email, message } = req.body;
     if (!name || !phone || !email || !message) {
@@ -440,7 +461,7 @@ router.get('/vcard/:clientId', async (req, res) => {
 // existing Contacts list (routes/contacts.js), tagged source: 'tap' so
 // it's distinguishable from contacts the owner added/imported themselves.
 // No auth -- same trust level as every other public tap-page route here.
-router.post('/leads/:clientId', async (req, res) => {
+router.post('/leads/:clientId', publicWriteLimiter, async (req, res) => {
   try {
     const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId cardActive');
     if (!client) return res.status(404).json({ error: 'Profile not found' });
@@ -501,7 +522,7 @@ router.post('/leads/:clientId', async (req, res) => {
 // does NOT gate on cardBlockReason the way leads/vcard/ar-layout do --
 // this route's whole purpose is to still work while the card is blocked,
 // not despite it.
-router.post('/card-tickets/:clientId', async (req, res) => {
+router.post('/card-tickets/:clientId', publicWriteLimiter, async (req, res) => {
   try {
     const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId');
     if (!client) return res.status(404).json({ error: 'Profile not found' });

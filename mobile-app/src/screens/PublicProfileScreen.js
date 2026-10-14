@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Linking, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import * as Contacts from 'expo-contacts';
+import * as Contacts from 'expo-contacts/legacy';
 import { api, publicUrl, resolveAssetUrl, WEB_URL } from '../api/client.js';
 import { Glyph } from '../components/Glyph.js';
 import { Avatar, Button, Card, Field, Message, Sheet, Tabs } from '../components/ui.js';
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
   strip: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 10, marginTop: 14, paddingHorizontal: 16 }, circle: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' },
   primary: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginVertical: 16 },
   exchange: { flex: 1, height: 48, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }, exchangeText: { color: '#fff', fontWeight: '800' },
-  secondaryAct: { height: 48, paddingHorizontal: 16, borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.08)' }, secondaryText: { color: colors.text, fontWeight: '700' },
+  secondaryAct: { height: 48, paddingHorizontal: 16, borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.08)' }, secondaryText: { color: '#ffffff', fontWeight: '700' },
   shareAct: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)' },
   content: { padding: 16, gap: 12 },
   bioCard: { padding: 16, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.05)', gap: 10 }, bioHead: { fontWeight: '800', fontSize: 14 }, bioText: { color: '#cbd5e1', lineHeight: 22, fontSize: 14 },

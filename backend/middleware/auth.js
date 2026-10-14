@@ -40,7 +40,9 @@ async function requireAuth(req, res, next) {
     req.user = payload; // { type: 'client', clientId, loginEmail, iat, exp }
     next();
   } catch (err) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    // TOKEN_EXPIRED tells the app it can call POST /api/auth/refresh instead of logging out.
+    if (err.name === 'TokenExpiredError') return res.status(401).json({ error: 'Token expired', code: 'TOKEN_EXPIRED' });
+    return res.status(401).json({ error: 'Invalid or expired token', code: 'TOKEN_INVALID' });
   }
 }
 
@@ -58,8 +60,9 @@ async function loadAdmin(req) {
   let payload;
   try {
     payload = jwt.verify(token, process.env.JWT_SECRET);
-  } catch {
-    return { error: 401, message: 'Invalid or expired token' };
+  } catch (err) {
+    if (err.name === 'TokenExpiredError') return { error: 401, message: 'Token expired', code: 'TOKEN_EXPIRED' };
+    return { error: 401, message: 'Invalid or expired token', code: 'TOKEN_INVALID' };
   }
   if (payload.type !== 'admin') return { error: 403, message: 'This endpoint requires an admin login' };
 
@@ -75,7 +78,7 @@ async function loadAdmin(req) {
 // further per-route change needed.
 async function requireAdmin(req, res, next) {
   const result = await loadAdmin(req);
-  if (result.error) return res.status(result.error).json({ error: result.message });
+  if (result.error) return res.status(result.error).json({ error: result.message, code: result.code });
   if (result.admin.role === 'employee') {
     return res.status(403).json({ error: 'Employee accounts can only use the Encode Tool, not this dashboard.' });
   }
@@ -88,7 +91,7 @@ async function requireAdmin(req, res, next) {
 // records" section of routes/admin.js).
 async function requireEncodeAccess(req, res, next) {
   const result = await loadAdmin(req);
-  if (result.error) return res.status(result.error).json({ error: result.message });
+  if (result.error) return res.status(result.error).json({ error: result.message, code: result.code });
   req.admin = result.admin;
   next();
 }

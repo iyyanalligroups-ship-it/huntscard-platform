@@ -42,9 +42,61 @@ export function getImpersonatedBy() {
   }
 }
 
-async function request(path, { method = 'GET', body, auth = true } = {}) {
+
+// ---- Token refresh --------------------------------------------------------------------------
+// Tokens are short-lived. Shortly before one expires (or after it has, within the server's grace
+// period) it is swapped for a new one via /api/auth/refresh, so people are not logged out mid-work.
+// The expiry is only READ here to decide when to refresh; the server still verifies every token.
+function tokenExpiryMs() {
+  try {
+    const part = getToken().split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(part)).exp * 1000;
+  } catch {
+    return 0;
+  }
+}
+
+let refreshing = null;
+// Resolves true if a new token was stored, or the server could not be reached (keep the session
+// and try again later); false if the server says this session cannot be refreshed.
+export function refreshSession() {
+  const token = getToken();
+  if (!token) return Promise.resolve(false);
+  if (!refreshing) {
+    refreshing = fetch(`${API_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+      .then(async (res) => {
+        if (!res.ok) return false;
+        const data = await res.json();
+        localStorage.setItem('huntsTAG_client_token', data.token);
+        return true;
+      })
+      .catch(() => true)
+      .finally(() => { refreshing = null; });
+  }
+  return refreshing;
+}
+
+async function ensureFreshToken() {
+  if (getImpersonatedBy()) return; // admin-issued 20-minute sessions are never extended
+  const exp = tokenExpiryMs();
+  if (exp && exp - Date.now() < 5 * 60 * 1000) await refreshSession();
+}
+
+if (typeof window !== 'undefined') {
+  const check = () => { if (getToken()) ensureFreshToken(); };
+  setInterval(check, 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+  check();
+}
+
+async function request(path, { method = 'GET', body, auth = true, retried = false } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (auth) {
+    await ensureFreshToken();
     const token = getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
   }
@@ -72,6 +124,9 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
     data = {};
   }
   if (!res.ok) {
+    if (res.status === 401 && auth && data.code === 'TOKEN_EXPIRED' && !retried && (await refreshSession())) {
+      return request(path, { method, body, auth, retried: true });
+    }
     if (res.status === 401 && auth) {
       clearSession();
       window.location.href = '/login';

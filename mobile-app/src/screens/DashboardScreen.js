@@ -113,7 +113,9 @@ export default function DashboardScreen({ navigation }) {
   const totalFilled = groups.reduce((s, g) => s + g.filled, 0);
   const pct = Math.round((totalFilled / totalFields) * 100);
   const stage = orderStage(profile);
-  const planLabel = profile?.cardType ? capitalize(profile.cardType) : 'No card yet';
+  // cardType is the plan's internal key; the display name comes from the profile, or from the card list (works even before the API returns planName).
+  const planName = profile?.planName || selectedCard?.planName || cards[0]?.planName || (profile?.cardType ? capitalize(profile.cardType) : null);
+  const planLabel = profile?.cardType ? planName : 'No card yet';
   const statusLabel = stage === -1 ? 'No order yet' : ORDER_STAGES[stage];
   const heroShape = selectedCard ? selectedCard.shape : profile?.cardShape;
   const heroDesign = selectedCard ? selectedCard.cardDesignUrl : profile?.cardFrontImageUrl;
@@ -153,7 +155,7 @@ export default function DashboardScreen({ navigation }) {
     <Card style={styles.zing}>
       <View style={{ flex: 1, gap: 4 }}>
         <Text style={styles.h2}>⚡ Zing</Text>
-        <Text style={styles.dim}>{profile?.zingEnabled ? 'No card on you? Zing your contact straight to their phone.' : `Zing isn't included in your current plan${profile?.cardType ? ` (${profile.cardType})` : ''}.`}</Text>
+        <Text style={styles.dim}>{profile?.zingEnabled ? 'No card on you? Zing your contact straight to their phone.' : `Zing isn't included in your current plan${profile?.cardType ? ` (${planName})` : ''}.`}</Text>
       </View>
       {profile?.zingEnabled ? <View style={{ alignItems: 'center', gap: 6 }}>
         <Pressable onPress={handleZing} disabled={zing === 'busy'} style={[styles.zingBtn, zing === 'success' && { backgroundColor: '#22c58b' }, zing === 'fail' && { backgroundColor: colors.danger }]}>

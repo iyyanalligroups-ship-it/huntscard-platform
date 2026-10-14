@@ -28,6 +28,8 @@ import Faq from './pages/Faq.jsx';
 import AboutUs from './pages/AboutUs.jsx';
 import WhatIsHuntsworld from './pages/WhatIsHuntsworld.jsx';
 import ChatSupport from './pages/ChatSupport.jsx';
+import PrivacyPolicy from './pages/PrivacyPolicy.jsx';
+import TermsConditions from './pages/TermsConditions.jsx';
 import Impersonate from './pages/Impersonate.jsx';
 
 // Lazy-loaded ("Mark 1" experiment) -- pulls in mind-ar/@tensorflow/tfjs,
@@ -220,6 +222,8 @@ export default function App() {
         <Route path="about" element={<AboutUs />} />
         <Route path="huntsworld" element={<WhatIsHuntsworld />} />
         <Route path="chat" element={<ChatSupport />} />
+        <Route path="privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="terms-condition" element={<TermsConditions />} />
       </Route>
 
       {/* Public tap page -- what a stranger sees when they tap the physical

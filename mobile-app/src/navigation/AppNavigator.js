@@ -21,6 +21,7 @@ import HomeScreen from '../screens/HomeScreen.js';
 import CatalogScreen from '../screens/CatalogScreen.js';
 import ContactUsScreen from '../screens/ContactUsScreen.js';
 import { AboutScreen, FaqScreen, HuntsworldScreen } from '../screens/InfoScreens.js';
+import { PrivacyPolicyScreen, TermsScreen } from '../screens/LegalScreens.js';
 import MagicArtScreen from '../screens/MagicArtScreen.js';
 import MagicPosterCartScreen from '../screens/MagicPosterCartScreen.js';
 import ShopScreen from '../screens/ShopScreen.js';
@@ -147,6 +148,8 @@ const sharedPages = <>
   <Stack.Screen name="About Us" component={AboutScreen} />
   <Stack.Screen name="What is HuntsWorld?" component={HuntsworldScreen} />
   <Stack.Screen name="FAQ" component={FaqScreen} />
+  <Stack.Screen name="Privacy Policy" component={PrivacyPolicyScreen} />
+  <Stack.Screen name="Terms & Conditions" component={TermsScreen} />
   <Stack.Screen name="Chat Support" component={ChatScreen} />
   <Stack.Screen name="Card" component={PublicProfileScreen} options={{ title: 'HuntsTAG Card' }} />
   <Stack.Screen name="Open a Card" component={OpenCardScreen} />
