@@ -17,7 +17,7 @@ const FEATURES = [
   {
     art: IlloSync,
     title: 'Phone to Phone Sync',
-    desc: 'Share your information directly from phone to phone in seconds. Fast, smooth and completely wireless -- networking has never been this effortless.',
+    desc: 'Share your information directly from phone to phone in seconds. Fast, smooth and completely wireless. Networking has never been this effortless.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="4" width="7" height="16" rx="1.5" />
@@ -30,7 +30,7 @@ const FEATURES = [
   {
     art: IlloAR,
     title: 'Augmented Reality',
-    desc: 'Experience networking like never before. HuntsTAG brings your profile to life through stunning Augmented Reality -- making you unforgettable in every meeting and event.',
+    desc: 'Experience networking like never before. HuntsTAG brings your profile to life through stunning Augmented Reality, making you unforgettable in every meeting and event.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 8.5 12 4l9 4.5-9 4.5-9-4.5Z" />
@@ -42,7 +42,7 @@ const FEATURES = [
   {
     art: IlloQR,
     title: 'QR Scanner',
-    desc: 'Not every phone supports NFC? No problem. Every HuntsTAG comes with a built-in QR code -- scan and connect in an instant from any smartphone.',
+    desc: 'Not every phone supports NFC? No problem. Every HuntsTAG comes with a built-in QR code. Scan and connect in an instant from any smartphone.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -67,7 +67,7 @@ export default function AboutUs() {
           <span className="grad">One Tap. Infinite Connections.</span>
         </h1>
         <p className="section-subheading">
-          HuntsTAG is a next generation smart business card powered by NFC technology -- designed to replace
+          HuntsTAG is a next generation smart business card powered by NFC technology, designed to replace
           traditional visiting cards with a seamless, futuristic and powerful networking experience.
         </p>
       </header>
@@ -85,7 +85,7 @@ export default function AboutUs() {
           </p>
           <p>
             Simply tap your HuntsTAG card on any smartphone and share your complete business profile,
-            portfolio, social media, contact details and more -- instantly, effortlessly and unforgettably.
+            portfolio, social media, contact details and more, instantly, effortlessly and unforgettably.
           </p>
           <p className="au-statement">
             HuntsTAG is not just a card. It is your digital identity.
@@ -110,7 +110,7 @@ export default function AboutUs() {
       <section className="au-cta-band">
         <div>
           <h2 className="section-heading">Get in touch</h2>
-          <p>Questions about a plan, an order, or anything else -- we'd like to hear from you.</p>
+          <p>Questions about a plan, an order, or anything else. We'd like to hear from you.</p>
         </div>
         <Link to="/contact" className="btn-primary au-cta">Contact us →</Link>
       </section>

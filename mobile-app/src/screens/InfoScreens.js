@@ -7,9 +7,9 @@ import { colors } from '../theme/colors.js';
 
 const FEATURES = [
   { icon: 'nfc', title: 'NFC Tap Technology', desc: 'Just tap your HuntsTAG on any NFC enabled smartphone and your complete profile transfers instantly. No app required. No WiFi needed. Just tap and connect.' },
-  { icon: 'phoneDevice', title: 'Phone to Phone Sync', desc: 'Share your information directly from phone to phone in seconds. Fast, smooth and completely wireless -- networking has never been this effortless.' },
-  { icon: 'layers', title: 'Augmented Reality', desc: 'Experience networking like never before. HuntsTAG brings your profile to life through stunning Augmented Reality -- making you unforgettable in every meeting and event.' },
-  { icon: 'qr', title: 'QR Scanner', desc: 'Not every phone supports NFC? No problem. Every HuntsTAG comes with a built-in QR code -- scan and connect in an instant from any smartphone.' },
+  { icon: 'phoneDevice', title: 'Phone to Phone Sync', desc: 'Share your information directly from phone to phone in seconds. Fast, smooth and completely wireless. Networking has never been this effortless.' },
+  { icon: 'layers', title: 'Augmented Reality', desc: 'Experience networking like never before. HuntsTAG brings your profile to life through stunning Augmented Reality, making you unforgettable in every meeting and event.' },
+  { icon: 'qr', title: 'QR Scanner', desc: 'Not every phone supports NFC? No problem. Every HuntsTAG comes with a built-in QR code. Scan and connect in an instant from any smartphone.' },
 ];
 
 const HUNTSWORLD_POINTS = [
@@ -34,12 +34,12 @@ export function FaqScreen({ navigation }) {
 
 export function AboutScreen({ navigation }) {
   return <Screen>
-    <Title eyebrow="HuntsTAG" subtitle="HuntsTAG is a next generation smart business card powered by NFC technology -- designed to replace traditional visiting cards with a seamless, futuristic and powerful networking experience.">The Future of Networking is Here.</Title>
+    <Title eyebrow="HuntsTAG" subtitle="HuntsTAG is a next generation smart business card powered by NFC technology, designed to replace traditional visiting cards with a seamless, futuristic and powerful networking experience.">The Future of Networking is Here.</Title>
     <Text style={styles.accent}>One Tap. Infinite Connections.</Text>
     <Card style={{ gap: 10 }}>
       <Text style={styles.h2}>What is HuntsTAG</Text>
       <Text style={styles.body}>In a world that moves at the speed of technology, your business card should too. HuntsTAG is a revolutionary smart card that connects people instantly with just a single tap. No more paper cards. No more manual typing. No more lost contacts.</Text>
-      <Text style={styles.body}>Simply tap your HuntsTAG card on any smartphone and share your complete business profile, portfolio, social media, contact details and more -- instantly, effortlessly and unforgettably.</Text>
+      <Text style={styles.body}>Simply tap your HuntsTAG card on any smartphone and share your complete business profile, portfolio, social media, contact details and more, instantly, effortlessly and unforgettably.</Text>
       <Text style={styles.statement}>HuntsTAG is not just a card. It is your digital identity.</Text>
     </Card>
     <Text style={styles.h2}>Key Features</Text>
@@ -49,7 +49,7 @@ export function AboutScreen({ navigation }) {
     </Card>)}
     <Card style={{ gap: 10 }}>
       <Text style={styles.h2}>Get in touch</Text>
-      <Text style={styles.body}>Questions about a plan, an order, or anything else -- we'd like to hear from you.</Text>
+      <Text style={styles.body}>Questions about a plan, an order, or anything else. We'd like to hear from you.</Text>
       <Button title="Contact us →" onPress={() => navigation.navigate('Contact Us')} />
     </Card>
   </Screen>;
