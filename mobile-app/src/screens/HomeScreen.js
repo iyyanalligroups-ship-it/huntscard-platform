@@ -259,7 +259,7 @@ export default function HomeScreen({ navigation }) {
       {SITE.businessAddress ? <Text style={styles.footText}>{SITE.businessAddress}</Text> : null}
       {SITE.gstNumber ? <Text style={styles.footText}>GSTIN: {SITE.gstNumber}</Text> : null}
       <View style={styles.footLinks}>
-        {['About Us', 'What is HuntsWorld?', 'FAQ', 'Contact Us'].map((label) => <Pressable key={label} onPress={go(label)}><Text style={styles.footLink}>{label}</Text></Pressable>)}
+        {['About Us', 'What is HuntsWorld?', 'FAQ', 'Contact Us', 'Privacy Policy', 'Terms & Conditions'].map((label) => <Pressable key={label} onPress={go(label)}><Text style={styles.footLink}>{label}</Text></Pressable>)}
         <Pressable onPress={() => Linking.openURL('mailto:info@huntsworld.com')}><Text style={styles.footLink}>info@huntsworld.com</Text></Pressable>
       </View>
       <Text style={styles.copy}>{'©'} {new Date().getFullYear()} HuntsTAG. All rights reserved.</Text>
