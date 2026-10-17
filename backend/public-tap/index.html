@@ -485,7 +485,7 @@
             </div>
           </div>` : ''}
           <h1 class="name">${escapeHtml(p.fullName)}</h1>
-          ${p.jobTitle ? `<p class="title">${escapeHtml(p.jobTitle)}</p>` : '<p class="title">&nbsp;</p>'}
+          ${p.designation || p.jobTitle ? `<p class="title">${escapeHtml([p.designation, p.jobTitle].filter(Boolean).join(' · '))}</p>` : '<p class="title">&nbsp;</p>'}
           <div class="actions-row">
             <button class="btn btn-primary" id="saveContactBtn">Save Contact</button>
             <button class="btn btn-secondary" id="shareBtn">Share</button>

@@ -20,8 +20,6 @@ const ClientSchema = new mongoose.Schema(
     // login email visible on a card tapped by strangers.
     loginEmail: {
       type: String,
-      required: true,
-      unique: true,
       lowercase: true,
       trim: true,
     },
@@ -32,8 +30,25 @@ const ClientSchema = new mongoose.Schema(
 
     // ---- Public profile fields (shown on the tap page) ----
     fullName: { type: String, required: true, trim: true },
-    jobTitle: { type: String, trim: true }, // e.g. "Designer @ Huntsworld"
-    bio: { type: String, trim: true, maxlength: 280 }, // short "About" text
+    // Kept as `jobTitle` in storage for compatibility with existing data,
+    // but presented to users as their company name.
+    jobTitle: { type: String, trim: true },
+    // The person's role/occupation within (or independently of) that company.
+    designation: { type: String, trim: true },
+    // Short one-line introduction shown beneath the name. Kept separate
+    // from the longer About bio so the public profile does not repeat it.
+    headline: { type: String, trim: true, maxlength: 120 },
+    bio: { type: String, trim: true, maxlength: 300 }, // short "About" text
+    addressMode: { type: String, enum: ['manual', 'google'], default: 'manual' },
+    addressLine1: { type: String, trim: true },
+    addressLine2: { type: String, trim: true },
+    addressCountry: { type: String, trim: true, default: 'India' },
+    addressCountryCode: { type: String, trim: true, uppercase: true, default: 'IN' },
+    addressState: { type: String, trim: true },
+    addressStateCode: { type: String, trim: true, uppercase: true },
+    addressCity: { type: String, trim: true },
+    addressPincode: { type: String, trim: true, maxlength: 6 },
+    googleMapsUrl: { type: String, trim: true },
     // "Expertise & Highlights" tags shown as #hashtags under bio on the
     // public tap page (see PublicProfile.jsx). Empty means the tap page
     // falls back to its own auto-picked defaults, so older profiles that
@@ -89,6 +104,12 @@ const ClientSchema = new mongoose.Schema(
     phone: { type: String, trim: true },
     whatsapp: { type: String, trim: true },
     publicEmail: { type: String, trim: true, lowercase: true },
+    publicEmailVerified: { type: Boolean, default: false },
+    pendingPublicEmail: { type: String, trim: true, lowercase: true, default: null },
+    publicEmailOtpHash: { type: String, default: null, select: false },
+    publicEmailOtpExpiresAt: { type: Date, default: null },
+    publicEmailOtpAttempts: { type: Number, default: 0 },
+    publicEmailOtpLastSentAt: { type: Date, default: null },
     instagramUrl: { type: String, trim: true },
     twitterUrl: { type: String, trim: true },
     portfolioUrl: { type: String, trim: true },
@@ -198,6 +219,14 @@ const ClientSchema = new mongoose.Schema(
     cardActive: { type: Boolean, default: true },
   },
   { timestamps: true } // adds createdAt / updatedAt automatically
+);
+
+// Email is optional for phone-verified self-registration. Keep supplied
+// emails unique while excluding phone-only accounts (where the field is
+// absent) from the index.
+ClientSchema.index(
+  { loginEmail: 1 },
+  { unique: true, partialFilterExpression: { loginEmail: { $type: 'string' } } }
 );
 
 module.exports = mongoose.model('Client', ClientSchema);

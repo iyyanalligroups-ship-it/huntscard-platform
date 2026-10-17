@@ -167,6 +167,10 @@ export const api = {
   login: (identifier, password) =>
     request('/api/auth/login', { method: 'POST', body: { identifier, password }, auth: false }),
   register: (payload) => request('/api/auth/register', { method: 'POST', body: payload, auth: false }),
+  requestRegistrationOtp: (phone) =>
+    request('/api/auth/register-otp/request', { method: 'POST', body: { phone }, auth: false }),
+  verifyRegistrationOtp: (phone, otp) =>
+    request('/api/auth/register-otp/verify', { method: 'POST', body: { phone, otp }, auth: false }),
   changePassword: (currentPassword, newPassword) =>
     request('/api/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } }),
   // Passwordless login via phone OTP -- phone only, no email equivalent.
@@ -182,6 +186,10 @@ export const api = {
   resetPassword: (token, newPassword) =>
     request('/api/auth/reset-password', { method: 'POST', body: { token, newPassword }, auth: false }),
   getProfile: () => request('/api/profile/me'),
+  requestPublicEmailOtp: (email) =>
+    request('/api/profile/email-verification/request', { method: 'POST', body: { email } }),
+  verifyPublicEmailOtp: (email, otp) =>
+    request('/api/profile/email-verification/verify', { method: 'POST', body: { email, otp } }),
   // Deactivate/pause -- hides the public profile/vCard/AR experience from
   // anyone who taps or scans the card (see Settings.jsx's "Card status").
   pauseCard: () => request('/api/profile/pause-card', { method: 'POST' }),
@@ -448,6 +456,7 @@ export const api = {
   getStates: (country) => request(`/api/public/geo/states?country=${encodeURIComponent(country)}`, { auth: false }),
   getCities: (country, state) =>
     request(`/api/public/geo/cities?country=${encodeURIComponent(country)}&state=${encodeURIComponent(state)}`, { auth: false }),
+  lookupPincode: (pincode) => request(`/api/public/geo/pincode/${encodeURIComponent(pincode)}`, { auth: false }),
 
   // Public shop -- no login required, this IS how a new visitor gets an account
   listShopPlans: () => request('/api/public/plans', { auth: false }),

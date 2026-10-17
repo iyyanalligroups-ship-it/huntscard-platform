@@ -95,4 +95,35 @@ function passwordResetEmail(otp) {
   return { text, html };
 }
 
-module.exports = { passwordResetEmail };
+function publicEmailVerificationEmail(otp) {
+  const code = String(otp);
+  const text = [
+    'Verify your HuntsTAG public email',
+    '',
+    `Your verification code is: ${code}`,
+    '',
+    'This code expires in 10 minutes and can only be used once.',
+    "If you didn't request this change, you can safely ignore this email.",
+    '',
+    'HuntsTAG Security',
+  ].join('\n');
+
+  const html = `<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:32px 14px;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;color:#2f2b3d;">
+    <div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #e2e4e9;border-radius:20px;overflow:hidden;box-shadow:0 14px 36px rgba(47,43,61,.10);">
+      <div style="height:7px;background:linear-gradient(90deg,#0d9fa3,#26b7b2,#7367f0);"></div>
+      <div style="padding:34px 36px;">
+        <div style="font-size:22px;font-weight:800;margin-bottom:10px;">Verify your public email</div>
+        <div style="color:#6f6b80;font-size:14px;line-height:1.6;margin-bottom:24px;">Enter this code in Profile Settings to publish this email on your HuntsTAG profile.</div>
+        <div style="padding:18px;text-align:center;background:#eefafa;border:1px solid #bfe8e7;border-radius:14px;color:#232033;font:800 34px/1.2 'Courier New',monospace;letter-spacing:10px;">${code}</div>
+        <div style="margin-top:20px;color:#817d91;font-size:12px;line-height:1.6;">This code expires in 10 minutes. Never share it with anyone.</div>
+      </div>
+    </div>
+  </body>
+</html>`;
+
+  return { text, html };
+}
+
+module.exports = { passwordResetEmail, publicEmailVerificationEmail };

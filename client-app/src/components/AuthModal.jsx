@@ -32,6 +32,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resending, setResending] = useState(false);
   const resendIntervalRef = useRef(null);
+  const regResendIntervalRef = useRef(null);
 
   function startResendCooldown() {
     setResendCooldown(OTP_RESEND_COOLDOWN_SECONDS);
@@ -47,7 +48,10 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
     }, 1000);
   }
 
-  useEffect(() => () => clearInterval(resendIntervalRef.current), []);
+  useEffect(() => () => {
+    clearInterval(resendIntervalRef.current);
+    clearInterval(regResendIntervalRef.current);
+  }, []);
 
   // register fields
   const [fullName, setFullName] = useState('');
@@ -57,6 +61,12 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regDesignation, setRegDesignation] = useState('');
+  const [regOtpSent, setRegOtpSent] = useState(false);
+  const [regOtp, setRegOtp] = useState('');
+  const [regPhoneVerificationToken, setRegPhoneVerificationToken] = useState('');
+  const [regOtpCooldown, setRegOtpCooldown] = useState(0);
+  const [regOtpSending, setRegOtpSending] = useState(false);
+  const [regOtpVerifying, setRegOtpVerifying] = useState(false);
 
   // password visibility toggles
   const [showLoginPassword, setShowLoginPassword] = useState(false);
@@ -98,6 +108,68 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
     setOtp('');
     setResendCooldown(0);
     clearInterval(resendIntervalRef.current);
+  }
+
+  function startRegistrationOtpCooldown() {
+    setRegOtpCooldown(OTP_RESEND_COOLDOWN_SECONDS);
+    clearInterval(regResendIntervalRef.current);
+    regResendIntervalRef.current = setInterval(() => {
+      setRegOtpCooldown((seconds) => {
+        if (seconds <= 1) {
+          clearInterval(regResendIntervalRef.current);
+          return 0;
+        }
+        return seconds - 1;
+      });
+    }, 1000);
+  }
+
+  function handleRegistrationPhoneChange(e) {
+    setPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
+    setRegOtpSent(false);
+    setRegOtp('');
+    setRegPhoneVerificationToken('');
+    setRegOtpCooldown(0);
+    clearInterval(regResendIntervalRef.current);
+  }
+
+  async function handleRequestRegistrationOtp() {
+    setError('');
+    if (!/^\d{10}$/.test(phone)) {
+      setError('Enter a valid 10-digit phone number.');
+      return;
+    }
+    setRegOtpSending(true);
+    try {
+      await api.requestRegistrationOtp(phone);
+      setRegOtpSent(true);
+      setRegOtp('');
+      setRegPhoneVerificationToken('');
+      startRegistrationOtpCooldown();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRegOtpSending(false);
+    }
+  }
+
+  async function handleVerifyRegistrationOtp() {
+    setError('');
+    if (!/^\d{6}$/.test(regOtp)) {
+      setError('Enter the 6-digit verification code.');
+      return;
+    }
+    setRegOtpVerifying(true);
+    try {
+      const result = await api.verifyRegistrationOtp(phone, regOtp);
+      setRegPhoneVerificationToken(result.verificationToken);
+      clearInterval(regResendIntervalRef.current);
+      setRegOtpCooldown(0);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRegOtpVerifying(false);
+    }
   }
 
   function onSession(res) {
@@ -168,6 +240,10 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
   async function handleRegister(e) {
     e.preventDefault();
     setError('');
+    if (!regPhoneVerificationToken) {
+      setError('Verify your phone number before creating your account.');
+      return;
+    }
     setLoading(true);
     try {
       const res = await api.register({
@@ -175,9 +251,10 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
         phone,
         gender: regGender || undefined,
         dateOfBirth: regDateOfBirth || undefined,
-        loginEmail: regEmail,
+        loginEmail: regEmail || undefined,
         password: regPassword,
         designation: regDesignation || undefined,
+        phoneVerificationToken: regPhoneVerificationToken,
       });
       setSession({ token: res.token, clientId: res.clientId });
       goToTopOnClose = true;
@@ -277,10 +354,15 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                   <input
                     id="modalOtpPhone"
                     type="tel"
+                    inputMode="numeric"
                     autoComplete="tel"
+                    minLength={10}
+                    maxLength={10}
+                    pattern="[0-9]{10}"
+                    title="Enter exactly 10 digits"
                     placeholder="e.g. 9876543210"
                     value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
+                    onChange={(e) => setLoginEmail(e.target.value.replace(/\D/g, '').slice(0, 10))}
                     required
                   />
                 </div>
@@ -370,10 +452,65 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                   placeholder="e.g. 9876543210"
                   autoComplete="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  onChange={handleRegistrationPhoneChange}
                   required
                 />
                 <p className="hint" style={{ marginBottom: 0 }}>Enter exactly 10 digits.</p>
+              </div>
+              <div className="field">
+                <label htmlFor="modalRegOtp">Phone verification</label>
+                {regPhoneVerificationToken ? (
+                  <div
+                    role="status"
+                    style={{ minHeight: 46, display: 'flex', alignItems: 'center', color: '#16803c', fontWeight: 600 }}
+                  >
+                    Phone number verified
+                  </div>
+                ) : regOtpSent ? (
+                  <>
+                    <input
+                      id="modalRegOtp"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      minLength={6}
+                      maxLength={6}
+                      pattern="[0-9]{6}"
+                      placeholder="Enter 6-digit code"
+                      value={regOtp}
+                      onChange={(e) => setRegOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    />
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button
+                        type="button"
+                        onClick={handleVerifyRegistrationOtp}
+                        disabled={regOtpVerifying || regOtp.length !== 6}
+                        style={{ flex: 1 }}
+                      >
+                        {regOtpVerifying ? 'Verifying…' : 'Verify code'}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={handleRequestRegistrationOtp}
+                        disabled={regOtpCooldown > 0 || regOtpSending}
+                        style={{ flex: 1 }}
+                      >
+                        {regOtpSending ? 'Sending…' : regOtpCooldown > 0 ? `Resend in ${regOtpCooldown}s` : 'Resend'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={handleRequestRegistrationOtp}
+                    disabled={regOtpSending || phone.length !== 10}
+                    style={{ minHeight: 46, width: '100%' }}
+                  >
+                    {regOtpSending ? 'Sending…' : 'Send verification code'}
+                  </button>
+                )}
               </div>
               <div className="field">
                 <label htmlFor="modalGender">Gender (optional)</label>
@@ -401,7 +538,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                 />
               </div>
               <div className="field">
-                <label htmlFor="modalRegEmail">Email</label>
+                <label htmlFor="modalRegEmail">Email (optional)</label>
                 <input
                   id="modalRegEmail"
                   type="email"
@@ -409,11 +546,10 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                   placeholder="e.g. priya@example.com"
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value.toLowerCase())}
-                  required
                 />
               </div>
               <div className="field">
-                <label htmlFor="modalRegDesignation">Designation (optional)</label>
+                <label htmlFor="modalRegDesignation">Occupation (optional)</label>
                 <input
                   id="modalRegDesignation"
                   type="text"
@@ -446,8 +582,8 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                 </div>
                 <p className="hint" style={{ marginBottom: 0 }}>At least 8 characters.</p>
               </div>
-              <button type="submit" disabled={loading}>
-                {loading ? 'Creating account…' : 'Create account'}
+              <button type="submit" disabled={loading || !regPhoneVerificationToken}>
+                {loading ? 'Creating account…' : regPhoneVerificationToken ? 'Create account' : 'Verify phone to continue'}
               </button>
             </form>
 

@@ -6,8 +6,24 @@ import { api } from '../api.js';
 import Magic3DPreview from '../components/Magic3DPreview.jsx';
 import ThemedSelect from '../components/ThemedSelect.jsx';
 import ThemeDatePicker from '../components/ThemeDatePicker.jsx';
+import GeoSelect from '../components/GeoSelect.jsx';
 
 const MAX_HIGHLIGHTS = 8;
+const MAX_HEADLINE_CHARACTERS = 120;
+const MAX_BIO_CHARACTERS = 300;
+const EMAIL_OTP_COOLDOWN_SECONDS = 45;
+const ADDRESS_FIELDS = [
+  'addressMode',
+  'addressLine1',
+  'addressLine2',
+  'addressCountry',
+  'addressCountryCode',
+  'addressState',
+  'addressStateCode',
+  'addressCity',
+  'addressPincode',
+  'googleMapsUrl',
+];
 
 function todayDateValue() {
   const today = new Date();
@@ -18,8 +34,15 @@ function todayDateValue() {
 // identity, not something that belongs to one of the five card tabs.
 const IDENTITY_FIELDS = [
   { key: 'fullName', label: 'Full name', type: 'text', required: true },
-  { key: 'jobTitle', label: 'Job title', type: 'text' },
-  { key: 'designation', label: 'Designation (optional)', type: 'text' },
+  { key: 'jobTitle', label: 'Company name', type: 'text' },
+  { key: 'designation', label: 'Occupation (optional)', type: 'text' },
+  {
+    key: 'headline',
+    label: 'Profile headline (optional)',
+    type: 'text',
+    maxLength: MAX_HEADLINE_CHARACTERS,
+    placeholder: 'e.g. Helping businesses turn ideas into useful products',
+  },
 ];
 
 // Everything else groups under the same five tabs the public card itself
@@ -50,6 +73,7 @@ const BASE_TABS = [
   { key: 'portfolio', label: 'Portfolio' },
   { key: 'social', label: 'Social' },
   { key: 'huntsworld', label: 'Huntsworld' },
+  { key: 'address', label: 'Address' },
 ];
 
 // Admin's `fieldType` values map straight onto <input type="..."> except
@@ -81,6 +105,17 @@ export default function Profile() {
   const [arModelSaved, setArModelSaved] = useState(false);
   const [activeTab, setActiveTab] = useState('bio');
   const [attributes, setAttributes] = useState([]); // admin-defined extra fields, see AttributeDefinition
+  const [emailOtp, setEmailOtp] = useState('');
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailOtpSending, setEmailOtpSending] = useState(false);
+  const [emailOtpVerifying, setEmailOtpVerifying] = useState(false);
+  const [emailOtpCooldown, setEmailOtpCooldown] = useState(0);
+  const [emailVerificationError, setEmailVerificationError] = useState('');
+  const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
+  const [addressCountries, setAddressCountries] = useState([]);
+  const [addressStates, setAddressStates] = useState([]);
+  const [addressCities, setAddressCities] = useState([]);
+  const [pincodeLookupStatus, setPincodeLookupStatus] = useState('');
   const fileInputRef = useRef(null);
   const bannerInputRef = useRef(null);
   const logoInputRef = useRef(null);
@@ -95,6 +130,57 @@ export default function Profile() {
       .then(setAttributes)
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    api.getCountries().then(setAddressCountries).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const countryCode = form.addressCountryCode;
+    if (!countryCode) {
+      setAddressStates([]);
+      return undefined;
+    }
+    let cancelled = false;
+    api
+      .getStates(countryCode)
+      .then((items) => {
+        if (cancelled) return;
+        setAddressStates(items);
+        setForm((current) => {
+          if (current.addressCountryCode !== countryCode || current.addressStateCode || !current.addressState) return current;
+          const match = items.find((item) => item.name.toLowerCase() === current.addressState.toLowerCase());
+          return match ? { ...current, addressStateCode: match.isoCode } : current;
+        });
+      })
+      .catch(() => !cancelled && setAddressStates([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [form.addressCountryCode]);
+
+  useEffect(() => {
+    const countryCode = form.addressCountryCode;
+    const stateCode = form.addressStateCode;
+    if (!countryCode || !stateCode) {
+      setAddressCities([]);
+      return undefined;
+    }
+    let cancelled = false;
+    api
+      .getCities(countryCode, stateCode)
+      .then((items) => !cancelled && setAddressCities(items))
+      .catch(() => !cancelled && setAddressCities([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [form.addressCountryCode, form.addressStateCode]);
+
+  useEffect(() => {
+    if (emailOtpCooldown <= 0) return undefined;
+    const timer = window.setTimeout(() => setEmailOtpCooldown((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [emailOtpCooldown]);
 
   const tabs = useMemo(() => {
     const baseKeys = new Set(BASE_TABS.map((t) => t.key));
@@ -117,7 +203,17 @@ export default function Profile() {
       .getProfile()
       .then((data) => {
         setProfile(data);
-        setForm(data);
+        const legacyAddress = data.customAttributes?.address || '';
+        const legacyIsMapUrl = /^https?:\/\//i.test(legacyAddress);
+        const hasStructuredAddress = Boolean(data.addressLine1 || data.addressLine2 || data.addressCity || data.addressState || data.addressPincode || data.googleMapsUrl);
+        setForm({
+          ...data,
+          addressMode: hasStructuredAddress ? data.addressMode || (data.googleMapsUrl ? 'google' : 'manual') : legacyIsMapUrl ? 'google' : 'manual',
+          addressCountry: data.addressCountry || 'India',
+          addressCountryCode: data.addressCountryCode || 'IN',
+          addressLine1: data.addressLine1 || (!legacyIsMapUrl ? legacyAddress : ''),
+          googleMapsUrl: data.googleMapsUrl || (legacyIsMapUrl ? legacyAddress : ''),
+        });
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -131,6 +227,129 @@ export default function Profile() {
   function updateCustomAttribute(key, value) {
     setForm((f) => ({ ...f, customAttributes: { ...(f.customAttributes || {}), [key]: value } }));
     setSaved(false);
+  }
+
+  function handleAddressCountryChange(option) {
+    setForm((current) => ({
+      ...current,
+      addressCountryCode: option.value,
+      addressCountry: option.label,
+      addressStateCode: '',
+      addressState: '',
+      addressCity: '',
+      addressPincode: '',
+    }));
+    setAddressCities([]);
+    setPincodeLookupStatus('');
+    setSaved(false);
+  }
+
+  function handleAddressStateChange(option) {
+    setForm((current) => ({
+      ...current,
+      addressStateCode: option.value,
+      addressState: option.label,
+      addressCity: '',
+    }));
+    setAddressCities([]);
+    setSaved(false);
+  }
+
+  function handleAddressCityChange(option) {
+    updateField('addressCity', option.value);
+  }
+
+  async function handleAddressPincodeChange(raw) {
+    const pincode = raw.replace(/\D/g, '').slice(0, 6);
+    updateField('addressPincode', pincode);
+    setPincodeLookupStatus('');
+    if (pincode.length !== 6 || (form.addressCountryCode || 'IN') !== 'IN') return;
+
+    setPincodeLookupStatus('Looking up PIN code…');
+    try {
+      const location = await api.lookupPincode(pincode);
+      const indiaStates = addressStates.length ? addressStates : await api.getStates('IN');
+      setAddressStates(indiaStates);
+      const matchingState = indiaStates.find(
+        (item) => item.name.toLowerCase().replace(/\s+/g, '') === location.state.toLowerCase().replace(/\s+/g, ''),
+      );
+      const cityNames = matchingState ? await api.getCities('IN', matchingState.isoCode) : [];
+      setAddressCities(cityNames);
+      setForm((current) =>
+        current.addressPincode === pincode
+          ? {
+              ...current,
+              addressCountry: location.country || 'India',
+              addressCountryCode: 'IN',
+              addressState: location.state || current.addressState,
+              addressStateCode: matchingState?.isoCode || current.addressStateCode,
+              addressCity: location.city || current.addressCity,
+            }
+          : current,
+      );
+      setPincodeLookupStatus('✓ State and city loaded from PIN code.');
+    } catch (err) {
+      setPincodeLookupStatus(err.message);
+    }
+  }
+
+  function handlePublicEmailChange(value) {
+    updateField('publicEmail', value.toLowerCase());
+    setEmailOtp('');
+    setEmailOtpSent(false);
+    setEmailOtpCooldown(0);
+    setEmailVerificationError('');
+    setEmailVerificationMessage('');
+  }
+
+  async function handleRequestPublicEmailOtp() {
+    const email = (form.publicEmail || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setEmailVerificationError('Enter a valid email address.');
+      return;
+    }
+    setEmailVerificationError('');
+    setEmailVerificationMessage('');
+    setEmailOtpSending(true);
+    try {
+      const result = await api.requestPublicEmailOtp(email);
+      if (result.verified) {
+        setProfile((current) => ({ ...current, publicEmail: email, publicEmailVerified: true }));
+        setEmailVerificationMessage('Email already verified.');
+        return;
+      }
+      setEmailOtpSent(true);
+      setEmailOtp('');
+      setEmailOtpCooldown(EMAIL_OTP_COOLDOWN_SECONDS);
+      setEmailVerificationMessage(`Verification code sent to ${email}.`);
+    } catch (err) {
+      setEmailVerificationError(err.message);
+    } finally {
+      setEmailOtpSending(false);
+    }
+  }
+
+  async function handleVerifyPublicEmailOtp() {
+    const email = (form.publicEmail || '').trim().toLowerCase();
+    if (!/^\d{6}$/.test(emailOtp)) {
+      setEmailVerificationError('Enter the 6-digit verification code.');
+      return;
+    }
+    setEmailVerificationError('');
+    setEmailOtpVerifying(true);
+    try {
+      const updated = await api.verifyPublicEmailOtp(email, emailOtp);
+      setProfile(updated);
+      setForm((current) => ({ ...current, publicEmail: updated.publicEmail || email }));
+      setEmailOtpSent(false);
+      setEmailOtp('');
+      setEmailOtpCooldown(0);
+      setEmailVerificationMessage('Email verified successfully.');
+    } catch (err) {
+      setEmailVerificationError(err.message);
+    } finally {
+      setEmailOtpVerifying(false);
+    }
   }
 
   async function handleFileChange(e) {
@@ -300,7 +519,12 @@ export default function Profile() {
       const updates = { bio: form.bio || '', highlights: form.highlights || [] };
       for (const { key } of IDENTITY_FIELDS) updates[key] = form[key] || '';
       for (const fields of Object.values(SECTION_FIELDS)) {
-        for (const { key } of fields) updates[key] = form[key] || '';
+        for (const { key } of fields) {
+          if (key !== 'publicEmail') updates[key] = form[key] || '';
+        }
+      }
+      for (const key of ADDRESS_FIELDS) {
+        updates[key] = form[key] || (key === 'addressCountry' ? 'India' : key === 'addressCountryCode' ? 'IN' : '');
       }
       // Private, admin-only fields -- deliberately NOT part of
       // IDENTITY_FIELDS/SECTION_FIELDS above, since those all render on
@@ -323,6 +547,10 @@ export default function Profile() {
   const displayPhoto = previewUrl || profile?.photoUrl;
   const displayBanner = bannerPreviewUrl || profile?.bannerUrl;
   const displayLogo = logoPreviewUrl || profile?.logoUrl;
+  const publicEmailIsVerified = Boolean(
+    profile?.publicEmailVerified &&
+      (form.publicEmail || '').trim().toLowerCase() === (profile.publicEmail || '').trim().toLowerCase(),
+  );
   // Resolution order: a fresh local pick, then the new one-slot field, then
   // the legacy video-only field (implicitly 'video') for clients who
   // uploaded before this existed -- never falls back to the general
@@ -345,12 +573,6 @@ export default function Profile() {
       </p>
 
       {error && <div className="error-banner">{error}</div>}
-      {saved && !error && (
-        <div className="hint" style={{ marginBottom: 16, color: 'var(--accent)' }}>
-          Saved — your card reflects this the next time someone taps it.
-        </div>
-      )}
-
       {/* --- photo + banner: both upload immediately on selection --- */}
       <div className="card" style={{ marginBottom: 16 }}>
         <label style={{ marginBottom: 8 }}>Banner (shown behind your photo on the card)</label>
@@ -706,15 +928,24 @@ export default function Profile() {
         {/* Identity -- shown above the tabs, same as the photo/banner above, since
             it isn't part of any one of the card's five tabs. */}
         <div className="field-grid" style={{ marginBottom: 20 }}>
-          {IDENTITY_FIELDS.map(({ key, label, type, required }) => (
+          {IDENTITY_FIELDS.map(({ key, label, type, required, maxLength, placeholder }) => (
             <div className="field" key={key}>
-              <label htmlFor={key}>{label}</label>
+              <div className="bio-field-heading">
+                <label htmlFor={key}>{label}</label>
+                {maxLength && (
+                  <span className={`bio-character-count${(form[key] || '').length >= maxLength ? ' at-limit' : ''}`}>
+                    {(form[key] || '').length} / {maxLength}
+                  </span>
+                )}
+              </div>
               <input
                 id={key}
                 type={type}
                 value={form[key] || ''}
                 onChange={(e) => updateField(key, e.target.value)}
                 required={required}
+                maxLength={maxLength}
+                placeholder={placeholder}
               />
             </div>
           ))}
@@ -784,11 +1015,20 @@ export default function Profile() {
 
         {activeTab === 'bio' && (
           <div className="field">
-            <label htmlFor="bio">About (short bio)</label>
+            <div className="bio-field-heading">
+              <label htmlFor="bio">About (short bio)</label>
+              <span
+                id="bioCharacterCount"
+                className={`bio-character-count${(form.bio || '').length >= MAX_BIO_CHARACTERS ? ' at-limit' : ''}`}
+              >
+                {(form.bio || '').length} / {MAX_BIO_CHARACTERS}
+              </span>
+            </div>
             <textarea
               id="bio"
               rows={3}
-              maxLength={280}
+              maxLength={MAX_BIO_CHARACTERS}
+              aria-describedby="bioCharacterCount"
               value={form.bio || ''}
               onChange={(e) => updateField('bio', e.target.value)}
               style={{
@@ -851,14 +1091,161 @@ export default function Profile() {
           </div>
         )}
 
-        {activeTab !== 'bio' && (
-          <div className="field-grid">
-            {(SECTION_FIELDS[activeTab] || []).map(({ key, label, type }) => (
-              <div className="field" key={key}>
-                <label htmlFor={key}>{label}</label>
-                <input id={key} type={type} value={form[key] || ''} onChange={(e) => updateField(key, e.target.value)} />
+        {activeTab === 'address' && (
+          <div className="profile-address-editor">
+            <div className="profile-address-mode" role="group" aria-label="Address entry method">
+              <button
+                type="button"
+                className={form.addressMode === 'google' ? 'secondary' : undefined}
+                onClick={() => updateField('addressMode', 'manual')}
+              >
+                Enter address
+              </button>
+              <button
+                type="button"
+                className={form.addressMode === 'google' ? undefined : 'secondary'}
+                onClick={() => updateField('addressMode', 'google')}
+              >
+                Google Maps link
+              </button>
+            </div>
+
+            {(form.addressMode || 'manual') === 'manual' ? (
+              <div className="field-grid">
+                <div className="field profile-address-wide">
+                  <label htmlFor="addressLine1">Address line 1</label>
+                  <input id="addressLine1" type="text" value={form.addressLine1 || ''} onChange={(e) => updateField('addressLine1', e.target.value)} placeholder="House/building number and street" />
+                </div>
+                <div className="field profile-address-wide">
+                  <label htmlFor="addressLine2">Address line 2 (optional)</label>
+                  <input id="addressLine2" type="text" value={form.addressLine2 || ''} onChange={(e) => updateField('addressLine2', e.target.value)} placeholder="Area, landmark, floor, etc." />
+                </div>
+                <div className="field">
+                  <label>Country</label>
+                  <GeoSelect
+                    value={form.addressCountryCode || 'IN'}
+                    options={addressCountries.map((country) => ({ value: country.isoCode, label: country.name }))}
+                    onChange={handleAddressCountryChange}
+                    placeholder="Select country"
+                    searchPlaceholder="Search countries…"
+                  />
+                </div>
+                <div className="field">
+                  <label>State</label>
+                  <GeoSelect
+                    value={form.addressStateCode || ''}
+                    options={addressStates.map((state) => ({ value: state.isoCode, label: state.name }))}
+                    onChange={handleAddressStateChange}
+                    placeholder="Select state"
+                    searchPlaceholder="Search states…"
+                    disabled={!form.addressCountryCode}
+                  />
+                </div>
+                <div className="field">
+                  <label>City</label>
+                  <GeoSelect
+                    value={form.addressCity || ''}
+                    options={addressCities.map((city) => ({ value: city, label: city }))}
+                    onChange={handleAddressCityChange}
+                    placeholder="Select city"
+                    searchPlaceholder="Search cities…"
+                    disabled={!form.addressStateCode}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="addressPincode">PIN code</label>
+                  <input
+                    id="addressPincode"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={form.addressPincode || ''}
+                    onChange={(e) => handleAddressPincodeChange(e.target.value)}
+                    placeholder="6-digit PIN code"
+                  />
+                  {pincodeLookupStatus && (
+                    <p className={`hint profile-pincode-status${pincodeLookupStatus.startsWith('✓') ? ' success' : ''}`}>
+                      {pincodeLookupStatus}
+                    </p>
+                  )}
+                </div>
               </div>
-            ))}
+            ) : (
+              <div className="field">
+                <label htmlFor="googleMapsUrl">Google Maps location link</label>
+                <input id="googleMapsUrl" type="url" value={form.googleMapsUrl || ''} onChange={(e) => updateField('googleMapsUrl', e.target.value)} placeholder="https://maps.google.com/..." />
+                <p className="hint" style={{ margin: '8px 0 0' }}>Paste the Share link from Google Maps.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab !== 'bio' && activeTab !== 'address' && (
+          <div className="field-grid">
+            {(SECTION_FIELDS[activeTab] || []).map(({ key, label, type }) =>
+              key === 'publicEmail' ? (
+                <div className="field public-email-verification" key={key}>
+                  <div className="public-email-label">
+                    <label htmlFor={key}>{label}</label>
+                    <span className={publicEmailIsVerified ? 'is-verified' : 'is-unverified'}>
+                      {publicEmailIsVerified ? '✓ Verified' : 'Unverified'}
+                    </span>
+                  </div>
+                  <div className="public-email-input-row">
+                    <input
+                      id={key}
+                      type={type}
+                      value={form[key] || ''}
+                      onChange={(e) => handlePublicEmailChange(e.target.value)}
+                      placeholder="name@example.com"
+                    />
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={handleRequestPublicEmailOtp}
+                      disabled={publicEmailIsVerified || emailOtpSending || emailOtpCooldown > 0}
+                    >
+                      {publicEmailIsVerified
+                        ? 'Verified'
+                        : emailOtpSending
+                        ? 'Sending…'
+                        : emailOtpCooldown > 0
+                        ? `Resend in ${emailOtpCooldown}s`
+                        : emailOtpSent
+                        ? 'Resend OTP'
+                        : 'Send OTP'}
+                    </button>
+                  </div>
+                  {emailOtpSent && !publicEmailIsVerified && (
+                    <div className="public-email-otp-row">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        aria-label="Email verification code"
+                        placeholder="6-digit OTP"
+                        value={emailOtp}
+                        onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleVerifyPublicEmailOtp}
+                        disabled={emailOtpVerifying || emailOtp.length !== 6}
+                      >
+                        {emailOtpVerifying ? 'Verifying…' : 'Verify email'}
+                      </button>
+                    </div>
+                  )}
+                  {emailVerificationMessage && <p className="hint public-email-success">{emailVerificationMessage}</p>}
+                  {emailVerificationError && <p className="hint public-email-error">{emailVerificationError}</p>}
+                </div>
+              ) : (
+                <div className="field" key={key}>
+                  <label htmlFor={key}>{label}</label>
+                  <input id={key} type={type} value={form[key] || ''} onChange={(e) => updateField(key, e.target.value)} />
+                </div>
+              ),
+            )}
             {attributes
               .filter((attr) => attr.section === activeTab)
               .map((attr) => (
@@ -876,15 +1263,8 @@ export default function Profile() {
         )}
 
         <button type="submit" disabled={saving} style={{ marginTop: 20 }}>
-          {saving ? 'Saving…' : 'Save changes'}
+          {saving ? 'Saving…' : saved && !error ? '✓ Saved' : 'Save changes'}
         </button>
-        {/* Feedback right next to the button -- the top-of-page banner is
-            off-screen when you're scrolled down at the Save button. */}
-        {saved && !error && (
-          <p className="hint" style={{ margin: '10px 0 0', color: 'var(--holo-cyan)' }}>
-            ✓ Saved — your card reflects this the next time someone taps it.
-          </p>
-        )}
         {error && (
           <p className="hint" style={{ margin: '10px 0 0', color: 'var(--danger)' }}>
             Couldn't save: {error}

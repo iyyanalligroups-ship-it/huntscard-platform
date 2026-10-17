@@ -7,6 +7,7 @@ const { nanoid } = require('nanoid');
 const { requireAuth } = require('../middleware/auth');
 const { str } = require('../utils/upload');
 const Client = require('../models/Client');
+const RegistrationOtp = require('../models/RegistrationOtp');
 const { sendSms } = require('../utils/sms');
 const { sendEmail } = require('../utils/email');
 const { passwordResetEmail } = require('../utils/emailTemplates');
@@ -56,6 +57,10 @@ const refreshLimiter = rateLimit({
 const LOGIN_OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const LOGIN_OTP_MAX_ATTEMPTS = 5;
 const LOGIN_OTP_RESEND_COOLDOWN_MS = 45 * 1000; // matches the Resend button's own countdown in AuthModal.jsx
+const REGISTRATION_OTP_TTL_MS = 10 * 60 * 1000;
+const REGISTRATION_OTP_MAX_ATTEMPTS = 5;
+const REGISTRATION_OTP_RESEND_COOLDOWN_MS = 45 * 1000;
+const REGISTRATION_VERIFICATION_TOKEN_TTL = '15m';
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 const RESET_OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const RESET_OTP_MAX_ATTEMPTS = 5;
@@ -73,6 +78,96 @@ function signToken(client) {
   );
 }
 
+function normalizePhone(value) {
+  return str(value).replace(/\D/g, '');
+}
+
+// POST /api/auth/register-otp/request
+// Sends an OTP before an account exists. The temporary record is kept in a
+// separate collection so an unverified phone number is never stored as a
+// Client account.
+router.post('/register-otp/request', otpLimiter, async (req, res) => {
+  try {
+    const phone = normalizePhone(req.body.phone);
+    if (!/^\d{10}$/.test(phone)) {
+      return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
+    }
+
+    const existingClient = await Client.findOne({ phone }).select('_id');
+    if (existingClient) {
+      return res.status(409).json({ error: 'This phone number is already registered. Log in instead.' });
+    }
+
+    const pending = await RegistrationOtp.findOne({ phone });
+    const withinCooldown =
+      pending?.lastSentAt && Date.now() - pending.lastSentAt.getTime() < REGISTRATION_OTP_RESEND_COOLDOWN_MS;
+    if (withinCooldown) {
+      return res.status(429).json({ error: 'Please wait before requesting another verification code.' });
+    }
+
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    await RegistrationOtp.findOneAndUpdate(
+      { phone },
+      {
+        otpHash: await bcrypt.hash(otp, 10),
+        expiresAt: new Date(Date.now() + REGISTRATION_OTP_TTL_MS),
+        attempts: 0,
+        lastSentAt: new Date(),
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    await sendSms(phone, `Your OTP for login/verification is ${otp}. Please do not share this with anyone. – HUNTSWORLD`);
+    res.json({ ok: true, message: 'A verification code has been sent to your phone.' });
+  } catch (err) {
+    console.error('[auth/register-otp/request]', err);
+    res.status(500).json({ error: 'Failed to send verification code' });
+  }
+});
+
+// POST /api/auth/register-otp/verify
+// A successful OTP check returns a short-lived signed proof. /register
+// requires that proof and verifies that it belongs to the submitted phone.
+router.post('/register-otp/verify', otpLimiter, async (req, res) => {
+  try {
+    const phone = normalizePhone(req.body.phone);
+    const otp = str(req.body.otp);
+    if (!/^\d{10}$/.test(phone) || !/^\d{6}$/.test(otp)) {
+      return res.status(400).json({ error: 'Enter a valid phone number and 6-digit code.' });
+    }
+
+    const pending = await RegistrationOtp.findOne({ phone });
+    if (!pending || !pending.otpHash || !pending.expiresAt) {
+      return res.status(400).json({ error: 'Invalid or expired code. Request a new one.' });
+    }
+    if (pending.expiresAt < new Date()) {
+      await RegistrationOtp.deleteOne({ phone });
+      return res.status(400).json({ error: 'Code expired. Request a new one.' });
+    }
+    if (pending.attempts >= REGISTRATION_OTP_MAX_ATTEMPTS) {
+      return res.status(429).json({ error: 'Too many incorrect attempts. Request a new code.' });
+    }
+
+    const ok = await bcrypt.compare(otp, pending.otpHash);
+    if (!ok) {
+      pending.attempts += 1;
+      await pending.save();
+      return res.status(401).json({ error: 'Incorrect code' });
+    }
+
+    await RegistrationOtp.deleteOne({ phone });
+    const verificationToken = jwt.sign(
+      { type: 'registration-phone', phone },
+      process.env.JWT_SECRET,
+      { expiresIn: REGISTRATION_VERIFICATION_TOKEN_TTL }
+    );
+    res.json({ ok: true, verificationToken });
+  } catch (err) {
+    console.error('[auth/register-otp/verify]', err);
+    res.status(500).json({ error: 'Phone verification failed' });
+  }
+});
+
 // POST /api/auth/register
 // Self-service account creation -- replaces the old admin-only client
 // creation flow. Free: no card, no payment, cardType/paid stay at their
@@ -84,12 +179,18 @@ router.post('/register', registerLimiter, async (req, res) => {
   try {
     const { gender, dateOfBirth } = req.body;
     const fullName = str(req.body.fullName);
+    const designation = str(req.body.designation);
     const phone = str(req.body.phone);
     const loginEmail = str(req.body.loginEmail);
     const password = str(req.body.password);
-    if (!fullName || !phone || !loginEmail || !password) {
-      return res.status(400).json({ error: 'Full name, phone number, email, and password are required.' });
+    const phoneVerificationToken = str(req.body.phoneVerificationToken);
+    if (!fullName || !phone || !password) {
+      return res.status(400).json({ error: 'Full name, phone number, and password are required.' });
     }
+    if (!phoneVerificationToken) {
+      return res.status(400).json({ error: 'Complete phone verification before creating your account.' });
+    }
+    const normalizedEmail = loginEmail ? loginEmail.toLowerCase() : '';
     const normalizedPhone = String(phone).replace(/\D/g, '');
     if (!/^\d{10}$/.test(normalizedPhone)) {
       return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
@@ -101,9 +202,20 @@ router.post('/register', registerLimiter, async (req, res) => {
       return res.status(400).json({ error: 'gender must be male, female, or other' });
     }
 
-    const existing = await Client.findOne({ loginEmail: loginEmail.toLowerCase() });
-    if (existing) {
-      return res.status(409).json({ error: 'An account with this email already exists. Try logging in instead.' });
+    try {
+      const proof = jwt.verify(phoneVerificationToken, process.env.JWT_SECRET);
+      if (proof.type !== 'registration-phone' || proof.phone !== normalizedPhone) {
+        throw new Error('Phone verification does not match');
+      }
+    } catch {
+      return res.status(400).json({ error: 'Phone verification expired or is invalid. Verify your number again.' });
+    }
+
+    if (normalizedEmail) {
+      const existing = await Client.findOne({ loginEmail: normalizedEmail });
+      if (existing) {
+        return res.status(409).json({ error: 'An account with this email already exists. Try logging in instead.' });
+      }
     }
     const existingPhone = await Client.findOne({ phone: normalizedPhone }).select('_id');
     if (existingPhone) {
@@ -113,9 +225,10 @@ router.post('/register', registerLimiter, async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const client = await Client.create({
       clientId: nanoid(10),
-      loginEmail: loginEmail.toLowerCase(),
+      ...(normalizedEmail ? { loginEmail: normalizedEmail } : {}),
       passwordHash,
       fullName,
+      ...(designation ? { designation } : {}),
       phone: normalizedPhone,
       gender: gender || null,
       dateOfBirth: dateOfBirth || null,
@@ -187,14 +300,22 @@ router.post('/login', loginLimiter, async (req, res) => {
 // Passwordless login via phone OTP -- phone only, no email equivalent.
 // Separate from the forgot-password reset-token fields so a login-OTP
 // request and a password reset in flight at the same time can't clobber
-// each other. Same generic response regardless of match, so this can't be
-// used to enumerate registered phone numbers.
+// each other. This endpoint intentionally tells the UI when a number is not
+// registered, so the user can be directed to registration first.
 router.post('/login-otp/request', otpLimiter, async (req, res) => {
   try {
-    const phone = str(req.body.phone);
-    if (!phone) return res.status(400).json({ error: 'phone is required' });
+    const phone = normalizePhone(req.body.phone);
+    if (!/^\d{10}$/.test(phone)) {
+      return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
+    }
 
     const client = await Client.findOne({ phone });
+    if (!client) {
+      return res.status(404).json({ error: 'This phone number is not registered. Please register first.' });
+    }
+    if (client.blocked) {
+      return res.status(403).json({ error: 'This account has been blocked. Contact support.' });
+    }
     // A too-soon resend (button double-tap, multiple tabs, a direct API
     // hit before the cooldown elapses) silently no-ops instead of erroring
     // -- an explicit "please wait" response here would leak whether this
@@ -202,7 +323,7 @@ router.post('/login-otp/request', otpLimiter, async (req, res) => {
     // response below already guards against.
     const withinCooldown =
       client?.loginOtpLastSentAt && Date.now() - client.loginOtpLastSentAt.getTime() < LOGIN_OTP_RESEND_COOLDOWN_MS;
-    if (client && !withinCooldown) {
+    if (!withinCooldown) {
       const otp = crypto.randomInt(100000, 1000000).toString();
       client.loginOtpHash = await bcrypt.hash(otp, 10);
       client.loginOtpExpiresAt = new Date(Date.now() + LOGIN_OTP_TTL_MS);
@@ -216,7 +337,7 @@ router.post('/login-otp/request', otpLimiter, async (req, res) => {
       await sendSms(phone, `Your OTP for login/verification is ${otp}. Please do not share this with anyone. – HUNTSWORLD`);
     }
 
-    res.json({ ok: true, message: 'If an account exists for this number, an OTP has been sent.' });
+    res.json({ ok: true, message: 'A login code has been sent to your phone.' });
   } catch (err) {
     console.error('[auth/login-otp/request]', err);
     res.status(500).json({ error: 'Failed to send login code' });

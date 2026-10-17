@@ -24,13 +24,36 @@ function fake(modPath, exports) {
 // ---- fakes ----
 const calls = { clientFindOne: [] };
 let clientRecord = null;
+let createdClient = null;
 const thenable = (result) => Object.assign(Promise.resolve(result), { select: () => Promise.resolve(result) });
 fake('models/Client.js', {
   findOne: (q) => {
     calls.clientFindOne.push(q);
     return thenable(clientRecord);
   },
+  create: async (data) => {
+    createdClient = { ...data };
+    return createdClient;
+  },
 });
+let registrationOtpRecord = null;
+let lastSms = null;
+fake('models/RegistrationOtp.js', {
+  findOne: async ({ phone }) => registrationOtpRecord?.phone === phone ? registrationOtpRecord : null,
+  findOneAndUpdate: async ({ phone }, update) => {
+    registrationOtpRecord = {
+      phone,
+      ...update,
+      save: async function save() { return this; },
+    };
+    return registrationOtpRecord;
+  },
+  deleteOne: async ({ phone }) => {
+    if (registrationOtpRecord?.phone === phone) registrationOtpRecord = null;
+  },
+});
+fake('utils/sms.js', { sendSms: async (phone, message) => { lastSms = { phone, message }; } });
+fake('routes/appointments.js', { claimAppointmentRequests: async () => {} });
 const adminRecord = { role: 'admin', _id: 'a1', email: 'a@x.test' };
 fake('models/Admin.js', { findById: () => thenable(adminRecord), findOne: () => thenable(null) });
 const contact = { _id: '507f1f77bcf86cd799439011', clientId: 'c1' };
@@ -83,6 +106,9 @@ const expiredAdmin = (days) => sign({ type: 'admin', adminId: 'a1', iat: now() -
 
 test.beforeEach(() => {
   clientRecord = { clientId: 'c1', loginEmail: 'a@x.test', blocked: false };
+  createdClient = null;
+  registrationOtpRecord = null;
+  lastSms = null;
   existingPayment = null;
   calls.clientFindOne.length = 0;
 });
@@ -138,6 +164,59 @@ test('login-otp verify and login reject operator objects', async () => {
   assert.equal((await post('/api/auth/login-otp/verify', { phone: { $gt: '' }, otp: '123456' })).status, 400);
   assert.equal((await post('/api/auth/login', { identifier: { $ne: null }, password: 'x' })).status, 400);
   assert.equal(calls.clientFindOne.length, 0);
+});
+test('login-otp request clearly rejects an unregistered phone number', async () => {
+  clientRecord = null;
+  const r = await post('/api/auth/login-otp/request', { phone: '9876543210' });
+  assert.equal(r.status, 404);
+  assert.match((await r.json()).error, /not registered/i);
+});
+test('registration requires phone-verification proof for the submitted number', async () => {
+  const fields = {
+    fullName: 'Test User',
+    phone: '9876543210',
+    loginEmail: 'test@example.com',
+    password: 'password123',
+  };
+  assert.equal((await post('/api/auth/register', fields)).status, 400);
+
+  const phoneVerificationToken = sign(
+    { type: 'registration-phone', phone: '9999999999' },
+    { expiresIn: '15m' }
+  );
+  assert.equal((await post('/api/auth/register', { ...fields, phoneVerificationToken })).status, 400);
+});
+test('phone-verified registration can create an account without email', async () => {
+  clientRecord = null;
+  const phone = '9876543210';
+  const phoneVerificationToken = sign(
+    { type: 'registration-phone', phone },
+    { expiresIn: '15m' }
+  );
+  const response = await post('/api/auth/register', {
+    fullName: 'Phone Only',
+    phone,
+    password: 'password123',
+    phoneVerificationToken,
+  });
+  assert.equal(response.status, 201);
+  assert.equal(createdClient.phone, phone);
+  assert.equal(createdClient.loginEmail, undefined);
+});
+test('registration OTP verifies the phone and returns matching signed proof', async () => {
+  clientRecord = null;
+  const phone = '9876543210';
+  assert.equal((await post('/api/auth/register-otp/request', { phone })).status, 200);
+  assert.equal(lastSms.phone, phone);
+  const otp = lastSms.message.match(/is (\d{6})/)[1];
+
+  const verified = await post('/api/auth/register-otp/verify', { phone, otp });
+  assert.equal(verified.status, 200);
+  const { verificationToken } = await verified.json();
+  const proof = jwt.verify(verificationToken, process.env.JWT_SECRET);
+  assert.equal(proof.type, 'registration-phone');
+  assert.equal(proof.phone, phone);
+  assert.equal(registrationOtpRecord, null);
 });
 
 // ---------------- uploads ----------------

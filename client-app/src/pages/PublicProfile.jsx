@@ -1,7 +1,7 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import gsap from 'gsap';
-import { ArrowRight, BadgeCheck, Box, ScanLine, Sparkles } from 'lucide-react';
+import { ArrowRight, BadgeCheck, Box, Gamepad2, ScanLine, Sparkles } from 'lucide-react';
 import { api, API_URL } from '../api.js';
 import ArView from './ArView.jsx';
 import './PublicProfile.css';
@@ -680,8 +680,29 @@ export default function PublicProfile() {
     .map((p) => p[0].toUpperCase())
     .join('');
 
-  // Extract address or map from customAttributes if present
-  const locationAttr = profile.customAttributes?.address || profile.customAttributes?.map || null;
+  // Structured address fields supersede the original single custom Address
+  // value, while the legacy value remains a fallback for existing profiles.
+  const legacyLocation = profile.customAttributes?.address || profile.customAttributes?.map || '';
+  const legacyLocationIsUrl = /^https?:\/\//i.test(legacyLocation);
+  const manualAddressParts = [
+    profile.addressLine1,
+    profile.addressLine2,
+    profile.addressCity,
+    profile.addressState,
+  ]
+    .map((part) => part?.trim())
+    .filter(Boolean);
+  const manualAddress = manualAddressParts.length
+    ? [...manualAddressParts, profile.addressCountry?.trim(), profile.addressPincode?.trim()].filter(Boolean).join(', ')
+    : '';
+  // Manual address and Google Maps are independent public contact details.
+  // Show both when the owner has saved both instead of allowing the selected
+  // editing mode to hide one of them on the public card.
+  const manualLocationText = manualAddress || (!legacyLocationIsUrl ? legacyLocation : '');
+  const manualLocationHref = manualLocationText
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(manualLocationText)}`
+    : '';
+  const googleLocationHref = profile.googleMapsUrl || (legacyLocationIsUrl ? legacyLocation : '');
 
   // Custom attributes helper
   function customRowsFor(section) {
@@ -697,6 +718,11 @@ export default function PublicProfile() {
       .filter(Boolean);
   }
 
+  // Game links work better as immediate quick actions than as a separate
+  // content tab. This keeps Steam and any future game URLs beside the other
+  // one-tap contact/social icons.
+  const gameQuickLinks = customRowsFor('game').filter((row) => row.href);
+
   // Define tabs: About, Contact, Portfolio, HuntsTAG
   const tabs = [];
   tabs.push({ label: 'About', key: 'bio' });
@@ -705,7 +731,7 @@ export default function PublicProfile() {
   if (profile.huntsworldUrl) tabs.push({ label: 'HuntsTAG', key: 'huntsworld' });
 
   // Custom admin sections
-  const BUILTIN_SECTION_KEYS = new Set(['contact', 'portfolio', 'social', 'huntsworld']);
+  const BUILTIN_SECTION_KEYS = new Set(['contact', 'portfolio', 'social', 'huntsworld', 'game', 'address']);
   const customSectionRows = {};
   for (const section of new Set(attributes.map((a) => a.section))) {
     if (BUILTIN_SECTION_KEYS.has(section)) continue;
@@ -722,7 +748,7 @@ export default function PublicProfile() {
   // Client-edited tags (Profile Settings -> About tab) win when set. Falls
   // back to the old auto-picked-by-role guess only for profiles that
   // predate this field, so they don't suddenly show no tags at all.
-  const isDeveloper = /developer|engineer|coder|tech|fullstack|frontend|backend/i.test(`${profile.jobTitle || ''} ${profile.bio || ''}`);
+  const isDeveloper = /developer|engineer|coder|tech|fullstack|frontend|backend/i.test(`${profile.designation || ''} ${profile.bio || ''}`);
   const specialtyTags = profile.highlights?.length
     ? profile.highlights
     : isDeveloper
@@ -876,19 +902,20 @@ export default function PublicProfile() {
             <div className="ht-name-wrap" ref={nameRef}>
               <h1 className="ht-full-name">{profile.fullName}</h1>
               <div className="ht-badges-row">
-                {profile.jobTitle && (
+                {profile.designation && (
                   <span className="ht-role-badge-pill">
-                    <Icons.CodeBracket />
+                    {profile.designation}
+                  </span>
+                )}
+                {profile.jobTitle && (
+                  <span className="ht-company-badge">
+                    <Icons.Building />
                     {profile.jobTitle}
                   </span>
                 )}
-                <span className="ht-company-badge">
-                  <Icons.Building />
-                  HuntsTAG
-                </span>
               </div>
-              {profile.bio && (
-                <p className="ht-quick-bio-snippet">{profile.bio}</p>
+              {profile.headline && (
+                <p className="ht-quick-bio-snippet">{profile.headline}</p>
               )}
             </div>
           </div>
@@ -958,6 +985,19 @@ export default function PublicProfile() {
                 <Icons.Phone />
               </a>
             )}
+            {gameQuickLinks.map((row) => (
+              <a
+                key={row.key}
+                href={row.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ht-social-circle-btn game"
+                title={`Open ${row.label}`}
+                aria-label={`Open ${row.label}`}
+              >
+                <Gamepad2 />
+              </a>
+            ))}
           </div>
 
           {/* Primary Action Buttons Bar */}
@@ -1017,10 +1057,6 @@ export default function PublicProfile() {
 
                 {/* Hardware / NFC Chip Specs */}
                 <div className="ht-specs-card">
-                  <div className="ht-spec-item">
-                    <span className="ht-spec-label">Business</span>
-                    <span className="ht-spec-val" style={{ color: 'var(--ht-accent)' }}>HuntsTAG</span>
-                  </div>
                   <div className="ht-spec-item">
                     <span className="ht-spec-label">Card ID</span>
                     <span className="ht-spec-val">{profile.clientId}</span>
@@ -1103,21 +1139,42 @@ export default function PublicProfile() {
                   </div>
                 )}
 
-                {locationAttr && (
+                {manualLocationText && (
                   <div className="ht-contact-card-tile">
                     <div className="ht-tile-badge location">
                       <Icons.MapPin />
                     </div>
                     <div className="ht-tile-info">
-                      <div className="ht-tile-type">Location & Map</div>
-                      <div className="ht-tile-val">Google Maps Location</div>
+                      <div className="ht-tile-type">Address</div>
+                      <div className="ht-tile-val">{manualLocationText}</div>
                     </div>
                     <a
-                      href={locationAttr}
+                      href={manualLocationHref}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="ht-tile-action-icon"
-                      title="Open in Maps"
+                      title="Find address on Google Maps"
+                    >
+                      <Icons.ArrowUpRight />
+                    </a>
+                  </div>
+                )}
+
+                {googleLocationHref && (
+                  <div className="ht-contact-card-tile">
+                    <div className="ht-tile-badge location">
+                      <Icons.MapPin />
+                    </div>
+                    <div className="ht-tile-info">
+                      <div className="ht-tile-type">Google Maps</div>
+                      <div className="ht-tile-val">Open saved location</div>
+                    </div>
+                    <a
+                      href={googleLocationHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ht-tile-action-icon"
+                      title="Open saved Google Maps location"
                     >
                       <Icons.ArrowUpRight />
                     </a>

@@ -6,7 +6,8 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "migrate:optional-email": "node migrate-optional-login-email.js"
   },
   "dependencies": {
     "archiver": "^8.0.0",

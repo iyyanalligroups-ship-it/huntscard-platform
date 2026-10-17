@@ -23,6 +23,9 @@ const ICONS = {
   magicArt: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8 19 13"/><path d="M15 9h0"/><path d="M17.8 6.2 19 5"/><path d="m3 21 9-9"/><path d="M12.2 6.2 13 7"/></svg>
   ),
+  camera: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 6 10 3.5h4L15.5 6H19a2.5 2.5 0 0 1 2.5 2.5v9A2.5 2.5 0 0 1 19 20H5a2.5 2.5 0 0 1-2.5-2.5v-9A2.5 2.5 0 0 1 5 6Z"/><circle cx="12" cy="13" r="4"/><path d="M18 9h.01"/></svg>
+  ),
   shop: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 7h12l1 13H5L6 7Z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/></svg>
   ),
@@ -75,10 +78,10 @@ const NAV_GROUPS = [
     label: 'Account & connections',
     icon: 'profile',
     items: [
-      { to: '/dashboard/appointments', label: 'Appointment Requests', icon: 'appointments' },
       { to: '/dashboard/profile', label: 'Profile', icon: 'profile' },
       { to: '/dashboard/settings', label: 'Profile Settings', icon: 'profileSettings' },
       { to: '/dashboard/contacts', label: 'Contacts', icon: 'contacts' },
+      { to: '/dashboard/appointments', label: 'Appointment Requests', icon: 'appointments' },
     ],
   },
   {
@@ -87,10 +90,10 @@ const NAV_GROUPS = [
     icon: 'arLayout',
     items: [
       { to: '/dashboard/ar-layout', label: 'AR Layout', icon: 'arLayout' },
-      { to: '/magic-camera', label: 'Magic Camera', icon: 'magicArt' },
+      { to: '/dashboard/magic-business-card', label: 'Magic Business Card', icon: 'magicArt' },
+      { to: '/magic-camera', label: 'Magic Camera', icon: 'camera', highlighted: true },
       // Magic Camera 3D nav entry hidden -- feature isn't ready yet, will
       // come back once it's finished. Route/page itself is untouched.
-      { to: '/dashboard/magic-business-card', label: 'Magic Business Card', icon: 'magicArt' },
     ],
   },
   {
@@ -323,7 +326,10 @@ export default function Layout() {
                       >
                         <span className="side-child-dot" />
                         <span className="side-icon">{ICONS[item.icon]}</span>
-                        {item.label}
+                        <span className={item.highlighted ? 'side-feature-badge' : 'side-link-label'}>
+                          {item.highlighted && <span className="side-feature-badge-dot" aria-hidden="true" />}
+                          {item.label}
+                        </span>
                       </NavLink>
                     ))}
                   </div>

@@ -151,12 +151,36 @@ export default function Dashboard() {
     .map((p) => p[0].toUpperCase())
     .join('');
 
+  const dashboardAddressParts = [profile?.addressLine1, profile?.addressLine2, profile?.addressCity, profile?.addressState]
+    .map((part) => part?.trim())
+    .filter(Boolean);
+  const dashboardManualAddress = dashboardAddressParts.length
+    ? [...dashboardAddressParts, profile?.addressCountry?.trim(), profile?.addressPincode?.trim()].filter(Boolean).join(', ')
+    : '';
+  const dashboardLegacyLocation = profile?.customAttributes?.address || profile?.customAttributes?.map || '';
+  const dashboardLegacyIsUrl = /^https?:\/\//i.test(dashboardLegacyLocation);
+  const dashboardHasStructuredAddress = Boolean(dashboardManualAddress || profile?.googleMapsUrl);
+  const dashboardUsesGoogle = dashboardHasStructuredAddress ? profile?.addressMode === 'google' : dashboardLegacyIsUrl;
+  const dashboardAddressLabel = dashboardUsesGoogle
+    ? 'Google Maps location'
+    : dashboardManualAddress || (!dashboardLegacyIsUrl ? dashboardLegacyLocation : '');
+  const dashboardAddressHref = dashboardUsesGoogle
+    ? profile?.googleMapsUrl || dashboardLegacyLocation
+    : dashboardAddressLabel
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dashboardAddressLabel)}`
+    : '';
+
   const contactRows = [
     profile?.phone && { icon: <Phone size={15} />, label: profile.phone, href: `tel:${profile.phone}` },
-    (profile?.publicEmail || profile?.loginEmail) && {
+    profile?.publicEmailVerified && profile?.publicEmail && {
       icon: <Mail size={15} />,
-      label: profile.publicEmail || profile.loginEmail,
-      href: `mailto:${profile.publicEmail || profile.loginEmail}`,
+      label: profile.publicEmail,
+      href: `mailto:${profile.publicEmail}`,
+    },
+    dashboardAddressLabel && {
+      icon: <Globe2 size={15} />,
+      label: dashboardAddressLabel,
+      href: dashboardAddressHref,
     },
   ].filter(Boolean);
 
@@ -206,7 +230,7 @@ export default function Dashboard() {
   // Attributes page) -- no hardcoded fields of their own, just whatever
   // custom rows this client filled in for that section. Includes AR-
   // flagged attributes' own sections (e.g. "Map"), same as PublicProfile.jsx.
-  const BUILTIN_SECTION_KEYS = new Set(['contact', 'portfolio', 'social', 'huntsworld']);
+  const BUILTIN_SECTION_KEYS = new Set(['contact', 'portfolio', 'social', 'huntsworld', 'address']);
   const customSectionRows = {};
   for (const section of new Set(attributes.map((a) => a.section))) {
     if (BUILTIN_SECTION_KEYS.has(section)) continue;
@@ -222,18 +246,19 @@ export default function Dashboard() {
   const clampedTab = Math.min(activeTab, tabs.length - 1);
   const currentKey = tabs[clampedTab]?.key;
   const profileChecks = [
-    profile?.fullName,
-    profile?.jobTitle,
-    profile?.photoUrl,
-    profile?.bannerUrl,
-    profile?.bio,
-    profile?.phone,
-    profile?.publicEmail || profile?.loginEmail,
-    profile?.portfolioUrl,
-    profile?.whatsapp,
-    profile?.instagramUrl || profile?.twitterUrl,
+    { label: 'Full name', complete: Boolean(profile?.fullName?.trim()) },
+    { label: 'Company name', complete: Boolean(profile?.jobTitle?.trim()) },
+    { label: 'Profile photo', complete: Boolean(profile?.photoUrl) },
+    { label: 'Cover banner', complete: Boolean(profile?.bannerUrl) },
+    { label: 'Short bio', complete: Boolean(profile?.bio?.trim()) },
+    { label: 'Phone number', complete: Boolean(profile?.phone?.trim()) },
+    { label: 'Verified public email', complete: Boolean(profile?.publicEmailVerified && profile?.publicEmail?.trim()) },
+    { label: 'Portfolio link', complete: Boolean(profile?.portfolioUrl?.trim()) },
+    { label: 'WhatsApp number', complete: Boolean(profile?.whatsapp?.trim()) },
+    { label: 'Instagram or X link', complete: Boolean((profile?.instagramUrl || profile?.twitterUrl)?.trim()) },
   ];
-  const completedFields = profileChecks.filter(Boolean).length;
+  const completedFields = profileChecks.filter((item) => item.complete).length;
+  const missingFields = profileChecks.filter((item) => !item.complete);
   const profileCompletion = Math.round((completedFields / profileChecks.length) * 100);
 
   function handleTouchStart(e) {
@@ -302,7 +327,9 @@ export default function Dashboard() {
         <div className="pv-header has-banner">
           <div className="pv-name">{profile?.fullName}</div>
           <div className="pv-client-id">{profile?.clientId}</div>
-          <div className="pv-title">{profile?.jobTitle || '\u00A0'}</div>
+          <div className="pv-title">
+            {[profile?.designation, profile?.jobTitle].filter(Boolean).join(' · ') || '\u00A0'}
+          </div>
           {profile?.clientId && (
             <div className="pv-qr-inline">
               <img src={`${API_URL}/api/public/qr/${profile.clientId}`} alt="QR code for this card" />
@@ -531,6 +558,19 @@ export default function Dashboard() {
                 <span>{profileCompletion === 100 ? 'Everything important is ready to share.' : 'Add more details to make every tap more useful.'}</span>
               </div>
             </div>
+            {missingFields.length > 0 && (
+              <div className="profile-readiness-missing">
+                <b>Missing for 100%</b>
+                <ul>
+                  {missingFields.map((item) => (
+                    <li key={item.label}>{item.label}</li>
+                  ))}
+                </ul>
+                <Link className="profile-readiness-cta" to="/dashboard/settings">
+                  Complete profile <ArrowUpRight size={14} />
+                </Link>
+              </div>
+            )}
           </section>
 
           <section className="client-profile-side-card">
@@ -540,7 +580,8 @@ export default function Dashboard() {
             </div>
             <dl className="client-profile-meta">
               <div><dt><UserRound size={14} /> Name</dt><dd>{profile?.fullName || 'Not added'}</dd></div>
-              <div><dt><BriefcaseBusiness size={14} /> Role</dt><dd>{profile?.jobTitle || 'Not added'}</dd></div>
+              <div><dt><BriefcaseBusiness size={14} /> Company</dt><dd>{profile?.jobTitle || 'Not added'}</dd></div>
+              <div><dt><BriefcaseBusiness size={14} /> Occupation</dt><dd>{profile?.designation || 'Not added'}</dd></div>
               <div><dt><Globe2 size={14} /> Client ID</dt><dd>{profile?.clientId}</dd></div>
             </dl>
           </section>

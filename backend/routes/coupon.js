@@ -94,7 +94,35 @@ router.post('/claim', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Upload both a front and back design before claiming.' });
     }
 
-    const deliveryAddress = await ClientAddress.findOne({ _id: deliveryAddressId, clientId: req.user.clientId });
+    let deliveryAddress = null;
+    if (deliveryAddressId === 'profile') {
+      if (client && client.addressLine1 && client.addressCity && client.addressPincode) {
+        deliveryAddress = {
+          name: client.fullName || 'Valued Customer',
+          phone: client.phone || '',
+          line1: client.addressLine1,
+          line2: client.addressLine2 || '',
+          country: client.addressCountry || 'India',
+          state: client.addressState || '',
+          city: client.addressCity || '',
+          pincode: client.addressPincode,
+        };
+      }
+    } else if (require('mongoose').isValidObjectId(deliveryAddressId)) {
+      deliveryAddress = await ClientAddress.findOne({ _id: deliveryAddressId, clientId: req.user.clientId });
+    }
+    if (!deliveryAddress && client && client.addressLine1 && client.addressCity && client.addressPincode) {
+      deliveryAddress = {
+        name: client.fullName || 'Valued Customer',
+        phone: client.phone || '',
+        line1: client.addressLine1,
+        line2: client.addressLine2 || '',
+        country: client.addressCountry || 'India',
+        state: client.addressState || '',
+        city: client.addressCity || '',
+        pincode: client.addressPincode,
+      };
+    }
     if (!deliveryAddress) return res.status(400).json({ error: 'The selected delivery address was not found.' });
 
     // Consume the coupon -- atomic on huntsworld's side, so a retried/

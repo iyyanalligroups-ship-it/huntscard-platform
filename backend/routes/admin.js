@@ -1227,10 +1227,10 @@ router.get('/clients', requireAdmin, async (req, res) => {
   const q = String(req.query.q || '').trim().slice(0, 100);
   if (q) {
     const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    filter.$or = ['fullName', 'clientId', 'loginEmail', 'phone', 'cardType'].map((f) => ({ [f]: rx }));
+    filter.$or = ['fullName', 'clientId', 'loginEmail', 'publicEmail', 'phone', 'cardType'].map((f) => ({ [f]: rx }));
   }
   const clients = await Client.find(filter)
-    .select('clientId fullName loginEmail phone gender dateOfBirth cardType logoUrl paid blocked chipEncoded encodedAt encodedBy createdAt')
+    .select('clientId fullName loginEmail publicEmail phone gender dateOfBirth cardType logoUrl paid blocked chipEncoded encodedAt encodedBy createdAt')
     .sort({ createdAt: -1 });
   res.json(clients);
 });
@@ -1244,7 +1244,7 @@ router.get('/clients', requireAdmin, async (req, res) => {
 router.get('/clients/:clientId', requireAdmin, async (req, res) => {
   const client = await Client.findOne({ clientId: req.params.clientId })
     .select(
-      'clientId fullName loginEmail phone gender dateOfBirth cardType logoUrl paid blocked chipEncoded encodedAt encodedBy createdAt bannerUrl customDesignFrontUrl cardVariantId'
+      'clientId fullName loginEmail publicEmail phone gender dateOfBirth cardType logoUrl paid blocked chipEncoded encodedAt encodedBy createdAt bannerUrl customDesignFrontUrl cardVariantId'
     );
   if (!client) return res.status(404).json({ error: 'Client not found' });
   const plan = await CardPlan.findOne({ key: client.cardType }).select('variants');
@@ -1279,6 +1279,7 @@ router.patch('/clients/:clientId', requireAdmin, async (req, res) => {
       chipEncoded,
     } = req.body;
     const updates = {};
+    let unsetLoginEmail = false;
 
     if (fullName !== undefined) updates.fullName = fullName;
     if (phone !== undefined) updates.phone = phone;
@@ -1299,12 +1300,17 @@ router.patch('/clients/:clientId', requireAdmin, async (req, res) => {
     if (huntsworldUrl !== undefined) updates.huntsworldUrl = huntsworldUrl;
 
     if (loginEmail !== undefined) {
-      const existing = await Client.findOne({
-        loginEmail: loginEmail.toLowerCase(),
-        clientId: { $ne: req.params.clientId },
-      });
-      if (existing) return res.status(409).json({ error: 'Another client already uses this email' });
-      updates.loginEmail = loginEmail.toLowerCase();
+      const normalizedLoginEmail = typeof loginEmail === 'string' ? loginEmail.trim().toLowerCase() : '';
+      if (normalizedLoginEmail) {
+        const existing = await Client.findOne({
+          loginEmail: normalizedLoginEmail,
+          clientId: { $ne: req.params.clientId },
+        });
+        if (existing) return res.status(409).json({ error: 'Another client already uses this email' });
+        updates.loginEmail = normalizedLoginEmail;
+      } else {
+        unsetLoginEmail = true;
+      }
     }
 
     if (cardType !== undefined) {
@@ -1340,7 +1346,7 @@ router.patch('/clients/:clientId', requireAdmin, async (req, res) => {
 
     const client = await Client.findOneAndUpdate(
       { clientId: req.params.clientId },
-      { $set: updates },
+      { $set: updates, ...(unsetLoginEmail ? { $unset: { loginEmail: '' } } : {}) },
       { new: true, runValidators: true }
     ).select('-passwordHash -chipPasswordHash');
 

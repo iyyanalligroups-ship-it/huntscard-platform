@@ -276,7 +276,11 @@ export default function DashboardHome() {
 
   // --- completeness, computed from real fields only ---
   const groups = FIELD_GROUPS.map((g) => {
-    const filled = g.fields.filter((f) => Boolean(profile?.[f] && String(profile[f]).trim())).length;
+    const filled = g.fields.filter((f) =>
+      f === 'publicEmail'
+        ? Boolean(profile?.publicEmailVerified && profile?.publicEmail?.trim())
+        : Boolean(profile?.[f] && String(profile[f]).trim()),
+    ).length;
     return { ...g, filled, total: g.fields.length };
   });
   const totalFields = groups.reduce((s, g) => s + g.total, 0);
@@ -304,6 +308,11 @@ export default function DashboardHome() {
   const heroCardDesignUrl = selectedCard ? selectedCard.cardDesignUrl : profile?.cardFrontImageUrl;
   const heroCardType = selectedCard ? selectedCard.cardType : profile?.cardType;
   const heroCardLabel = selectedCard?.label || selectedCard?.variantName || planLabel;
+  // New accounts do not own a physical card yet. Do not render the preview
+  // panel at all for them—the panel's white background otherwise looks like
+  // a large blank card. `profile.paid` keeps legacy paid accounts working,
+  // while a real Card record covers newer/admin-assigned multi-card accounts.
+  const hasOwnedCard = Boolean(profile?.paid || cards.length > 0);
 
   // Hero mini card preview -- sized to the real design image's own real
   // pixel aspect ratio when known (heroImageDims, see the effects above),
@@ -454,38 +463,40 @@ export default function DashboardHome() {
           </section>
         </div>
 
-        <div className="dash-hero-right">
-          <div
-            ref={miniCardRef}
-            onMouseMove={handleCardTiltMove}
-            onMouseLeave={handleCardTiltLeave}
-            className={`tap-card mini ${heroCardType || 'unassigned'}`}
-            style={{
-              ...miniCardSize,
-              minWidth: miniCardSize.width,
-              ...(cardCompositeUrl || heroCardDesignUrl
-                ? {
-                    // contain, not cover -- the real design (or the
-                    // composite, once cardCompositeUrl is ready -- see
-                    // the effect above) often carries a QR code near an
-                    // edge; cover was cropping that off to fill the box,
-                    // contain always shows the whole thing.
-                    // Plain color, not the class's own dark fallback
-                    // (see .tap-card:not(...) in styles.css) -- with a
-                    // real design image there's nothing for that fallback
-                    // to show through anymore except as unwanted bars in
-                    // the letterboxed gaps, so it's cleared here.
-                    background: 'transparent',
-                    backgroundImage: `url(${cardCompositeUrl || heroCardDesignUrl})`,
-                    backgroundSize: 'contain',
-                    backgroundPosition: 'center',
-                    backgroundRepeat: 'no-repeat',
-                  }
-                : {}),
-            }}
-          >
+        {hasOwnedCard && (
+          <div className="dash-hero-right">
+            <div
+              ref={miniCardRef}
+              onMouseMove={handleCardTiltMove}
+              onMouseLeave={handleCardTiltLeave}
+              className={`tap-card mini ${heroCardType || 'unassigned'}`}
+              style={{
+                ...miniCardSize,
+                minWidth: miniCardSize.width,
+                ...(cardCompositeUrl || heroCardDesignUrl
+                  ? {
+                      // contain, not cover -- the real design (or the
+                      // composite, once cardCompositeUrl is ready -- see
+                      // the effect above) often carries a QR code near an
+                      // edge; cover was cropping that off to fill the box,
+                      // contain always shows the whole thing.
+                      // Plain color, not the class's own dark fallback
+                      // (see .tap-card:not(...) in styles.css) -- with a
+                      // real design image there's nothing for that fallback
+                      // to show through anymore except as unwanted bars in
+                      // the letterboxed gaps, so it's cleared here.
+                      background: 'transparent',
+                      backgroundImage: `url(${cardCompositeUrl || heroCardDesignUrl})`,
+                      backgroundSize: 'contain',
+                      backgroundPosition: 'center',
+                      backgroundRepeat: 'no-repeat',
+                    }
+                  : {}),
+              }}
+            >
+            </div>
           </div>
-        </div>
+        )}
       </section>
 
       {/* KPI row -- every number here is real (taps, plan, order, completeness) */}

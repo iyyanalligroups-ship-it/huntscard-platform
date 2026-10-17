@@ -761,6 +761,11 @@
   background: rgba(244, 114, 182, 0.15);
   box-shadow: 0 8px 20px rgba(244, 114, 182, 0.28);
 }
+.ht-social-circle-btn.game:hover {
+  border-color: #a78bfa;
+  background: rgba(167, 139, 250, 0.15);
+  box-shadow: 0 8px 20px rgba(167, 139, 250, 0.28);
+}
 
 /* Primary Action Buttons */
 .ht-primary-actions {
@@ -861,6 +866,7 @@
   display: none;
 }
 .ht-tab-btn {
+  width: auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1101,6 +1107,9 @@
   transform: translateX(2px);
 }
 .ht-copy-btn {
+  width: auto;
+  min-height: 0;
+  flex: 0 0 auto;
   background: transparent;
   border: none;
   color: var(--ht-text-dim);

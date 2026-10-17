@@ -352,7 +352,7 @@ router.get('/profile/:clientId', async (req, res) => {
     { $inc: { tapCount: 1 } }, // simple tap analytics, per the report's spec -- kept even while paused, harmless
     { new: true }
   ).select(
-    'fullName jobTitle bio highlights photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail loginEmail instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType cardVariantId clientId cardActive customDesignFrontUrl customDesignBackUrl'
+    'fullName jobTitle designation headline bio highlights addressMode addressLine1 addressLine2 addressCountry addressState addressCity addressPincode googleMapsUrl photoUrl bannerUrl arVideoUrl arBannerUrl arBannerType arModelUrl arModelType phone whatsapp publicEmail publicEmailVerified instagramUrl twitterUrl portfolioUrl huntsworldUrl customAttributes cardType cardVariantId clientId cardActive customDesignFrontUrl customDesignBackUrl'
   );
 
   if (!client) {
@@ -369,12 +369,10 @@ router.get('/profile/:clientId', async (req, res) => {
   }
 
   const clientObj = client.toObject();
-  // No public contact email set -- fall back to the login email rather
-  // than leaving the card's Contact tab with no email row at all. Applied
-  // here (not stored) so Profile Settings' own "Public email" field still
-  // shows genuinely empty when it's genuinely empty.
-  clientObj.publicEmail = clientObj.publicEmail || clientObj.loginEmail;
-  delete clientObj.loginEmail;
+  // Never publish an email until the owner has proved access to it using
+  // Profile Settings' OTP flow. Login email is private and is not a public
+  // fallback.
+  if (!clientObj.publicEmailVerified) delete clientObj.publicEmail;
   // The physical card's actual shape -- picked at purchase time (see
   // CardPlanVariantSchema.shape) and needed by the AR layout system to
   // size/orient itself to match instead of always assuming landscape.
@@ -440,9 +438,10 @@ router.get('/vcard/:clientId', async (req, res) => {
     'BEGIN:VCARD',
     'VERSION:3.0',
     `FN:${client.fullName || ''}`,
-    client.jobTitle ? `TITLE:${client.jobTitle}` : '',
+    client.designation ? `TITLE:${client.designation}` : '',
+    client.jobTitle ? `ORG:${client.jobTitle}` : '',
     client.phone ? `TEL;TYPE=CELL:${client.phone}` : '',
-    client.publicEmail || client.loginEmail ? `EMAIL:${client.publicEmail || client.loginEmail}` : '',
+    client.publicEmailVerified && client.publicEmail ? `EMAIL:${client.publicEmail}` : '',
     client.portfolioUrl ? `URL:${client.portfolioUrl}` : '',
     client.photoUrl ? `PHOTO;VALUE=URI:${client.photoUrl}` : '',
     'END:VCARD',
@@ -570,7 +569,7 @@ router.get('/ar-targets', async (req, res) => {
   const clients = await Client.find({ chipEncoded: true, photoUrl: { $exists: true, $ne: null } })
     .sort({ encodedAt: -1 })
     .limit(LIMIT)
-    .select('clientId fullName jobTitle photoUrl');
+    .select('clientId fullName jobTitle designation photoUrl');
 
   res.json(clients);
 });
@@ -656,9 +655,8 @@ router.get('/ar-icons', async (req, res) => {
 // MagicPosterCart.jsx). Backed by the `country-state-city` package's own
 // bundled dataset (no network call out, no API key), just re-served here
 // as small JSON lists rather than shipping the whole dataset to the
-// browser. Pincode is NOT included -- one city can have many postal
-// codes and there's no reliable free dataset mapping city -> pincode, so
-// that field stays a plain manual input on the form.
+// browser. Indian PIN codes are resolved separately through the public
+// postal lookup proxy below.
 // -----------------------------------------------------------------------
 
 // GET /api/public/geo/countries
@@ -681,6 +679,43 @@ router.get('/geo/cities', (req, res) => {
   if (!country || !state) return res.status(400).json({ error: 'country and state are required' });
   res.set('Cache-Control', 'public, max-age=86400');
   res.json(City.getCitiesOfState(country, state).map((c) => c.name));
+});
+
+// GET /api/public/geo/pincode/600001
+// Proxied server-side so the client has one stable API surface and never
+// depends on a third-party CORS policy. This lookup is India-specific.
+router.get('/geo/pincode/:pincode', async (req, res) => {
+  const pincode = String(req.params.pincode || '').replace(/\D/g, '');
+  if (!/^\d{6}$/.test(pincode)) {
+    return res.status(400).json({ error: 'A valid 6-digit Indian PIN code is required.' });
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(`https://api.postalpincode.in/pincode/${pincode}`, { signal: controller.signal });
+    if (!response.ok) throw new Error(`Postal service returned ${response.status}`);
+    const payload = await response.json();
+    const result = Array.isArray(payload) ? payload[0] : null;
+    const offices = result?.Status === 'Success' && Array.isArray(result.PostOffice) ? result.PostOffice : [];
+    if (!offices.length) return res.status(404).json({ error: 'No location found for this PIN code.' });
+
+    const first = offices[0];
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.json({
+      pincode,
+      country: first.Country || 'India',
+      countryCode: 'IN',
+      state: first.State || '',
+      city: first.District || first.Block || first.Name || '',
+      postOffices: [...new Set(offices.map((office) => office.Name?.trim()).filter(Boolean))],
+    });
+  } catch (err) {
+    console.error('[public/geo/pincode]', err.message);
+    res.status(502).json({ error: 'PIN code lookup is temporarily unavailable. You can still choose the location manually.' });
+  } finally {
+    clearTimeout(timeout);
+  }
 });
 
 // GET /api/public/magic-art -- every COMPLETE admin-managed Magic Art

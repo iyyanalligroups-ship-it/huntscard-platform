@@ -24,11 +24,15 @@ const { laneForState, DEFAULT_LANE_RATES, computeDeliveryAmount, DEFAULT_POSTER_
 const { getChargeAmount, getMagicArtChargeAmount, computeMagicPosterTotals } = require('../utils/pricing');
 const { buildInvoicePdf, normalizeCardInvoiceOrder } = require('../utils/invoice');
 const { sendEmail } = require('../utils/email');
+const { publicEmailVerificationEmail } = require('../utils/emailTemplates');
 const { getGlobalMagicLayoutDefault, mergeMagicLayout } = require('../utils/magicLayout');
 const { buildVariantMap, resolveCardVariant } = require('../utils/cardVariant');
 const { nextOrderNumber } = require('../utils/orderNumber');
 
 const router = express.Router();
+const PUBLIC_EMAIL_OTP_TTL_MS = 10 * 60 * 1000;
+const PUBLIC_EMAIL_OTP_MAX_ATTEMPTS = 5;
+const PUBLIC_EMAIL_OTP_RESEND_COOLDOWN_MS = 45 * 1000;
 
 // Only construct the Razorpay client if keys are actually set -- lets the
 // rest of the app run fine before you've configured payments, and gives a
@@ -510,11 +514,22 @@ router.delete('/ar-model', requireAuth, async (req, res) => {
 const EDITABLE_FIELDS = [
   'fullName',
   'jobTitle',
+  'designation',
+  'headline',
   'bio',
+  'addressMode',
+  'addressLine1',
+  'addressLine2',
+  'addressCountry',
+  'addressCountryCode',
+  'addressState',
+  'addressStateCode',
+  'addressCity',
+  'addressPincode',
+  'googleMapsUrl',
   'highlights',
   'phone',
   'whatsapp',
-  'publicEmail',
   'instagramUrl',
   'twitterUrl',
   'portfolioUrl',
@@ -531,6 +546,94 @@ router.get('/me', requireAuth, async (req, res) => {
   if (!client) return res.status(404).json({ error: 'Client not found' });
 
   res.json(await withPlanFlags(client));
+});
+
+// Public contact emails are published only after ownership is proven by a
+// short-lived OTP sent to that exact address. Normal PUT /me updates cannot
+// change this field; successful verification below is the only write path.
+router.post('/email-verification/request', requireAuth, async (req, res) => {
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Enter a valid email address.' });
+    }
+
+    const client = await Client.findOne({ clientId: req.user.clientId });
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    if (client.publicEmailVerified && client.publicEmail === email) {
+      return res.json({ ok: true, verified: true, message: 'This email is already verified.' });
+    }
+
+    const withinCooldown =
+      client.pendingPublicEmail === email &&
+      client.publicEmailOtpLastSentAt &&
+      Date.now() - client.publicEmailOtpLastSentAt.getTime() < PUBLIC_EMAIL_OTP_RESEND_COOLDOWN_MS;
+    if (withinCooldown) {
+      return res.status(429).json({ error: 'Please wait before requesting another verification code.' });
+    }
+
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    client.pendingPublicEmail = email;
+    client.publicEmailOtpHash = await bcrypt.hash(otp, 10);
+    client.publicEmailOtpExpiresAt = new Date(Date.now() + PUBLIC_EMAIL_OTP_TTL_MS);
+    client.publicEmailOtpAttempts = 0;
+    client.publicEmailOtpLastSentAt = new Date();
+    await client.save();
+
+    await sendEmail(email, 'Verify your HuntsTAG public email', publicEmailVerificationEmail(otp));
+    res.json({ ok: true, message: 'Verification code sent.' });
+  } catch (err) {
+    console.error('[profile/email-verification/request]', err);
+    res.status(500).json({ error: 'Failed to send verification code.' });
+  }
+});
+
+router.post('/email-verification/verify', requireAuth, async (req, res) => {
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const otp = String(req.body.otp || '').trim();
+    if (!email || !/^\d{6}$/.test(otp)) {
+      return res.status(400).json({ error: 'Enter the email and 6-digit verification code.' });
+    }
+
+    const client = await Client.findOne({ clientId: req.user.clientId }).select('+publicEmailOtpHash');
+    if (
+      !client ||
+      client.pendingPublicEmail !== email ||
+      !client.publicEmailOtpHash ||
+      !client.publicEmailOtpExpiresAt
+    ) {
+      return res.status(400).json({ error: 'Invalid or expired code. Request a new one.' });
+    }
+    if (client.publicEmailOtpExpiresAt < new Date()) {
+      return res.status(400).json({ error: 'Code expired. Request a new one.' });
+    }
+    if (client.publicEmailOtpAttempts >= PUBLIC_EMAIL_OTP_MAX_ATTEMPTS) {
+      return res.status(429).json({ error: 'Too many incorrect attempts. Request a new code.' });
+    }
+
+    const valid = await bcrypt.compare(otp, client.publicEmailOtpHash);
+    if (!valid) {
+      client.publicEmailOtpAttempts += 1;
+      await client.save();
+      return res.status(401).json({ error: 'Incorrect verification code.' });
+    }
+
+    client.publicEmail = email;
+    client.publicEmailVerified = true;
+    client.pendingPublicEmail = null;
+    client.publicEmailOtpHash = null;
+    client.publicEmailOtpExpiresAt = null;
+    client.publicEmailOtpAttempts = 0;
+    client.publicEmailOtpLastSentAt = null;
+    await client.save();
+
+    const verifiedClient = await Client.findOne({ clientId: req.user.clientId }).select('-passwordHash -chipPasswordHash');
+    res.json(await withPlanFlags(verifiedClient));
+  } catch (err) {
+    console.error('[profile/email-verification/verify]', err);
+    res.status(500).json({ error: 'Email verification failed.' });
+  }
 });
 
 // Magic Business Card -- self-service now (client can edit their own,
@@ -995,6 +1098,37 @@ router.put('/me', requireAuth, async (req, res) => {
     ).select('-passwordHash -chipPasswordHash');
 
     if (!client) return res.status(404).json({ error: 'Client not found' });
+    // Sync profile address to ClientAddress so it is automatically available
+    // on the Shop and Magic Poster checkout pages
+    if (client.addressLine1 && client.addressCity && client.addressPincode) {
+      try {
+        const addressData = {
+          name: client.fullName || req.user.fullName || 'Valued Customer',
+          phone: client.phone || req.user.phone || '0000000000',
+          line1: client.addressLine1,
+          line2: client.addressLine2 || '',
+          country: client.addressCountry || 'India',
+          state: client.addressState || '',
+          city: client.addressCity || '',
+          pincode: client.addressPincode,
+        };
+        const existingProfileAddr = await ClientAddress.findOne({ clientId: req.user.clientId, label: 'Profile Address' });
+        if (existingProfileAddr) {
+          await ClientAddress.updateOne({ _id: existingProfileAddr._id }, { $set: addressData });
+        } else {
+          const hasAny = await ClientAddress.exists({ clientId: req.user.clientId });
+          await ClientAddress.create({
+            clientId: req.user.clientId,
+            label: 'Profile Address',
+            ...addressData,
+            isDefault: !hasAny,
+          });
+        }
+      } catch (addrErr) {
+        console.error('[profile/me sync address]', addrErr);
+      }
+    }
+
     res.json(await withPlanFlags(client));
   } catch (err) {
     console.error('[profile/me PUT]', err);
@@ -1245,7 +1379,42 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
       quantity = parseQuantity(req.body.quantity);
     }
 
-    const deliveryAddress = await ClientAddress.findOne({ _id: deliveryAddressId, clientId: req.user.clientId });
+    let deliveryAddress = null;
+    if (deliveryAddressId === 'profile') {
+      const client = await Client.findOne({ clientId: req.user.clientId })
+        .select('fullName phone addressLine1 addressLine2 addressCountry addressState addressCity addressPincode');
+      if (client && client.addressLine1 && client.addressCity && client.addressPincode) {
+        deliveryAddress = {
+          name: client.fullName || 'Valued Customer',
+          phone: client.phone || '',
+          line1: client.addressLine1,
+          line2: client.addressLine2 || '',
+          country: client.addressCountry || 'India',
+          state: client.addressState || '',
+          city: client.addressCity || '',
+          pincode: client.addressPincode,
+        };
+      }
+    } else if (mongoose.isValidObjectId(deliveryAddressId)) {
+      deliveryAddress = await ClientAddress.findOne({ _id: deliveryAddressId, clientId: req.user.clientId });
+    }
+    if (!deliveryAddress) {
+      // Fallback check if client profile matches
+      const client = await Client.findOne({ clientId: req.user.clientId })
+        .select('fullName phone addressLine1 addressLine2 addressCountry addressState addressCity addressPincode');
+      if (client && client.addressLine1 && client.addressCity && client.addressPincode) {
+        deliveryAddress = {
+          name: client.fullName || 'Valued Customer',
+          phone: client.phone || '',
+          line1: client.addressLine1,
+          line2: client.addressLine2 || '',
+          country: client.addressCountry || 'India',
+          state: client.addressState || '',
+          city: client.addressCity || '',
+          pincode: client.addressPincode,
+        };
+      }
+    }
     if (!deliveryAddress) return res.status(400).json({ error: 'The selected delivery address was not found.' });
 
     const subtotal = chargeAmount * quantity;
@@ -1507,7 +1676,36 @@ router.post('/upgrade-confirm', requireAuth, async (req, res) => {
 // GET /api/profile/addresses
 router.get('/addresses', requireAuth, async (req, res) => {
   const addresses = await ClientAddress.find({ clientId: req.user.clientId }).sort({ isDefault: -1, createdAt: -1 });
-  res.json(addresses);
+
+  // If specific shop delivery addresses exist, return them
+  if (addresses.length > 0) {
+    return res.json(addresses);
+  }
+
+  // Else fallback: if no shop delivery address exists, show the profile settings address (public profile address)
+  const client = await Client.findOne({ clientId: req.user.clientId })
+    .select('fullName phone addressLine1 addressLine2 addressCountry addressState addressCity addressPincode');
+
+  if (client && client.addressLine1 && client.addressCity && client.addressPincode) {
+    return res.json([
+      {
+        _id: 'profile',
+        label: 'Profile Address',
+        name: client.fullName || 'Valued Customer',
+        phone: client.phone || '',
+        line1: client.addressLine1,
+        line2: client.addressLine2 || '',
+        country: client.addressCountry || 'India',
+        state: client.addressState || '',
+        city: client.addressCity || '',
+        pincode: client.addressPincode,
+        isDefault: true,
+        isFromProfile: true,
+      },
+    ]);
+  }
+
+  res.json([]);
 });
 
 // POST /api/profile/addresses

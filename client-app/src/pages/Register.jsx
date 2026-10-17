@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, AtSign, BadgeCheck, BriefcaseBusiness, Eye, EyeOff, LockKeyhole, ShieldCheck, Smartphone, Sparkles, UserPlus, UserRound, Wifi } from 'lucide-react';
 import { api, setSession } from '../api.js';
@@ -12,6 +12,8 @@ function todayDateValue() {
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 }
 
+const OTP_RESEND_COOLDOWN_SECONDS = 45;
+
 export default function Register() {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -23,14 +25,98 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [phoneVerificationToken, setPhoneVerificationToken] = useState('');
+  const [otpCooldown, setOtpCooldown] = useState(0);
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const resendIntervalRef = useRef(null);
   const navigate = useNavigate();
+
+  useEffect(() => () => clearInterval(resendIntervalRef.current), []);
+
+  function startOtpCooldown() {
+    setOtpCooldown(OTP_RESEND_COOLDOWN_SECONDS);
+    clearInterval(resendIntervalRef.current);
+    resendIntervalRef.current = setInterval(() => {
+      setOtpCooldown((seconds) => {
+        if (seconds <= 1) {
+          clearInterval(resendIntervalRef.current);
+          return 0;
+        }
+        return seconds - 1;
+      });
+    }, 1000);
+  }
+
+  function handlePhoneChange(e) {
+    setPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
+    setOtpSent(false);
+    setOtp('');
+    setPhoneVerificationToken('');
+    setOtpCooldown(0);
+    clearInterval(resendIntervalRef.current);
+  }
+
+  async function handleRequestOtp() {
+    setError('');
+    if (!/^\d{10}$/.test(phone)) {
+      setError('Enter a valid 10-digit phone number.');
+      return;
+    }
+    setOtpSending(true);
+    try {
+      await api.requestRegistrationOtp(phone);
+      setOtpSent(true);
+      setOtp('');
+      setPhoneVerificationToken('');
+      startOtpCooldown();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setOtpSending(false);
+    }
+  }
+
+  async function handleVerifyOtp() {
+    setError('');
+    if (!/^\d{6}$/.test(otp)) {
+      setError('Enter the 6-digit verification code.');
+      return;
+    }
+    setOtpVerifying(true);
+    try {
+      const result = await api.verifyRegistrationOtp(phone, otp);
+      setPhoneVerificationToken(result.verificationToken);
+      clearInterval(resendIntervalRef.current);
+      setOtpCooldown(0);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setOtpVerifying(false);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    if (!phoneVerificationToken) {
+      setError('Verify your phone number before creating your account.');
+      return;
+    }
     setLoading(true);
     try {
-      const res = await api.register({ fullName, phone, gender: gender || undefined, dateOfBirth: dateOfBirth || undefined, loginEmail, password, designation: designation || undefined });
+      const res = await api.register({
+        fullName,
+        phone,
+        gender: gender || undefined,
+        dateOfBirth: dateOfBirth || undefined,
+        loginEmail: loginEmail || undefined,
+        password,
+        designation: designation || undefined,
+        phoneVerificationToken,
+      });
       setSession({ token: res.token, clientId: res.clientId });
       navigate('/dashboard');
     } catch (err) {
@@ -108,10 +194,46 @@ export default function Register() {
                       title="Enter exactly 10 digits"
                       placeholder="10-digit mobile number"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      onChange={handlePhoneChange}
                       required
                     />
                   </div>
+                </div>
+                <div className="field register-grid__wide">
+                  <label htmlFor="registrationOtp">Phone verification</label>
+                  {phoneVerificationToken ? (
+                    <div role="status" style={{ minHeight: 48, display: 'flex', alignItems: 'center', color: '#62d98b', fontWeight: 700 }}>
+                      <BadgeCheck size={18} style={{ marginRight: 8 }} /> Phone number verified
+                    </div>
+                  ) : otpSent ? (
+                    <div className="registration-otp-row">
+                      <div className="login-input">
+                        <ShieldCheck size={18} aria-hidden="true" />
+                        <input
+                          id="registrationOtp"
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          minLength={6}
+                          maxLength={6}
+                          pattern="[0-9]{6}"
+                          placeholder="Enter 6-digit code"
+                          value={otp}
+                          onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        />
+                      </div>
+                      <button type="button" onClick={handleVerifyOtp} disabled={otpVerifying || otp.length !== 6} style={{ width: 'auto' }}>
+                        {otpVerifying ? 'Verifying…' : 'Verify code'}
+                      </button>
+                      <button type="button" className="secondary" onClick={handleRequestOtp} disabled={otpCooldown > 0 || otpSending} style={{ width: 'auto' }}>
+                        {otpSending ? 'Sending…' : otpCooldown > 0 ? `Resend in ${otpCooldown}s` : 'Resend'}
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="button" className="secondary" onClick={handleRequestOtp} disabled={otpSending || phone.length !== 10}>
+                      {otpSending ? 'Sending…' : 'Send verification code'}
+                    </button>
+                  )}
                 </div>
                 <div className="field">
                   <label htmlFor="gender">Gender (optional)</label>
@@ -133,7 +255,7 @@ export default function Register() {
                   <ThemeDatePicker id="dateOfBirth" value={dateOfBirth} onChange={setDateOfBirth} max={todayDateValue()} ariaLabel="Date of birth" />
                 </div>
                 <div className="field">
-                  <label htmlFor="loginEmail">Email</label>
+                  <label htmlFor="loginEmail">Email (optional)</label>
                   <div className="login-input">
                     <AtSign size={18} aria-hidden="true" />
                     <input
@@ -143,12 +265,11 @@ export default function Register() {
                       placeholder="name@example.com"
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value.toLowerCase())}
-                      required
                     />
                   </div>
                 </div>
                 <div className="field">
-                  <label htmlFor="designation">Designation (optional)</label>
+                  <label htmlFor="designation">Occupation (optional)</label>
                   <div className="login-input">
                     <BriefcaseBusiness size={18} aria-hidden="true" />
                     <input id="designation" type="text" placeholder="e.g. Software Engineer, Manager" value={designation} onChange={(e) => setDesignation(e.target.value)} />
@@ -179,8 +300,8 @@ export default function Register() {
                   </div>
                 </div>
               </div>
-              <button className="login-submit" type="submit" disabled={loading}>
-                {loading ? 'Creating account…' : <>Create account <ArrowRight size={18} /></>}
+              <button className="login-submit" type="submit" disabled={loading || !phoneVerificationToken}>
+                {loading ? 'Creating account…' : phoneVerificationToken ? <>Create account <ArrowRight size={18} /></> : 'Verify phone to continue'}
               </button>
             </form>
 
