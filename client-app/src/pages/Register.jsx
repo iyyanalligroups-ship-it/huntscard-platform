@@ -6,6 +6,7 @@ import WaveBackdrop from '../components/WaveBackdrop.jsx';
 import ParticleWaves from '../components/ParticleWaves.jsx';
 import ThemedSelect from '../components/ThemedSelect.jsx';
 import ThemeDatePicker from '../components/ThemeDatePicker.jsx';
+import { trackEvent } from '../siteConfig.js';
 
 function todayDateValue() {
   const today = new Date();
@@ -118,6 +119,7 @@ export default function Register() {
         phoneVerificationToken,
       });
       setSession({ token: res.token, clientId: res.clientId });
+      trackEvent('sign_up', { method: 'phone_otp' });
       navigate('/dashboard');
     } catch (err) {
       setError(err.message);

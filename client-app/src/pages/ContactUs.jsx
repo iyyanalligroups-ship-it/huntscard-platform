@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, isLoggedIn } from '../api.js';
+import { trackEvent } from '../siteConfig.js';
 
 export default function ContactUs() {
   const [form, setForm] = useState({ name: '', phone: '', email: '', message: '' });
@@ -116,6 +117,7 @@ export default function ContactUs() {
       setFieldErrors({});
       setTouched({});
       setSent(true);
+      trackEvent('generate_lead', { form: 'contact' }); // no name, phone or email
     } catch (err) {
       setError(err.message);
     } finally {

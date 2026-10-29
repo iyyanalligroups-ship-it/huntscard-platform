@@ -4,6 +4,7 @@ import { Eye, EyeOff, X } from 'lucide-react';
 import { api, setSession } from '../api.js';
 import ThemedSelect from './ThemedSelect.jsx';
 import ThemeDatePicker from './ThemeDatePicker.jsx';
+import { trackEvent } from '../siteConfig.js';
 
 // Matches the backend's own LOGIN_OTP_RESEND_COOLDOWN_MS (routes/auth.js)
 // -- purely a UX countdown here, the server enforces the real cooldown
@@ -174,6 +175,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
 
   function onSession(res) {
     setSession({ token: res.token, clientId: res.clientId });
+    trackEvent('login', { method: 'password_or_otp' });
     goToTopOnClose = true;
     onClose();
     navigate(res.mustChangePassword ? '/change-password' : redirectTo || '/');
@@ -257,6 +259,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
         phoneVerificationToken: regPhoneVerificationToken,
       });
       setSession({ token: res.token, clientId: res.clientId });
+      trackEvent('sign_up', { method: 'phone_otp' });
       goToTopOnClose = true;
       onClose();
       navigate(redirectTo || '/dashboard');

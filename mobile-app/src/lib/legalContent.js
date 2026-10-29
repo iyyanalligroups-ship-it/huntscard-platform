@@ -4,7 +4,7 @@
 // Shape: { title, updated, intro, sections: [{ h, p: [paragraphs], ul: [bullets], subs: [{ h, p, ul }] }] }
 
 export const SUPPORT_EMAIL = 'info@huntsworld.com';
-export const LEGAL_UPDATED = '14 October 2026';
+export const LEGAL_UPDATED = '29 October 2026';
 
 export const PRIVACY = {
   title: 'Privacy Policy',
@@ -110,6 +110,7 @@ export const PRIVACY = {
       h: '8. Cookies and Local Storage',
       p: [
         'HuntsTAG uses your browser’s local storage, and secure storage on your phone, to keep you signed in and to remember simple preferences. We do not use this to show you third-party advertising.',
+        'Our website uses Google Analytics, which sets cookies to count visits and see which pages are used. It receives the pages you view, your device and browser details and your approximate location, and we do not send it your name, phone number or email. The mobile app does not use Google Analytics.',
       ],
     },
     {

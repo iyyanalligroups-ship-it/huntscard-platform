@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { api, isLoggedIn } from '../api.js';
 import WhyChooseHuntsworld from '../components/WhyChooseHuntsworld.jsx';
+import { photoProps, SIZES } from '../lib/responsiveImage.js';
 
 // D1 -- alternate homepage hero, styled after a bold stacked-headline /
 // stat-card reference layout the user shared. Kept as a fully separate
@@ -340,7 +341,7 @@ export default function HomeD1() {
 
       <section className="home-poster" aria-label="NFC smart business card">
         <img
-          src="/assets/photos/nfc-smart-business-card-poster.png"
+          {...photoProps('/assets/photos/nfc-smart-business-card-poster.png', SIZES.poster)}
           alt="NFC Smart Business Card — Tap. Connect. Grow. NFC tap, save contact, social links and website."
           loading="lazy"
           decoding="async"

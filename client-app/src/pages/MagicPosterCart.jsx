@@ -5,6 +5,7 @@ import { api, isLoggedIn } from '../api.js';
 import { loadRazorpayScript } from '../razorpay.js';
 import { useCart } from '../cart.jsx';
 import GeoSelect from '../components/GeoSelect.jsx';
+import { trackPurchase } from '../siteConfig.js';
 
 // India only, on purpose -- deliveries only ever ship within India, so
 // there's no real Country field for the person to fill in, just State ->
@@ -175,7 +176,9 @@ export default function MagicPosterCart() {
         prefill: contact,
         handler: async (response) => {
           try {
-            resolve(await confirmPayment(response, order));
+            const result = await confirmPayment(response, order);
+            trackPurchase(order);
+            resolve(result);
           } catch (err) {
             reject(err);
           }

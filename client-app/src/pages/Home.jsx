@@ -8,6 +8,7 @@ import TechGlobe from '../components/TechGlobe.jsx';
 import { SITE, whatsappLink, trackEvent } from '../siteConfig.js';
 import { Nfc, UserRound, BookUser, QrCode, Lock, RefreshCw, Smartphone, Sparkles, ShieldCheck, Palette, Check, MessageCircle, Truck, BadgeCheck, Eye } from 'lucide-react';
 import { IlloChooseCard, IlloProfile, IlloTap, IlloUpdate, IlloLock, IlloDesign } from '../components/Illustrations.jsx';
+import { photoProps, SIZES } from '../lib/responsiveImage.js';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -538,7 +539,7 @@ export default function Home() {
 
       <section className="home-poster" aria-label="NFC smart business card">
         <img
-          src="/assets/photos/nfc-smart-business-card-poster.png"
+          {...photoProps('/assets/photos/nfc-smart-business-card-poster.png', SIZES.poster)}
           alt="NFC Smart Business Card — Tap. Connect. Grow. NFC tap, save contact, social links and website."
           loading="lazy"
           decoding="async"
@@ -607,7 +608,7 @@ export default function Home() {
           <Link to="/catalog" className="pro-link">Browse the catalog →</Link>
         </div>
         <div className="pro-video-frame">
-          <video src="/assets/photos/tap-demo.mp4" autoPlay muted loop playsInline preload="metadata" poster="/assets/photos/card-teal.jpg" />
+          <video src="/assets/photos/tap-demo.mp4" autoPlay muted loop playsInline preload="metadata" poster="/assets/photos/card-teal-638.webp" />
         </div>
       </section>
 

@@ -1,0 +1,18 @@
+/* Keyword landing pages (pages/LandingPage.jsx) */
+.lp-page { max-width: 860px; margin: 0 auto; padding: 0 16px 48px; }
+.lp-crumbs { font-size: 0.85rem; opacity: 0.75; padding: 16px 0 0; }
+.lp-crumbs a { color: inherit; }
+.lp-hero { padding: 24px 0 8px; }
+.lp-hero h1 { font-size: clamp(1.9rem, 5vw, 3rem); line-height: 1.15; margin: 0 0 16px; }
+.lp-page[lang="hi"] .lp-hero h1 { line-height: 1.4; }
+.lp-lead { font-size: 1.1rem; line-height: 1.65; max-width: 70ch; margin: 0 0 12px; opacity: 0.85; }
+.lp-hero .au-cta { margin-top: 8px; display: inline-block; }
+.lp-section { margin-top: 32px; }
+.lp-section h2 { font-size: clamp(1.25rem, 2.4vw, 1.6rem); margin: 0 0 10px; }
+.lp-section p { line-height: 1.7; max-width: 70ch; margin: 0 0 12px; }
+.lp-faq-item { border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 12px; padding: 12px 16px; margin-bottom: 10px; }
+.lp-faq-item summary { cursor: pointer; font-weight: 600; }
+.lp-faq-item p { margin: 10px 0 0; }
+.lp-related { display: flex; flex-wrap: wrap; gap: 10px 18px; padding: 0; margin: 0; list-style: none; }
+.lp-related a { text-decoration: underline; }
+.lp-page[lang="hi"] .lp-section h2 { line-height: 1.4; }

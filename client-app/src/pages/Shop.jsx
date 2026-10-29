@@ -32,6 +32,7 @@ import GeoSelect from '../components/GeoSelect.jsx';
 import MyMagicPosterOrders from './MyMagicPosterOrders.jsx';
 import MagicArt from './MagicArt.jsx';
 import VariantMedia from '../components/VariantMedia.jsx';
+import { trackPurchase } from '../siteConfig.js';
 
 const PLAN_DISPLAY_ORDER = ['premium', 'elite', 'nova', 'custom', 'apex'];
 const COUNTRY_ISO = 'IN';
@@ -668,6 +669,7 @@ export default function Shop() {
         handler: async (response) => {
           try {
             const result = await confirmPayment(response);
+            trackPurchase(order);
             resolve(result);
           } catch (err) {
             reject(err);

@@ -9,12 +9,14 @@
 // Colour is removed in CSS (grayscale), so any future colourful upload still fits the theme.
 // Different crops (object-position / zoom) keep one photo from looking repeated.
 
+import { photoProps, SIZES } from '../lib/responsiveImage.js';
+
 const BASE = '/assets/photos/';
 
-function Photo({ src, alt = '', pos = '50% 50%', zoom = 1, className = '' }) {
+function Photo({ src, alt = '', pos = '50% 50%', zoom = 1, className = '', sizes = SIZES.half }) {
   return (
     <div className={`av-photo ${className}`} aria-hidden={alt ? undefined : 'true'}>
-      <img src={BASE + src} alt={alt} loading="lazy" decoding="async" style={{ objectPosition: pos, '--zoom': zoom }} />
+      <img {...photoProps(BASE + src, sizes)} alt={alt} loading="lazy" decoding="async" style={{ objectPosition: pos, '--zoom': zoom }} />
     </div>
   );
 }
@@ -23,7 +25,7 @@ function Photo({ src, alt = '', pos = '50% 50%', zoom = 1, className = '' }) {
 function CardShot({ src, className = '', tilt = 0 }) {
   return (
     <div className={`av-photo av-cardshot ${className}`} aria-hidden="true">
-      <img src={BASE + src} alt="" loading="lazy" decoding="async" style={{ '--tilt': tilt + 'deg' }} />
+      <img {...photoProps(BASE + src, SIZES.card)} alt="" loading="lazy" decoding="async" style={{ '--tilt': tilt + 'deg' }} />
     </div>
   );
 }
@@ -33,7 +35,7 @@ function CardFan({ srcs, className = '' }) {
   return (
     <div className={`av-photo av-cardfan ${className}`} aria-hidden="true">
       {srcs.map((s, i) => (
-        <img key={s} src={BASE + s} alt="" loading="lazy" decoding="async" className={`fan-${i}`} />
+        <img key={s} {...photoProps(BASE + s, SIZES.card)} alt="" loading="lazy" decoding="async" className={`fan-${i}`} />
       ))}
     </div>
   );
@@ -41,7 +43,7 @@ function CardFan({ srcs, className = '' }) {
 
 // HOME hero: the wide studio photograph
 export function HeroScene({ className = '' }) {
-  return <Photo src="wolf.jpg" alt="The HuntsTAG wolf broadcasting a tap signal" pos="50% 42%" className={`av-hero-photo ${className}`} />;
+  return <Photo src="wolf.jpg" alt="The HuntsTAG wolf broadcasting a tap signal" pos="50% 42%" sizes={SIZES.full} className={`av-hero-photo ${className}`} />;
 }
 
 export const IlloChooseCard = ({ className = '' }) => <CardFan srcs={['card-black.jpg', 'card-art.jpg', 'card-orange.jpg']} className={className} />;

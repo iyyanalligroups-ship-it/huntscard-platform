@@ -13,6 +13,7 @@ const chatRoutes = require('./routes/chat');
 const publicRoutes = require('./routes/public');
 const adminAuthRoutes = require('./routes/adminAuth');
 const adminRoutes = require('./routes/admin');
+const { createSitemapHandler } = require('./utils/sitemap');
 const couponRoutes = require('./routes/coupon'); // HuntsWorld free-card coupon claim -- separate feature
 
 async function main() {
@@ -30,6 +31,10 @@ async function main() {
   app.use(express.json());
 
   app.get('/health', (req, res) => res.json({ ok: true }));
+
+  // Sitemap built from the real public pages + database content, cached ~10 minutes.
+  // nginx sends /sitemap.xml here (see client-app/deploy/nginx-seo.conf.example).
+  app.get('/sitemap.xml', createSitemapHandler());
 
   // Uploaded client photos -- backend/uploads/photos/*, referenced by
   // Client.photoUrl. Public and unauthenticated on purpose, same as any

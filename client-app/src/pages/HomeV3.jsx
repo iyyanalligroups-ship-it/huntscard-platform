@@ -22,6 +22,7 @@ import '../home-v3-editions.css';
 import '../home-v3-backup.css';
 import '../home-v3-track.css';
 import '../home-v3-contact.css';
+import { photoProps, SIZES } from '../lib/responsiveImage.js';
 
 // Engagement-first homepage. Each full-width band has one job and one action,
 // ordered by what a first-time visitor needs to decide: hook -> why -> what
@@ -468,8 +469,8 @@ export default function HomeV3() {
             </ul>
           </div>
           <div className="hv3-hero-visual">
-            <img className="hv3-hero-card hv3-hero-card-a" src="/assets/photos/card-orange.jpg" alt="" aria-hidden="true" />
-            <img className="hv3-hero-card hv3-hero-card-b" src="/assets/photos/card-art.jpg" alt="" aria-hidden="true" />
+            <img className="hv3-hero-card hv3-hero-card-a" {...photoProps('/assets/photos/card-orange.jpg', SIZES.card)} alt="" aria-hidden="true" />
+            <img className="hv3-hero-card hv3-hero-card-b" {...photoProps('/assets/photos/card-art.jpg', SIZES.card)} alt="" aria-hidden="true" />
             <ProfilePhone user={me} />
             <span className="hv3-float">Tap to open your world</span>
             {HERO_CHIPS.map(({ Icon, label, tone, pos }) => (
@@ -546,7 +547,7 @@ export default function HomeV3() {
                 <small>3D model</small>
               </div></div>
               <div className="ar-cardwrap">
-                <img className="ar-card" src="/assets/photos/card-black.jpg" alt="" loading="lazy" decoding="async" />
+                <img className="ar-card" {...photoProps('/assets/photos/card-black.jpg', SIZES.card)} alt="" loading="lazy" decoding="async" />
                 <span className="ar-beam" />
               </div>
               <span className="ar-tag"><ScanLine size={14} />Scanning QR</span>
@@ -660,7 +661,7 @@ export default function HomeV3() {
             </Link>
           </R>
           <R delay={120} className="hv3-media">
-            <img src="/assets/photos/nfc-smart-business-card-poster.png"
+            <img {...photoProps('/assets/photos/nfc-smart-business-card-poster.png', SIZES.poster)}
                  alt="HuntsTAG NFC card: tap, save contact, social links and website" loading="lazy" decoding="async" />
             <span className="hv3-chip hv3-chip-e hv3-tone-green" aria-hidden="true"><MessageCircle size={18} />WhatsApp</span>
             <span className="hv3-chip hv3-chip-f hv3-tone-violet" aria-hidden="true"><Link2 size={18} />Portfolio</span>

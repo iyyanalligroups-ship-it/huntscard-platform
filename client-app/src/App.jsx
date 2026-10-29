@@ -1,11 +1,16 @@
-import { Component, lazy, Suspense, useLayoutEffect, useRef } from 'react';
+import { Component, lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigationType } from 'react-router-dom';
 import { isLoggedIn } from './api.js';
+import { trackPageView } from './analytics.js';
 import PublicLayout from './components/PublicLayout.jsx';
 import Home from './pages/HomeSwitch.jsx'; // renders Home.jsx or HomeD1.jsx per the admin-toggled theme setting
 import Shop from './pages/Shop.jsx';
 import Catalog from './pages/Catalog.jsx';
 import ContactUs from './pages/ContactUs.jsx';
+import NotFound from './pages/NotFound.jsx';
+import Seo from './components/Seo.jsx';
+import LandingPage from './pages/LandingPage.jsx';
+import { LANDING_PAGES } from './landingPages.js';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import ForgotPassword from './pages/ForgotPassword.jsx';
@@ -205,10 +210,22 @@ function ScrollToTop() {
   return null;
 }
 
+// One GA4 page_view per route change. The timeout lets the page set its title first.
+function RouteAnalytics() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const t = setTimeout(() => trackPageView(pathname), 0);
+    return () => clearTimeout(t);
+  }, [pathname]);
+  return null;
+}
+
 export default function App() {
   return (
     <>
       <ScrollToTop />
+      <Seo />
+      <RouteAnalytics />
       <Routes>
       {/* Public site -- anyone can browse and buy without an account */}
       <Route path="/" element={<PublicLayout />}>
@@ -224,6 +241,12 @@ export default function App() {
         <Route path="chat" element={<ChatSupport />} />
         <Route path="privacy-policy" element={<PrivacyPolicy />} />
         <Route path="terms-condition" element={<TermsConditions />} />
+        {/* Keyword landing pages, one route per entry in landingPages.js */}
+        {LANDING_PAGES.map((page) => (
+          <Route key={page.path} path={page.path.slice(1)} element={<LandingPage page={page} />} />
+        ))}
+        {/* Unknown address: real "not found" page (Seo.jsx marks it noindex) */}
+        <Route path="*" element={<NotFound />} />
       </Route>
 
       {/* Public tap page -- what a stranger sees when they tap the physical
@@ -335,7 +358,6 @@ export default function App() {
         <Route path="contacts" element={<Contacts />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   );

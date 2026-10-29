@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "seo:export": "node scripts/export-seo-paths.mjs",
+    "prebuild": "node scripts/export-seo-paths.mjs",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@google/model-viewer": "^4.3.1",

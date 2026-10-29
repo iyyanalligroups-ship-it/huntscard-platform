@@ -16,6 +16,7 @@ import {
 import { api, setSession } from '../api.js';
 import WaveBackdrop from '../components/WaveBackdrop.jsx';
 import ParticleWaves from '../components/ParticleWaves.jsx';
+import { trackEvent } from '../siteConfig.js';
 
 export default function Login() {
   const [mode, setMode] = useState('password'); // 'password' | 'otp'
@@ -39,6 +40,7 @@ export default function Login() {
 
   function onSession(res) {
     setSession({ token: res.token, clientId: res.clientId });
+    trackEvent('login', { method: 'password_or_otp' });
     navigate(res.mustChangePassword ? '/change-password' : '/');
   }
 

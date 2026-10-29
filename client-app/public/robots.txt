@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+# Private or tool pages (these also send a noindex tag)
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /change-password
+Disallow: /impersonate
+Disallow: /dashboard
+Disallow: /c/
+Disallow: /magic-camera
+Disallow: /magic-poster-cart
+Disallow: /chat
+
+Sitemap: https://huntstag.com/sitemap.xml

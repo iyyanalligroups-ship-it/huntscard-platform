@@ -22,13 +22,8 @@ export function whatsappLink(message = SITE.whatsappMessage) {
   return `https://wa.me/${SITE.whatsappNumber}?text=${encodeURIComponent(message)}`;
 }
 
-// Fire an analytics event if GA4 / Meta Pixel are loaded (see analytics.js).
-export function trackEvent(name, params = {}) {
-  try {
-    if (window.gtag) window.gtag('event', name, params);
-    if (window.fbq) window.fbq('trackCustom', name, params);
-  } catch { /* analytics must never break the page */ }
-}
+// Analytics helpers live in analytics.js; re-exported so pages keep importing them from here.
+export { trackEvent, trackPurchase } from './analytics.js';
 
 // Real customer quotes only. Each: { name, role, text }. Empty = section hidden.
 export const TESTIMONIALS = [];

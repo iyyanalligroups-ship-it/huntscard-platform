@@ -1,0 +1,36 @@
+{
+  "card-art.jpg": [
+    480,
+    638
+  ],
+  "card-black.jpg": [
+    480,
+    638
+  ],
+  "card-orange.jpg": [
+    480,
+    638
+  ],
+  "card-teal.jpg": [
+    480,
+    638
+  ],
+  "launch.jpg": [
+    480,
+    800,
+    1080
+  ],
+  "nfc-smart-business-card-poster.png": [
+    480,
+    800,
+    1200,
+    1600,
+    1983
+  ],
+  "wolf.jpg": [
+    480,
+    800,
+    1200,
+    1600
+  ]
+}

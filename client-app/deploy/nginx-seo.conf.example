@@ -1,0 +1,36 @@
+# SEO rules to merge into the existing server block for huntstag.com (nginx on the VPS).
+# This is an example: adjust root, ports and paths to match the current config. Nothing here is deployed.
+#
+#   root  = the folder with the built client app (client-app/dist)
+#   4000  = the backend port (server.js, PORT)
+
+# 1. Dynamic sitemap from the backend (cached ~10 minutes there).
+#    If the backend is down, nginx serves the static copy built into dist/sitemap.xml.
+location = /sitemap.xml {
+    proxy_pass http://127.0.0.1:4000/sitemap.xml;
+    proxy_set_header Host $host;
+    proxy_intercept_errors on;
+    error_page 500 502 503 504 = @static_sitemap;
+}
+location @static_sitemap {
+    root /var/www/huntstag/client-app/dist;   # <- same root as the site
+    try_files /sitemap.xml =404;
+}
+
+# 2. robots.txt is a plain file.
+location = /robots.txt {
+    try_files /robots.txt =404;
+}
+
+# 3. Missing files must return 404, not the home page.
+#    Anything that looks like a file (has an extension) is never sent to index.html.
+location ~* \.(?:js|css|map|png|jpe?g|webp|gif|svg|ico|woff2?|ttf|mp4|webm|json|xml|txt|glb|mind|crt)$ {
+    try_files $uri =404;
+    add_header Cache-Control "public, max-age=604800";
+}
+
+# 4. App pages (React Router). Unknown addresses open the app's own "Page not found"
+#    page, which carries noindex. A single-page app cannot send a real 404 for these.
+location / {
+    try_files $uri /index.html;
+}
