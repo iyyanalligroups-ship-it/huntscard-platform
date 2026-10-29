@@ -7,7 +7,6 @@ gsap.registerPlugin(ScrollTrigger);
 
 import { SITE } from '../siteConfig.js';
 import { api } from '../api.js';
-import { LANDING_PAGES } from '../landingPages.js';
 import { Download, Smartphone } from 'lucide-react';
 
 const SUPPORT_EMAIL = 'info@huntsworld.com';
@@ -79,7 +78,6 @@ export default function Footer({ homeTheme }) {
           <Link to="/shop">Shop</Link>
           <Link to="/catalog">Catalog</Link>
           <Link to="/magic-art">Magic Poster</Link>
-          {LANDING_PAGES.map((p) => <Link key={p.path} to={p.path}>{p.crumb}</Link>)}
         </div>
 
         <div className="site-footer-col">
