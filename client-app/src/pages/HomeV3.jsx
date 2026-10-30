@@ -469,7 +469,7 @@ export default function HomeV3() {
             </ul>
           </div>
           <div className="hv3-hero-visual">
-            <img className="hv3-hero-card hv3-hero-card-a" {...photoProps('/assets/photos/card-orange.jpg', SIZES.card)} alt="" aria-hidden="true" />
+            <img className="hv3-hero-card hv3-hero-card-a" fetchpriority="high" {...photoProps('/assets/photos/card-orange.jpg', SIZES.card)} alt="" aria-hidden="true" />
             <img className="hv3-hero-card hv3-hero-card-b" {...photoProps('/assets/photos/card-art.jpg', SIZES.card)} alt="" aria-hidden="true" />
             <ProfilePhone user={me} />
             <span className="hv3-float">Tap to open your world</span>

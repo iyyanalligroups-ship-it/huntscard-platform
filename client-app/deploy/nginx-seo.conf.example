@@ -4,6 +4,20 @@
 #   root  = the folder with the built client app (client-app/dist)
 #   4000  = the backend port (server.js, PORT)
 
+# 0. COMPRESSION -- the Lighthouse reports show app.js (578 KiB) and the stylesheet (528 KiB) are sent
+#    uncompressed. nginx only compresses text/html unless told otherwise. Put this in the http { } block
+#    (or the server block). It cuts the JavaScript to about 180 KiB and the CSS to about 85 KiB.
+gzip on;
+gzip_comp_level 6;
+gzip_min_length 1024;
+gzip_vary on;
+gzip_proxied any;
+gzip_types text/css text/plain text/javascript application/javascript application/json
+           application/manifest+json application/xml image/svg+xml;
+# If the brotli module is installed (nginx -V | grep brotli), also add:
+#   brotli on;  brotli_comp_level 5;
+#   brotli_types text/css text/plain text/javascript application/javascript application/json image/svg+xml;
+
 # 1. Dynamic sitemap from the backend (cached ~10 minutes there).
 #    If the backend is down, nginx serves the static copy built into dist/sitemap.xml.
 location = /sitemap.xml {
@@ -43,4 +57,11 @@ location ~* \.(?:js|css|map|png|jpe?g|webp|gif|svg|ico|woff2?|ttf|mp4|webm|json|
 #      own "Page not found" screen for unknown addresses.
 location / {
     try_files $uri $uri/index.html /app-shell.html;
+    add_header Cache-Control "no-cache";   # pages are re-checked every visit; hashed files above are cached for a year
 }
+
+# 6. HSTS -- tells browsers to use https only (Semrush: "2 subdomains don't support HSTS").
+#    Add this line to the server block of EACH site: huntstag.com / www.huntstag.com AND api.huntstag.com.
+#    Start with a short time, check that everything still loads over https, then raise it (31536000 = 1 year).
+#    Do not add includeSubDomains or preload until every subdomain works over https.
+#    add_header Strict-Transport-Security "max-age=300" always;

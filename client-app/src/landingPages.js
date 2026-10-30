@@ -52,7 +52,7 @@ export const LANDING_PAGES = [
       { q: 'Can I change my details after I order?', a: 'Yes. You edit your profile from your dashboard, and your card opens the latest version.' },
       { q: 'Do you deliver across India?', a: 'Yes. We deliver across India. All charges are shown at checkout.' },
     ],
-    related: ['/digital-visiting-card', '/nfc-card-without-app', '/qr-and-nfc-visiting-card', '/nfc-card-delivery-india'],
+    related: ['/digital-visiting-card', '/nfc-card-without-app', '/qr-and-nfc-visiting-card', '/nfc-card-delivery-india', '/magic-poster'],
     cta: SHOP,
   },
   {
@@ -95,7 +95,7 @@ export const LANDING_PAGES = [
       { q: 'Can people save my number?', a: 'Yes. Your profile has a button that saves your contact details to the phone.' },
       { q: 'Can I update my profile later?', a: 'Yes, from your dashboard. The card keeps opening your latest profile.' },
     ],
-    related: ['/nfc-business-card-india', '/whatsapp-nfc-card', '/instagram-nfc-card', '/hi/digital-visiting-card'],
+    related: ['/nfc-business-card-india', '/whatsapp-nfc-card', '/instagram-nfc-card', '/hi/digital-visiting-card', '/magic-poster'],
     cta: SHOP,
   },
   {
@@ -136,7 +136,7 @@ export const LANDING_PAGES = [
       { q: 'Does it work if the phone is locked?', a: 'That depends on the phone. Some phones read NFC with the screen on, others need it unlocked. The QR code always works with the camera.' },
       { q: 'Do I need internet to share it?', a: 'The person opening your profile needs an internet connection, because the profile is an online page.' },
     ],
-    related: ['/nfc-business-card-india', '/qr-and-nfc-visiting-card', '/nfc-card-kya-hai'],
+    related: ['/nfc-business-card-india', '/qr-and-nfc-visiting-card', '/nfc-card-kya-hai', '/magic-poster'],
     cta: SHOP,
   },
   {

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -41,8 +41,24 @@ function caCertMimePlugin() {
   };
 }
 
-export default defineConfig({
-  plugins: [react(), caCertMimePlugin()],
+// Adds <link rel="preconnect"> for the API server (VITE_API_URL) so its connection is ready before the
+// app's first request. Skipped for localhost.
+function apiPreconnectPlugin(mode) {
+  const api = loadEnv(mode, __dirname, 'VITE_').VITE_API_URL;
+  let origin = '';
+  try {
+    const u = new URL(api);
+    if (!['localhost', '127.0.0.1'].includes(u.hostname)) origin = u.origin;
+  } catch { /* not set */ }
+  return {
+    name: 'api-preconnect',
+    transformIndexHtml: (html) => (origin ? html.replace('</head>', `    <link rel="preconnect" href="${origin}" crossorigin />
+  </head>`) : html),
+  };
+}
+
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), caCertMimePlugin(), apiPreconnectPlugin(mode)],
   optimizeDeps: {
     // mind-ar's own source uses Vite-specific `?worker&inline` imports
     // internally (compiler.js/controller.js) -- esbuild's dependency
@@ -87,4 +103,4 @@ export default defineConfig({
     },
     https: httpsConfig,
   },
-});
+}));

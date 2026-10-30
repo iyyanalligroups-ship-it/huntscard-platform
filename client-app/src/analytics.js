@@ -23,7 +23,12 @@ export function initAnalytics() {
     window.gtag('js', new Date());
     // Page views are sent from code (see trackPageView) so the title is already set.
     window.gtag('config', GA_ID, { send_page_view: false });
-    addScript(`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(GA_ID)}`);
+    // The 177 KB tag loads after the page is ready, so it never competes with the first paint.
+    // gtag() calls made before it arrives are queued in dataLayer and sent when it loads.
+    const loadTag = () => addScript(`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(GA_ID)}`);
+    const whenIdle = () => (window.requestIdleCallback ? window.requestIdleCallback(loadTag, { timeout: 4000 }) : setTimeout(loadTag, 2000));
+    if (document.readyState === 'complete') whenIdle();
+    else window.addEventListener('load', whenIdle, { once: true });
   }
 
   if (pixelId) {

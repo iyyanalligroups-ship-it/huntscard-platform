@@ -116,6 +116,18 @@ class MagicCameraErrorBoundary extends Component {
   }
 }
 
+// The camera pages are full-screen tools with no visible heading. A screen-reader-only <h1> gives each
+// one a title for assistive tech and site audits, without changing how the page looks.
+const srOnly = { position: 'absolute', width: 1, height: 1, margin: -1, padding: 0, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 };
+function CameraShell({ title, children }) {
+  return (
+    <>
+      <h1 style={srOnly}>{title}</h1>
+      {children}
+    </>
+  );
+}
+
 function RequireAuth({ children }) {
   if (!isLoggedIn()) return <Navigate to="/login" replace />;
   return children;
@@ -271,11 +283,13 @@ export default function App() {
       <Route
         path="/magic-camera"
         element={
-          <MagicCameraErrorBoundary>
+          <CameraShell title="Magic Camera">
+            <MagicCameraErrorBoundary>
             <Suspense fallback={<p className="subtitle">Loading…</p>}>
               <MagicCamera />
             </Suspense>
           </MagicCameraErrorBoundary>
+          </CameraShell>
         }
       />
       {/* Same page, scoped to one client -- reached from that client's own
@@ -286,11 +300,13 @@ export default function App() {
       <Route
         path="/magic-camera/:clientId"
         element={
-          <MagicCameraErrorBoundary>
+          <CameraShell title="Magic Camera">
+            <MagicCameraErrorBoundary>
             <Suspense fallback={<p className="subtitle">Loading…</p>}>
               <MagicCamera />
             </Suspense>
           </MagicCameraErrorBoundary>
+          </CameraShell>
         }
       />
       {/* Separate 3D-model-only camera -- same "reachable with no login"
@@ -301,21 +317,25 @@ export default function App() {
       <Route
         path="/magic-camera-3d"
         element={
-          <MagicCameraErrorBoundary>
+          <CameraShell title="Magic Camera 3D">
+            <MagicCameraErrorBoundary>
             <Suspense fallback={<p className="subtitle">Loading…</p>}>
               <MagicCamera3D />
             </Suspense>
           </MagicCameraErrorBoundary>
+          </CameraShell>
         }
       />
       <Route
         path="/magic-camera-3d/:clientId"
         element={
-          <MagicCameraErrorBoundary>
+          <CameraShell title="Magic Camera 3D">
+            <MagicCameraErrorBoundary>
             <Suspense fallback={<p className="subtitle">Loading…</p>}>
               <MagicCamera3D />
             </Suspense>
           </MagicCameraErrorBoundary>
+          </CameraShell>
         }
       />
 

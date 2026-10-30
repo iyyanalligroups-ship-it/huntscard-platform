@@ -1,3 +1,4 @@
+let siteSettingsInFlight = null;
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 function getToken() {
@@ -239,7 +240,15 @@ export const api = {
   getPublicStreetArt: () => request('/api/public/street-art', { auth: false }),
   // Which homepage design to render (see HomeSwitch.jsx) -- toggled from
   // the admin app's topbar switch.
-  getSiteSettings: () => request('/api/public/site-settings', { auth: false }),
+  // Header, homepage and footer all ask for this on load: share one request while it is in flight.
+  getSiteSettings: () => {
+    if (!siteSettingsInFlight) {
+      siteSettingsInFlight = request('/api/public/site-settings', { auth: false }).finally(() => {
+        siteSettingsInFlight = null;
+      });
+    }
+    return siteSettingsInFlight;
+  },
   // Admin-managed FAQ entries (see admin-app's Faq.jsx), active ones only,
   // in admin's chosen order -- feeds pages/Faq.jsx.
   getPublicFaq: () => request('/api/public/faq', { auth: false }),
