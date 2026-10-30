@@ -22,15 +22,25 @@ location = /robots.txt {
     try_files /robots.txt =404;
 }
 
-# 3. Missing files must return 404, not the home page.
+# 3. Hashed build files (names like index-DaLvZr4p.js) never change, so browsers can keep them for a year.
+#    This must stay ABOVE the next rule: nginx uses the first matching regex location.
+location ~* "^/assets/[^/]+-[A-Za-z0-9_-]{8}\.(?:js|css)$" {
+    try_files $uri =404;
+    add_header Cache-Control "public, max-age=31536000, immutable";
+}
+
+# 4. Missing files must return 404, not the home page.
 #    Anything that looks like a file (has an extension) is never sent to index.html.
 location ~* \.(?:js|css|map|png|jpe?g|webp|gif|svg|ico|woff2?|ttf|mp4|webm|json|xml|txt|glb|mind|crt)$ {
     try_files $uri =404;
     add_header Cache-Control "public, max-age=604800";
 }
 
-# 4. App pages (React Router). Unknown addresses open the app's own "Page not found"
-#    page, which carries noindex. A single-page app cannot send a real 404 for these.
+# 5. App pages (React Router).
+#    - Public pages: `npm run build` writes dist/<path>/index.html with that page's own title, tags and text.
+#    - Everything else (login, dashboard, /c/... profiles, unknown addresses): dist/app-shell.html,
+#      a plain page marked noindex. A single-page app cannot send a real 404 for these; the app shows its
+#      own "Page not found" screen for unknown addresses.
 location / {
-    try_files $uri /index.html;
+    try_files $uri $uri/index.html /app-shell.html;
 }

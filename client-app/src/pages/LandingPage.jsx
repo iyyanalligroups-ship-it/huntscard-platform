@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { LANDING_BY_PATH } from '../landingPages.js';
-import { SITE_URL } from '../seoData.js';
+import { landingJsonLd } from '../seoData.js';
 import { trackEvent } from '../siteConfig.js';
 import '../landing.css';
 
@@ -9,25 +9,8 @@ import '../landing.css';
 export default function LandingPage({ page }) {
   // FAQPage + BreadcrumbList structured data, added to <head> while the page is open.
   useEffect(() => {
-    const data = [
-      {
-        '@context': 'https://schema.org',
-        '@type': 'BreadcrumbList',
-        itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
-          { '@type': 'ListItem', position: 2, name: page.crumb, item: `${SITE_URL}${page.path}` },
-        ],
-      },
-      {
-        '@context': 'https://schema.org',
-        '@type': 'FAQPage',
-        mainEntity: page.faq.map((f) => ({
-          '@type': 'Question',
-          name: f.q,
-          acceptedAnswer: { '@type': 'Answer', text: f.a },
-        })),
-      },
-    ];
+    const data = landingJsonLd(page);
+    document.head.querySelectorAll('script[data-prerender]').forEach((n) => n.remove()); // the build-time copy
     const el = document.createElement('script');
     el.type = 'application/ld+json';
     el.dataset.landing = 'true';

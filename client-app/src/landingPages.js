@@ -350,7 +350,7 @@ export const LANDING_PAGES = [
     lang: 'en-IN',
     title: 'NFC Card Kya Hai? Digital Visiting Card Kaise Banaye | HuntsTAG',
     description:
-      'NFC card kya hai aur digital visiting card kaise banaye? HuntsTAG NFC card ek tap mein aapka number, WhatsApp aur portfolio share karta hai. App ki zarurat nahi.',
+      'NFC card kya hai aur digital visiting card kaise banaye? HuntsTAG NFC card ek tap mein aapka number, WhatsApp aur portfolio share karta hai. App nahi chahiye.',
     h1: 'NFC card kya hai? Digital visiting card kaise banaye',
     crumb: 'NFC card kya hai',
     lead: [

@@ -8,6 +8,7 @@
     "seo:export": "node scripts/export-seo-paths.mjs",
     "prebuild": "node scripts/export-seo-paths.mjs",
     "build": "vite build",
+    "postbuild": "node scripts/prerender-seo.mjs",
     "preview": "vite preview",
     "test": "node --test test/*.test.mjs"
   },

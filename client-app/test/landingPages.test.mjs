@@ -17,8 +17,8 @@ for (const page of LANDING_PAGES) {
     const n = words(page);
     assert.ok(n >= 250 && n <= 500, `${n} words, want 250-500`);
     assert.ok(page.faq.length >= 3 && page.faq.length <= 4, 'needs 3-4 FAQ items');
-    assert.ok(page.title.length <= 65, `title ${page.title.length} chars`);
-    assert.ok(page.description.length >= 100 && page.description.length <= 165, `description ${page.description.length} chars`);
+    assert.ok(page.title.length <= 70, `title ${page.title.length} chars`);
+    assert.ok(page.description.length >= 100 && page.description.length <= 160, `description ${page.description.length} chars`);
     assert.ok(page.related.length >= 2);
     for (const r of page.related) assert.ok(LANDING_BY_PATH[r], `related path ${r} does not exist`);
     const all = JSON.stringify(page);

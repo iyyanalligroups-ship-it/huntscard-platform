@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { DEFAULT_OG_IMAGE, LOGO_URL, NOT_FOUND, PRIVATE_PREFIXES, PUBLIC_PAGES, SITE_NAME, SITE_URL } from '../seoData.js';
+import { DEFAULT_OG_IMAGE, NOT_FOUND, PRIVATE_PREFIXES, PUBLIC_PAGES, SITE_NAME, SITE_URL, siteJsonLd } from '../seoData.js';
 
 function setMeta(attr, key, content) {
   let el = document.head.querySelector(`meta[${attr}="${key}"]`);
@@ -69,10 +69,8 @@ export default function Seo() {
     const el = document.createElement('script');
     el.type = 'application/ld+json';
     el.dataset.site = 'true';
-    el.textContent = JSON.stringify([
-      { '@context': 'https://schema.org', '@type': 'Organization', '@id': `${SITE_URL}/#organization`, name: SITE_NAME, url: `${SITE_URL}/`, logo: LOGO_URL },
-      { '@context': 'https://schema.org', '@type': 'WebSite', '@id': `${SITE_URL}/#website`, name: SITE_NAME, url: `${SITE_URL}/`, inLanguage: ['en-IN', 'hi'], publisher: { '@id': `${SITE_URL}/#organization` } },
-    ]);
+    el.textContent = JSON.stringify(siteJsonLd());
+    document.head.querySelectorAll('script[data-prerender]').forEach((n) => n.remove()); // the build-time copy
     document.head.appendChild(el);
     return () => el.remove();
   }, [pathname]);

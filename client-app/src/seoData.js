@@ -84,3 +84,29 @@ export const NOT_FOUND = {
   title: 'Page not found | HuntsTAG',
   description: 'This page does not exist. Go back to the HuntsTAG home page.',
 };
+
+// Structured data. Used by the React pages and by scripts/prerender-seo.mjs, so both write the same thing.
+export function siteJsonLd() {
+  return [
+    { '@context': 'https://schema.org', '@type': 'Organization', '@id': `${SITE_URL}/#organization`, name: SITE_NAME, url: `${SITE_URL}/`, logo: LOGO_URL },
+    { '@context': 'https://schema.org', '@type': 'WebSite', '@id': `${SITE_URL}/#website`, name: SITE_NAME, url: `${SITE_URL}/`, inLanguage: ['en-IN', 'hi'], publisher: { '@id': `${SITE_URL}/#organization` } },
+  ];
+}
+
+export function landingJsonLd(page) {
+  return [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
+        { '@type': 'ListItem', position: 2, name: page.crumb, item: `${SITE_URL}${page.path}` },
+      ],
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: page.faq.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+    },
+  ];
+}

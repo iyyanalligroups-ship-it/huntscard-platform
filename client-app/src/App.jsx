@@ -11,31 +11,39 @@ import NotFound from './pages/NotFound.jsx';
 import Seo from './components/Seo.jsx';
 import LandingPage from './pages/LandingPage.jsx';
 import { LANDING_PAGES } from './landingPages.js';
-import Login from './pages/Login.jsx';
-import Register from './pages/Register.jsx';
-import ForgotPassword from './pages/ForgotPassword.jsx';
-import ResetPassword from './pages/ResetPassword.jsx';
-import ChangePassword from './pages/ChangePassword.jsx';
-import Layout from './components/Layout.jsx';
-import DashboardHome from './pages/DashboardHome.jsx';
-import Dashboard from './pages/Dashboard.jsx';
-import Profile from './pages/Profile.jsx';
-import Track from './pages/Track.jsx';
-import Settings from './pages/Settings.jsx';
-import ArLayout from './pages/ArLayout.jsx';
-import Contacts from './pages/Contacts.jsx';
-import Appointments from './pages/Appointments.jsx';
-import PublicProfile from './pages/PublicProfile.jsx';
 import MagicArt from './pages/MagicArt.jsx';
 import MagicPosterCart from './pages/MagicPosterCart.jsx';
-import MagicBusinessCard from './pages/MagicBusinessCard.jsx';
 import Faq from './pages/Faq.jsx';
 import AboutUs from './pages/AboutUs.jsx';
 import WhatIsHuntsworld from './pages/WhatIsHuntsworld.jsx';
 import ChatSupport from './pages/ChatSupport.jsx';
 import PrivacyPolicy from './pages/PrivacyPolicy.jsx';
 import TermsConditions from './pages/TermsConditions.jsx';
-import Impersonate from './pages/Impersonate.jsx';
+
+// Loaded only when the route is visited, so public marketing pages don't download the dashboard,
+// profile, login and 3D code. Same components and behaviour, just split into separate files.
+const Login = lazy(() => import('./pages/Login.jsx'));
+const Register = lazy(() => import('./pages/Register.jsx'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword.jsx'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'));
+const ChangePassword = lazy(() => import('./pages/ChangePassword.jsx'));
+const Impersonate = lazy(() => import('./pages/Impersonate.jsx'));
+const Layout = lazy(() => import('./components/Layout.jsx'));
+const DashboardHome = lazy(() => import('./pages/DashboardHome.jsx'));
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
+const Profile = lazy(() => import('./pages/Profile.jsx'));
+const Track = lazy(() => import('./pages/Track.jsx'));
+const Settings = lazy(() => import('./pages/Settings.jsx'));
+const ArLayout = lazy(() => import('./pages/ArLayout.jsx'));
+const Contacts = lazy(() => import('./pages/Contacts.jsx'));
+const Appointments = lazy(() => import('./pages/Appointments.jsx'));
+const PublicProfile = lazy(() => import('./pages/PublicProfile.jsx'));
+const MagicBusinessCard = lazy(() => import('./pages/MagicBusinessCard.jsx'));
+
+// Blank frame while a lazy route loads (HomeSwitch does the same while it loads its setting).
+function Lazy({ children }) {
+  return <Suspense fallback={null}>{children}</Suspense>;
+}
 
 // Lazy-loaded ("Mark 1" experiment) -- pulls in mind-ar/@tensorflow/tfjs,
 // a heavy and still-unproven dependency. Loading it eagerly like every
@@ -252,7 +260,7 @@ export default function App() {
       {/* Public tap page -- what a stranger sees when they tap the physical
           card or scan its QR code. No login, standalone (not wrapped in
           PublicLayout's marketing-site header). */}
-      <Route path="/c/:clientId" element={<PublicProfile />} />
+      <Route path="/c/:clientId" element={<Lazy><PublicProfile /></Lazy>} />
 
       {/* Magic Camera -- moved here from /dashboard/magic-camera so it's
           reachable with NO login at all (its data, GET /api/public/magic-art,
@@ -311,16 +319,16 @@ export default function App() {
         }
       />
 
-      <Route path="/login" element={<Login />} />
-      <Route path="/impersonate" element={<Impersonate />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/login" element={<Lazy><Login /></Lazy>} />
+      <Route path="/impersonate" element={<Lazy><Impersonate /></Lazy>} />
+      <Route path="/register" element={<Lazy><Register /></Lazy>} />
+      <Route path="/forgot-password" element={<Lazy><ForgotPassword /></Lazy>} />
+      <Route path="/reset-password" element={<Lazy><ResetPassword /></Lazy>} />
       <Route
         path="/change-password"
         element={
           <RequireAuth>
-            <ChangePassword />
+            <Lazy><ChangePassword /></Lazy>
           </RequireAuth>
         }
       />
@@ -331,11 +339,11 @@ export default function App() {
         path="/dashboard"
         element={
           <RequireAuth>
-            <Layout />
+            <Lazy><Layout /></Lazy>
           </RequireAuth>
         }
       >
-        <Route index element={<DashboardHome />} />
+        <Route index element={<Lazy><DashboardHome /></Lazy>} />
         <Route
           path="huntsengine-test"
           element={
@@ -346,16 +354,16 @@ export default function App() {
             </HuntsEngineTestErrorBoundary>
           }
         />
-        <Route path="magic-business-card" element={<MagicBusinessCard />} />
-        <Route path="appointments" element={<Appointments />} />
-        <Route path="profile" element={<Dashboard />} />
-        <Route path="settings" element={<Profile />} />
-        <Route path="ar-layout" element={<ArLayout />} />
+        <Route path="magic-business-card" element={<Lazy><MagicBusinessCard /></Lazy>} />
+        <Route path="appointments" element={<Lazy><Appointments /></Lazy>} />
+        <Route path="profile" element={<Lazy><Dashboard /></Lazy>} />
+        <Route path="settings" element={<Lazy><Profile /></Lazy>} />
+        <Route path="ar-layout" element={<Lazy><ArLayout /></Lazy>} />
         <Route path="upgrade" element={<Shop />} />
-        <Route path="track" element={<Track />} />
+        <Route path="track" element={<Lazy><Track /></Lazy>} />
         <Route path="magic-poster-orders" element={<Navigate to="/dashboard/upgrade?history=poster" replace />} />
-        <Route path="account-settings" element={<Settings />} />
-        <Route path="contacts" element={<Contacts />} />
+        <Route path="account-settings" element={<Lazy><Settings /></Lazy>} />
+        <Route path="contacts" element={<Lazy><Contacts /></Lazy>} />
       </Route>
 
       </Routes>
