@@ -12,5 +12,6 @@ test('website and mobile app privacy policy files are identical', () => {
 test('privacy policy says Google Analytics is used and that no name, phone or email is sent', () => {
   const text = JSON.stringify(PRIVACY);
   assert.match(text, /Google Analytics/);
-  assert.match(text, /do not send it your name, phone number or email/);
+  assert.match(text, /Meta \(Facebook\) Pixel/);
+  assert.match(text, /do not send them your name, phone number or email/);
 });

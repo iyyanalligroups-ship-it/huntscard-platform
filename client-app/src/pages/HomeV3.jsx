@@ -251,7 +251,7 @@ function PlanCard({ plan, index }) {
         <div className="hv3-swatches" role="group" aria-label={`${plan.name} styles`}>
           {variants.slice(0, 5).map((s, k) => (
             <button type="button" key={s._id || k} className={k === vi ? 'on' : ''} title={s.name} aria-label={s.name} aria-pressed={k === vi} onClick={() => setVi(k)} onMouseEnter={() => setVi(k)} onFocus={() => setVi(k)}>
-              <img src={s.frontImageUrl} alt="" loading="lazy" onError={(e) => { e.currentTarget.closest('button').style.display = 'none'; }} />
+              <img src={s.frontImageUrl} alt={`${plan.name} - ${s.name}`} loading="lazy" onError={(e) => { e.currentTarget.closest('button').style.display = 'none'; }} />
             </button>
           ))}
           {variants.length > 5 && <em>+{variants.length - 5}</em>}
@@ -469,8 +469,8 @@ export default function HomeV3() {
             </ul>
           </div>
           <div className="hv3-hero-visual">
-            <img className="hv3-hero-card hv3-hero-card-a" fetchpriority="high" {...photoProps('/assets/photos/card-orange.jpg', SIZES.card)} alt="" aria-hidden="true" />
-            <img className="hv3-hero-card hv3-hero-card-b" {...photoProps('/assets/photos/card-art.jpg', SIZES.card)} alt="" aria-hidden="true" />
+            <img className="hv3-hero-card hv3-hero-card-a" fetchpriority="high" {...photoProps('/assets/photos/card-orange.jpg', SIZES.card)} alt="HuntsTAG orange NFC business card" />
+            <img className="hv3-hero-card hv3-hero-card-b" {...photoProps('/assets/photos/card-art.jpg', SIZES.card)} alt="HuntsTAG NFC business card with art design" />
             <ProfilePhone user={me} />
             <span className="hv3-float">Tap to open your world</span>
             {HERO_CHIPS.map(({ Icon, label, tone, pos }) => (
@@ -547,7 +547,7 @@ export default function HomeV3() {
                 <small>3D model</small>
               </div></div>
               <div className="ar-cardwrap">
-                <img className="ar-card" {...photoProps('/assets/photos/card-black.jpg', SIZES.card)} alt="" loading="lazy" decoding="async" />
+                <img className="ar-card" {...photoProps('/assets/photos/card-black.jpg', SIZES.card)} alt="HuntsTAG black NFC business card" loading="lazy" decoding="async" />
                 <span className="ar-beam" />
               </div>
               <span className="ar-tag"><ScanLine size={14} />Scanning QR</span>
@@ -750,7 +750,7 @@ export default function HomeV3() {
                   <div className="ed-drop d2"><Upload size={22} /><b>back.png</b><i /></div>
                   <ArrowRight size={26} className="ed-arrow" />
                   <div className="ed-cardframe">
-                    {edImage(customPlan) ? <img src={edImage(customPlan)} alt="" loading="lazy" /> : <span className="ed-blank">Your design</span>}
+                    {edImage(customPlan) ? <img src={edImage(customPlan)} alt="Custom design NFC business card"loading="lazy" /> : <span className="ed-blank">Your design</span>}
                   </div>
                 </div>
                 <ul className="ed-chips">{edFeatures(customPlan).map((f) => (<li key={f}><Check size={13} strokeWidth={3} />{f}</li>))}</ul>
@@ -768,7 +768,7 @@ export default function HomeV3() {
                 <div className="ed-visual ed-sound" aria-hidden="true">
                   <span className="ed-wave"><i /><i /><i /></span>
                   <div className="ed-cardframe tilt">
-                    {edImage(limitedPlan) ? <img src={edImage(limitedPlan)} alt="" loading="lazy" /> : <span className="ed-blank">Limited</span>}
+                    {edImage(limitedPlan) ? <img src={edImage(limitedPlan)} alt="Limited edition NFC business card"loading="lazy" /> : <span className="ed-blank">Limited</span>}
                   </div>
                   <span className="ed-speaker"><Volume2 size={18} />Plays a sound</span>
                   <span className="ed-eq"><i /><i /><i /><i /><i /></span>
@@ -905,7 +905,7 @@ export default function HomeV3() {
         <ol className="mbc-stages">
           <R as="li" className="mbc-stage">
             <div className="mbc-art mbc-s1" aria-hidden="true">
-              <div className="mbc-cardimg"><img src={mbcImg} alt="" loading="lazy" /><span className="mbc-qrzone"><b /><b /><b /><b /></span></div>
+              <div className="mbc-cardimg"><img src={mbcImg} alt="Business card with a Magic Camera QR code" loading="lazy" /><span className="mbc-qrzone"><b /><b /><b /><b /></span></div>
               <span className="mbc-tag"><QrCode size={13} />QR opens Magic Camera</span>
             </div>
             <em>01</em><h3>Scan the QR on your card</h3>
@@ -913,7 +913,7 @@ export default function HomeV3() {
           </R>
           <R as="li" className="mbc-stage">
             <div className="mbc-art mbc-trace" aria-hidden="true">
-              <div className="mbc-cardimg"><img src={mbcImg} alt="" loading="lazy" /></div>
+              <div className="mbc-cardimg"><img src={mbcImg} alt="Business card being scanned with Magic Camera" loading="lazy" /></div>
               <span className="mbc-frame"><b /><b /><b /><b /></span>
               <span className="mbc-dots">{Array.from({ length: 16 }).map((_, k) => (<u key={k} style={{ '--d': k }} />))}</span>
               <span className="mbc-scanline" />
@@ -924,7 +924,7 @@ export default function HomeV3() {
           </R>
           <R as="li" className="mbc-stage">
             <div className="mbc-art mbc-play" aria-hidden="true">
-              <div className="mbc-cardimg"><img src={mbcImg} alt="" loading="lazy" /><div className="mbc-video"><Play size={26} fill="currentColor" /></div></div>
+              <div className="mbc-cardimg"><img src={mbcImg} alt="Business card playing a video in Magic Camera" loading="lazy" /><div className="mbc-video"><Play size={26} fill="currentColor" /></div></div>
               <span className="mbc-pill p1"><Phone size={13} />Call</span>
               <span className="mbc-pill p2"><Link2 size={13} />Portfolio</span>
               <span className="mbc-pill p3"><Share2 size={13} />Social</span>
@@ -1167,7 +1167,7 @@ export default function HomeV3() {
 
       {/* 15. FINAL PUSH */}
       <Band className="hv3-final" label="Order your card">
-        <img className="hv3-final-mark" src="/assets/huntsTAG-wolf-logo.png" alt="" aria-hidden="true" />
+        <img className="hv3-final-mark" src="/assets/huntsTAG-wolf-logo.png" alt="HuntsTAG wolf logo" />
         <div className="hv3-final-copy">
           <R as="span" className="hv3-eyebrow">Ready when you are</R>
           <R as="h2" className="hv3-h2">Stop handing out cards people throw away.</R>

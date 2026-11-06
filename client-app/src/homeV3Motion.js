@@ -32,9 +32,11 @@ function hero(root) {
   const q = (s) => root.querySelectorAll(s);
   const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
   tl.from(q('.hv3-hero .hv3-eyebrow'), { y: 18, autoAlpha: 0, duration: 0.6 })
-    .from(q('.hv3-hero h1'), { y: 56, autoAlpha: 0, clipPath: 'inset(0 0 100% 0)', duration: 1, ease: 'expo.out' }, '-=0.3')
+    // The headline and intro text slide up but are visible from the first frame (no fade or clip). They are the
+    // largest text on the page, so hiding them until the animation reached them delayed Largest Contentful Paint by seconds on phones.
+    .from(q('.hv3-hero h1'), { y: 40, duration: 0.8, ease: 'expo.out' }, '-=0.3')
     .from(q('.hv3-hero .hv3-tag'), { y: 18, autoAlpha: 0, duration: 0.6 }, '-=0.55')
-    .from(q('.hv3-hero .hv3-lead'), { y: 18, autoAlpha: 0, duration: 0.6 }, '-=0.45')
+    .from(q('.hv3-hero .hv3-lead'), { y: 14, duration: 0.5 }, '-=0.45')
     .from(q('.hv3-hero .hv3-cta-row > *'), { y: 22, autoAlpha: 0, stagger: 0.1, duration: 0.6 }, '-=0.35')
     .from(q('.hv3-hero .hv3-mini li'), { y: 14, autoAlpha: 0, stagger: 0.1, duration: 0.5 }, '-=0.3')
     .from(q('.hv3-hero .hv3-profile'), { y: 90, autoAlpha: 0, scale: 0.92, duration: 1.2, ease: 'expo.out' }, 0.2)
@@ -139,6 +141,15 @@ function final(root) {
   gsap.fromTo(q('.hv3-final-mark'), { rotate: -8, scale: 0.9 }, { rotate: 8, scale: 1.08, ease: 'none', scrollTrigger: { trigger: '.hv3-final', start: 'top bottom', end: 'bottom top', scrub: 0.8 } });
 }
 
+// ScrollTrigger.refresh() re-measures every trigger on the page and forces a full layout (hundreds of ms on a phone).
+// Plans, posters and FAQ arrive from the API one after another and each called it, so the page was re-measured up to
+// three times in a row. This waits until they have settled and refreshes once.
+let refreshTimer = 0;
+function refreshSoon() {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => ScrollTrigger.refresh(), 300);
+}
+
 // Pieces that depend on async data (plans, posters, FAQ). Called after they render.
 export function dynamicMotion(root) {
   const q = (s) => root.querySelectorAll(s);
@@ -166,7 +177,7 @@ export function dynamicMotion(root) {
   }
 
   registerReveals(root);
-  ScrollTrigger.refresh();
+  refreshSoon();
 }
 
 // Pointer tilt on plan cards (desktop pointers only). Returns a cleanup.

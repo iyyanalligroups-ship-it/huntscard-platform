@@ -33,6 +33,22 @@ test('purchase sends value in rupees, currency and order id only', () => {
   assert.deepEqual(ev[2], { transaction_id: 'order_X', value: 2499, currency: 'INR' });
 });
 
+test('Meta Pixel gets PageView, standard events and a purchase without extra fields', () => {
+  const fb = [];
+  globalThis.window.fbq = (...a) => fb.push(a);
+  trackPageView('/meta-check');
+  assert.deepEqual(fb.at(-1), ['track', 'PageView']);
+  trackEvent('sign_up', { method: 'phone_otp' });
+  assert.deepEqual(fb.at(-1), ['track', 'CompleteRegistration', { method: 'phone_otp' }]);
+  trackEvent('generate_lead', { form: 'contact' });
+  assert.equal(fb.at(-1)[1], 'Lead');
+  trackEvent('plan_click', { plan: 'x' });
+  assert.deepEqual(fb.at(-1), ['trackCustom', 'plan_click', { plan: 'x' }]);
+  trackPurchase({ orderId: 'order_Y', amount: 249900, currency: 'INR', secret: 'x' });
+  assert.deepEqual(fb.at(-1), ['track', 'Purchase', { value: 2499, currency: 'INR' }, { eventID: 'order_Y' }]);
+  delete globalThis.window.fbq;
+});
+
 test('helpers never throw, even without gtag', () => {
   delete globalThis.window.gtag;
   assert.doesNotThrow(() => { trackPageView('/x'); trackEvent('sign_up', { method: 'phone_otp' }); trackPurchase(undefined); });

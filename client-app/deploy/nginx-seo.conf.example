@@ -18,6 +18,21 @@ gzip_types text/css text/plain text/javascript application/javascript applicatio
 #   brotli on;  brotli_comp_level 5;
 #   brotli_types text/css text/plain text/javascript application/javascript application/json image/svg+xml;
 
+# 0b. ONE ADDRESS -- every page must open on https://huntstag.com (no www, no http). The page says its
+#     canonical is https://huntstag.com/..., so a crawl that lands on www or http shows "canonical mismatch".
+#     Add these as separate server blocks (certificate lines must match your existing ones):
+# server {
+#     listen 80;
+#     server_name huntstag.com www.huntstag.com;
+#     return 301 https://huntstag.com$request_uri;
+# }
+# server {
+#     listen 443 ssl;
+#     server_name www.huntstag.com;
+#     # ssl_certificate / ssl_certificate_key: same as the main block
+#     return 301 https://huntstag.com$request_uri;
+# }
+
 # 1. Dynamic sitemap from the backend (cached ~10 minutes there).
 #    If the backend is down, nginx serves the static copy built into dist/sitemap.xml.
 location = /sitemap.xml {
