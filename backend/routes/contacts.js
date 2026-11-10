@@ -6,6 +6,7 @@ const multer = require('multer');
 const mongoose = require('mongoose');
 const { safeExt } = require('../utils/upload');
 const { requireAuth } = require('../middleware/auth');
+const { diffFields, noteChanges } = require('../utils/activityLog');
 const Contact = require('../models/Contact');
 
 const router = express.Router();
@@ -123,6 +124,7 @@ router.put('/contacts/:id', requireAuth, async (req, res) => {
       if (dup) return res.status(409).json({ error: 'A contact with this phone number is already saved.' });
     }
 
+    const contactBefore = contact.toObject();
     contact.firstName = (firstName || '').toString().trim();
     contact.lastName = (lastName || '').toString().trim();
     contact.phone = trimmedPhone;
@@ -131,6 +133,10 @@ router.put('/contacts/:id', requireAuth, async (req, res) => {
     contact.address = (address || '').toString().trim();
     contact.notes = (notes || '').toString().trim();
     await contact.save(); // pre-save hook on the model resyncs `name` from firstName/lastName
+    try {
+      // A contact is someone else's details: the log says which fields changed, never the values.
+      noteChanges(req, diffFields(contactBefore, contact.toObject(), ['firstName', 'lastName', 'phone', 'email', 'org', 'address', 'notes'], { hideValues: true }));
+    } catch { /* activity log only */ }
 
     res.json(contact);
   } catch (err) {

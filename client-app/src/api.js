@@ -5,12 +5,40 @@ function getToken() {
   return localStorage.getItem('huntsTAG_client_token');
 }
 
+// For the activity tracker, which sends its own small requests (see activityTracker.js).
+export function getClientToken() {
+  return getToken();
+}
+
+// Reads the claims of a login token (no checking; the server does that).
+function tokenClaims(token) {
+  try { return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return {}; }
+}
+
+// Tells the server this login ended, so the activity log shows "Logged out" (or "Switched account").
+// Best-effort: it never waits, never throws, and never blocks the logout itself.
+function reportLogout(token, reason) {
+  try {
+    if (!token || tokenClaims(token).impersonatedBy) return;
+    fetch(`${API_URL}/api/auth/logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(reason ? { reason } : {}),
+      keepalive: true, // still sent when the page is about to change
+    }).catch(() => {});
+  } catch { /* logging out never fails */ }
+}
+
 export function setSession({ token, clientId }) {
+  // Logging in as someone else without logging out first: the earlier login is over.
+  const old = getToken();
+  if (old && old !== token && tokenClaims(old).sid && tokenClaims(old).sid !== tokenClaims(token).sid) reportLogout(old, 'switched');
   localStorage.setItem('huntsTAG_client_token', token);
   localStorage.setItem('huntsTAG_client_id', clientId);
 }
 
 export function clearSession() {
+  reportLogout(getToken());
   localStorage.removeItem('huntsTAG_client_token');
   localStorage.removeItem('huntsTAG_client_id');
 }
@@ -561,6 +589,18 @@ export const api = {
   // Phone-contacts backup (import from this phone, export to restore on a
   // new one). See pages/Contacts.jsx.
   listContacts: () => request('/api/profile/contacts'),
+  // One page of contacts: { contacts, total, hasMore } -- the Contacts page loads 10 at a time.
+  listContactsPage: ({ limit = 10, skip = 0 } = {}) => request(`/api/profile/contacts?limit=${limit}&skip=${skip}`),
+  // "My activity": the logged-in person's own logins and steps (see backend/routes/activity.js)
+  myActivity: ({ from, to, page } = {}) => {
+    const q = new URLSearchParams();
+    if (from) q.set('from', from);
+    if (to) q.set('to', to);
+    if (page && page > 1) q.set('page', String(page));
+    const text = q.toString();
+    return request(`/api/profile/activity${text ? `?${text}` : ''}`);
+  },
+  myActivityDay: (day) => request(`/api/profile/activity/days/${day}`),
   importContacts: (contacts) => request('/api/profile/contacts/import', { method: 'POST', body: { contacts } }),
   createContact: (payload) => request('/api/profile/contacts', { method: 'POST', body: payload }),
   updateContact: (id, payload) => request(`/api/profile/contacts/${id}`, { method: 'PUT', body: payload }),

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, clearSession, markPasswordChanged, onUnauthorized, readSession, saveSession } from '../api/client.js';
+import { flushActivity, setActivityToken, startActivityTracking } from '../lib/activityTracker.js';
 
 const AuthContext = createContext(null);
 
@@ -8,9 +9,14 @@ export function AuthProvider({ children }) {
   const [restoring, setRestoring] = useState(true);
 
   const signOut = useCallback(async () => {
+    await flushActivity({ timeoutMs: 1500 }).catch(() => {}); // the last steps go out before the logout is reported
     await clearSession();
     setSessionState(null);
   }, []);
+
+  // The activity tracker follows the login: it records only while a client is logged in.
+  useEffect(() => { setActivityToken(session?.token || null); }, [session]);
+  useEffect(() => startActivityTracking(), []);
 
   useEffect(() => {
     readSession().then((saved) => setSessionState(saved.token ? saved : null)).finally(() => setRestoring(false));

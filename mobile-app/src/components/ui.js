@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Glyph } from './Glyph.js';
+import { recordTap } from '../lib/activityTracker.js';
 import { colors, radius } from '../theme/colors.js';
 
 // onEndReached fires when the user scrolls within ~300px of the bottom (infinite scroll).
@@ -82,11 +83,12 @@ export function PasswordField({ label, ...props }) {
   );
 }
 
-export function Button({ title, onPress, disabled, kind = 'primary', compact = false, style, icon, loading }) {
+// noTrack: do not note this tap in the activity log.
+export function Button({ title, onPress, disabled, kind = 'primary', compact = false, style, icon, loading, noTrack }) {
   const iconColor = kind === 'primary' ? '#ffffff' : kind === 'danger' ? colors.danger : colors.text;
   return (
     <Pressable
-      onPress={onPress}
+      onPress={(e) => { if (!noTrack) recordTap(title); onPress?.(e); }}
       disabled={disabled || loading}
       style={({ pressed }) => [styles.button, styles[`button_${kind}`], compact && styles.compact, pressed && styles.pressed, (disabled || loading) && styles.disabled, style]}
     >
@@ -96,9 +98,10 @@ export function Button({ title, onPress, disabled, kind = 'primary', compact = f
   );
 }
 
-export function IconButton({ name, onPress, color = colors.text, size = 18, style, badge, disabled }) {
+// label: what the activity log calls this tap (defaults to the icon's name); noTrack skips it.
+export function IconButton({ name, onPress, color = colors.text, size = 18, style, badge, disabled, label, noTrack }) {
   return (
-    <Pressable onPress={onPress} disabled={disabled} hitSlop={6} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed, disabled && styles.disabled, style]}>
+    <Pressable onPress={(e) => { if (!noTrack) recordTap(label || `${name} icon`); onPress?.(e); }} disabled={disabled} hitSlop={6} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed, disabled && styles.disabled, style]}>
       <Glyph name={name} color={color} size={size} />
       {badge ? <View style={styles.badge}><Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text></View> : null}
     </Pressable>
@@ -130,7 +133,7 @@ export function Tabs({ tabs, value, onChange, style }) {
       {tabs.map((tab) => {
         const active = tab.key === value;
         return (
-          <Pressable key={tab.key} onPress={() => onChange(tab.key)} style={[styles.tab, active && styles.tabActive]}>
+          <Pressable key={tab.key} onPress={() => { recordTap(`${tab.label} tab`); onChange(tab.key); }} style={[styles.tab, active && styles.tabActive]}>
             {tab.icon ? <Glyph name={tab.icon} size={14} color={active ? '#ffffff' : colors.text} /> : null}
             <Text style={[styles.tabText, active && styles.tabTextActive]}>{tab.label}</Text>
           </Pressable>

@@ -14,7 +14,7 @@ export const MEMBER_MENU = [
   { id: 'workspace', label: 'Workspace', items: [{ name: 'Dashboard', icon: 'dashboard' }] },
   { id: 'account', label: 'Account & connections', items: [
     { name: 'Appointment Requests', icon: 'calendar' }, { name: 'Profile', icon: 'user' },
-    { name: 'Profile Settings', icon: 'edit' }, { name: 'Contacts', icon: 'contacts' }] },
+    { name: 'Profile Settings', icon: 'edit' }, { name: 'Contacts', icon: 'contacts' }, { name: 'My Activity', icon: 'clock' }] },
   { id: 'studio', label: 'Studio & AR', items: [
     { name: 'AR Layout', icon: 'layers' }, { name: 'Magic Camera', icon: 'magic' }, { name: 'Magic Business Card', icon: 'sparkles' }] },
   { id: 'orders', label: 'Shop & orders', items: [

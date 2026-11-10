@@ -2,6 +2,7 @@ import { Component, lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'r
 import { Navigate, Route, Routes, useLocation, useNavigationType } from 'react-router-dom';
 import { isLoggedIn } from './api.js';
 import { trackPageView } from './analytics.js';
+import ActivityTracker from './components/ActivityTracker.jsx';
 import PublicLayout from './components/PublicLayout.jsx';
 import Home from './pages/HomeSwitch.jsx'; // renders Home.jsx or HomeD1.jsx per the admin-toggled theme setting
 import Shop from './pages/Shop.jsx';
@@ -34,6 +35,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
 const Profile = lazy(() => import('./pages/Profile.jsx'));
 const Track = lazy(() => import('./pages/Track.jsx'));
 const Settings = lazy(() => import('./pages/Settings.jsx'));
+const MyActivity = lazy(() => import('./pages/MyActivity.jsx'));
 const ArLayout = lazy(() => import('./pages/ArLayout.jsx'));
 const Contacts = lazy(() => import('./pages/Contacts.jsx'));
 const Appointments = lazy(() => import('./pages/Appointments.jsx'));
@@ -246,6 +248,7 @@ export default function App() {
       <ScrollToTop />
       <Seo />
       <RouteAnalytics />
+      <ActivityTracker />
       <Routes>
       {/* Public site -- anyone can browse and buy without an account */}
       <Route path="/" element={<PublicLayout />}>
@@ -383,6 +386,7 @@ export default function App() {
         <Route path="track" element={<Lazy><Track /></Lazy>} />
         <Route path="magic-poster-orders" element={<Navigate to="/dashboard/upgrade?history=poster" replace />} />
         <Route path="account-settings" element={<Lazy><Settings /></Lazy>} />
+        <Route path="activity" element={<Lazy><MyActivity /></Lazy>} />
         <Route path="contacts" element={<Lazy><Contacts /></Lazy>} />
       </Route>
 

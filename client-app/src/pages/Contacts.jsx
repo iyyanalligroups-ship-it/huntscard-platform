@@ -102,10 +102,15 @@ function rowToContact(row) {
   };
 }
 
+const PAGE_SIZE = 10; // contacts shown at first, and added by each "Load more"
+
 const EMPTY_FORM = { firstName: '', lastName: '', phone: '', email: '', org: '', address: '', notes: '' };
 
 export default function Contacts() {
-  const [contacts, setContacts] = useState([]);
+  const [contacts, setContacts] = useState([]); // the pages loaded so far, not necessarily everything
+  const [total, setTotal] = useState(0); // how many contacts exist in all
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [excelExporting, setExcelExporting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [importing, setImporting] = useState(false);
@@ -156,11 +161,35 @@ export default function Contacts() {
   // WhatsApp specifically.
   const [sentRequest, setSentRequest] = useState(null);
 
-  function loadContacts() {
+  // Back to the first page (after an import or a new contact). `keep` refreshes the rows already on screen
+  // instead (after an edit, so the list does not jump back to the top). The server allows 50 rows at once.
+  function loadContacts({ keep = false } = {}) {
+    const limit = keep ? Math.min(50, Math.max(PAGE_SIZE, contacts.length)) : PAGE_SIZE;
     return api
-      .listContacts()
-      .then(setContacts)
+      .listContactsPage({ limit, skip: 0 })
+      .then((r) => {
+        setContacts(r.contacts);
+        setTotal(r.total);
+      })
       .catch((err) => setError(err.message));
+  }
+
+  async function loadMoreContacts() {
+    setError('');
+    setLoadingMore(true);
+    try {
+      const r = await api.listContactsPage({ limit: PAGE_SIZE, skip: contacts.length });
+      // skip a row that is already on screen (the list may have changed since the last page was loaded)
+      setContacts((list) => {
+        const seen = new Set(list.map((c) => c._id));
+        return [...list, ...r.contacts.filter((c) => !seen.has(c._id))];
+      });
+      setTotal(r.total);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoadingMore(false);
+    }
   }
 
   useEffect(() => {
@@ -247,8 +276,20 @@ export default function Contacts() {
     }
   }
 
-  function handleExcelExport() {
-    const rows = contacts.map((c) => ({
+  // The spreadsheet must hold every contact, not just the pages loaded on screen, so it fetches them all.
+  async function handleExcelExport() {
+    setError('');
+    setExcelExporting(true);
+    let all;
+    try {
+      all = await api.listContacts();
+    } catch (err) {
+      setError(err.message);
+      return;
+    } finally {
+      setExcelExporting(false);
+    }
+    const rows = all.map((c) => ({
       'First Name': c.firstName || '',
       'Last Name': c.lastName || '',
       Phone: c.phone,
@@ -289,6 +330,7 @@ export default function Contacts() {
     try {
       await api.deleteContact(id);
       setContacts((list) => list.filter((c) => c._id !== id));
+      setTotal((t) => Math.max(0, t - 1));
       setDeleteTarget(null);
     } catch (err) {
       setError(err.message);
@@ -412,7 +454,7 @@ export default function Contacts() {
         await api.uploadContactPhoto(contact._id, formPhotoFile);
       }
 
-      await loadContacts();
+      await loadContacts({ keep: formMode === 'edit' });
       closeForm();
     } catch (err) {
       setFormError(err.message);
@@ -449,7 +491,7 @@ export default function Contacts() {
             className="secondary"
             style={{ width: 'auto' }}
             onClick={handleExport}
-            disabled={exporting || contacts.length === 0}
+            disabled={exporting || total === 0}
           >
             {exporting ? 'Preparing…' : 'Export contacts'}
           </button>
@@ -490,9 +532,9 @@ export default function Contacts() {
             className="secondary"
             style={{ width: 'auto' }}
             onClick={handleExcelExport}
-            disabled={contacts.length === 0}
+            disabled={total === 0 || excelExporting}
           >
-            Export to Excel
+            {excelExporting ? 'Preparing…' : 'Export to Excel'}
           </button>
           <button type="button" className="secondary" style={{ width: 'auto' }} onClick={handleDownloadTemplate}>
             Download template
@@ -699,6 +741,14 @@ export default function Contacts() {
                 </div>
               </div>
             ))}
+            <div className="contact-list-footer" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 6 }}>
+              <p className="hint" style={{ margin: 0 }}>Showing {contacts.length} of {total} contacts</p>
+              {contacts.length < total && (
+                <button type="button" className="secondary" style={{ width: 'auto' }} onClick={loadMoreContacts} disabled={loadingMore}>
+                  {loadingMore ? 'Loading…' : `Load more (${total - contacts.length} left)`}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

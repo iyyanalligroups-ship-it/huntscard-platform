@@ -8,6 +8,7 @@ const bcrypt = require('bcryptjs');
 const { nanoid } = require('nanoid');
 const Razorpay = require('razorpay');
 const { requireAuth } = require('../middleware/auth');
+const { diffFields, noteChanges } = require('../utils/activityLog');
 const Client = require('../models/Client');
 const MagicBusinessCard = require('../models/MagicBusinessCard');
 const CardRequest = require('../models/CardRequest');
@@ -1091,6 +1092,12 @@ router.put('/me', requireAuth, async (req, res) => {
       updates.customAttributes = merged;
     }
 
+    // For the activity log only: what these fields were before. A failure here never affects the save.
+    let beforeEdit = null;
+    try {
+      beforeEdit = await Client.findOne({ clientId: req.user.clientId }).select(Object.keys(updates).join(' ')).lean();
+    } catch { /* activity log only */ }
+
     const client = await Client.findOneAndUpdate(
       { clientId: req.user.clientId },
       { $set: updates },
@@ -1098,6 +1105,10 @@ router.put('/me', requireAuth, async (req, res) => {
     ).select('-passwordHash -chipPasswordHash');
 
     if (!client) return res.status(404).json({ error: 'Client not found' });
+    try {
+      const keys = Object.keys(updates).filter((k) => k !== 'customAttributes');
+      noteChanges(req, diffFields(beforeEdit, client.toObject(), keys));
+    } catch { /* activity log only */ }
     // Sync profile address to ClientAddress so it is automatically available
     // on the Shop and Magic Poster checkout pages
     if (client.addressLine1 && client.addressCity && client.addressPincode) {
@@ -1743,6 +1754,7 @@ router.patch('/addresses/:id', requireAuth, async (req, res) => {
   try {
     const address = await ClientAddress.findOne({ _id: req.params.id, clientId: req.user.clientId });
     if (!address) return res.status(404).json({ error: 'Address not found' });
+    const addressBefore = address.toObject();
     for (const field of ['label', 'name', 'phone', 'line1', 'line2', 'country', 'state', 'city', 'pincode']) {
       if (req.body[field] !== undefined) address[field] = req.body[field];
     }
@@ -1753,6 +1765,9 @@ router.patch('/addresses/:id', requireAuth, async (req, res) => {
       address.isDefault = false;
     }
     await address.save();
+    try {
+      noteChanges(req, diffFields(addressBefore, address.toObject(), ['label', 'name', 'phone', 'line1', 'line2', 'country', 'state', 'city', 'pincode', 'isDefault']));
+    } catch { /* activity log only */ }
     res.json(address);
   } catch (err) {
     console.error('[profile/addresses PATCH]', err);

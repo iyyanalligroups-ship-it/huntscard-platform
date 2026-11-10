@@ -4,7 +4,7 @@
 // Shape: { title, updated, intro, sections: [{ h, p: [paragraphs], ul: [bullets], subs: [{ h, p, ul }] }] }
 
 export const SUPPORT_EMAIL = 'info@huntsworld.com';
-export const LEGAL_UPDATED = '6 November 2026';
+export const LEGAL_UPDATED = '10 November 2026';
 
 export const PRIVACY = {
   title: 'Privacy Policy',
@@ -31,6 +31,7 @@ export const PRIVACY = {
           ul: [
             'Card taps: a count of how many times your card or public profile was opened.',
             'Device and usage data: browser or device type, IP address, pages visited and error logs, used to keep the service running and secure.',
+            'Activity log: each login and logout, and what you do while logged in (the pages you open, the buttons you click, and actions such as editing your profile or placing an order), with the time and whether it was the website or the app. For form fields it notes only that a field was edited, never what you typed, except in search boxes. You can see your own log under My Activity. It is never used to record passwords, one-time passwords or card or bank details. HuntsTAG staff can see it to help you and to keep the service secure, and it may be kept in a backup.',
             'Notification tokens: if you allow notifications, an identifier that lets us send them to your browser or device.',
           ],
         },

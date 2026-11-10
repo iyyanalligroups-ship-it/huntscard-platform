@@ -24,7 +24,29 @@ export async function readSession() {
   return { token, clientId, mustChangePassword: mustChangePassword === 'true' };
 }
 
+// Tells the server this login ended, so the activity log shows "Logged out". Best-effort: it never
+// waits, never throws, and never blocks the logout.
+function reportLogout(token, reason) {
+  try {
+    if (!token) return;
+    fetch(`${API_URL}/api/auth/logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-Client-Platform': 'app' },
+      body: JSON.stringify(reason ? { reason } : {}),
+    }).catch(() => {});
+  } catch { /* logging out never fails */ }
+}
+
+function sidOf(token) {
+  try { return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).sid || null; } catch { return null; }
+}
+
 export async function saveSession({ token, clientId, mustChangePassword = false }) {
+  try {
+    // Signing in as someone else without signing out first: the earlier login is over.
+    const old = await SecureStore.getItemAsync(TOKEN_KEY);
+    if (old && old !== token && sidOf(old) && sidOf(old) !== sidOf(token)) reportLogout(old, 'switched');
+  } catch { /* never blocks signing in */ }
   await Promise.all([
     SecureStore.setItemAsync(TOKEN_KEY, token),
     SecureStore.setItemAsync(CLIENT_ID_KEY, clientId || ''),
@@ -37,6 +59,7 @@ export async function markPasswordChanged() {
 }
 
 export async function clearSession() {
+  try { reportLogout(await SecureStore.getItemAsync(TOKEN_KEY)); } catch { /* never blocks signing out */ }
   await Promise.all([
     SecureStore.deleteItemAsync(TOKEN_KEY),
     SecureStore.deleteItemAsync(CLIENT_ID_KEY),
@@ -53,7 +76,8 @@ export function resolveAssetUrl(url) {
 // Swaps a recently expired token for a new one (POST /api/auth/refresh). True if a new token was
 // stored; false if the server refused (session too old / blocked) -- then the caller logs out.
 let refreshing = null;
-function refreshSession() {
+// Swaps the saved token for a fresh one. Exported for the activity tracker (it upgrades a login that has no session id).
+export function refreshSession() {
   if (!refreshing) {
     refreshing = (async () => {
       const token = await SecureStore.getItemAsync(TOKEN_KEY);
@@ -61,7 +85,7 @@ function refreshSession() {
       try {
         const res = await fetch(`${API_URL}/api/auth/refresh`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Client-Platform': 'app' },
           body: JSON.stringify({ token }),
         });
         if (!res.ok) return false;
@@ -77,7 +101,7 @@ function refreshSession() {
 }
 
 async function request(path, { method = 'GET', body, auth = true, form = false, retried = false } = {}) {
-  const headers = {};
+  const headers = { 'X-Client-Platform': 'app' }; // lets the activity log tell the app from the website
   if (!form) headers['Content-Type'] = 'application/json';
   if (auth) {
     const token = await SecureStore.getItemAsync(TOKEN_KEY);
@@ -216,6 +240,9 @@ export const api = {
   // ---- notifications ----
   getNotifications: () => request('/api/profile/notifications'),
   markNotificationRead: (id) => request(`/api/profile/notifications/${id}/read`, { method: 'POST' }),
+  // "My activity": this person's own logins and steps, 7 days per page (see backend/routes/activity.js)
+  myActivity: ({ from, to, page } = {}) => request(`/api/profile/activity${qs({ from, to, page: page > 1 ? page : undefined })}`),
+  myActivityDay: (day) => request(`/api/profile/activity/days/${day}`),
 
   // ---- AR layout + Magic Business Card ----
   getMyArLayout: (cardNumber) => request(`/api/profile/ar-layout${qs({ card: cardNumber })}`),

@@ -12,6 +12,7 @@ const { sendSms } = require('../utils/sms');
 const { sendEmail } = require('../utils/email');
 const { passwordResetEmail } = require('../utils/emailTemplates');
 const { claimAppointmentRequests } = require('./appointments');
+const { startSessionSafe, endSession } = require('../utils/activityLog');
 
 const router = express.Router();
 
@@ -70,12 +71,18 @@ function hashResetToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-function signToken(client) {
-  return jwt.sign(
-    { type: 'client', clientId: client.clientId, loginEmail: client.loginEmail },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '1h' }
-  );
+// session = { sid, sst }: the login's id and when it started (kept when the token is refreshed).
+function signToken(client, session) {
+  const claims = { type: 'client', clientId: client.clientId, loginEmail: client.loginEmail };
+  if (session) { claims.sid = session.sid; claims.sst = session.sst; }
+  return jwt.sign(claims, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '1h' });
+}
+
+// A login = one activity session (see utils/activityLog.js). Creating its record never blocks the login.
+function beginSession(req, client) {
+  const session = { sid: nanoid(24), sst: Math.floor(Date.now() / 1000) };
+  startSessionSafe(req, client, session.sid, session.sst);
+  return session;
 }
 
 function normalizePhone(value) {
@@ -240,7 +247,7 @@ router.post('/register', registerLimiter, async (req, res) => {
     // Never blocks/fails registration if this has a problem.
     claimAppointmentRequests(client).catch((err) => console.error('[claimAppointmentRequests]', err));
 
-    const token = signToken(client);
+    const token = signToken(client, beginSession(req, client));
     res.status(201).json({
       token,
       clientId: client.clientId,
@@ -283,7 +290,7 @@ router.post('/login', loginLimiter, async (req, res) => {
       return res.status(403).json({ error: 'This account has been blocked. Contact support.' });
     }
 
-    const token = signToken(client);
+    const token = signToken(client, beginSession(req, client));
     res.json({
       token,
       clientId: client.clientId,
@@ -382,7 +389,7 @@ router.post('/login-otp/verify', otpLimiter, async (req, res) => {
     client.loginOtpAttempts = 0;
     await client.save();
 
-    const token = signToken(client);
+    const token = signToken(client, beginSession(req, client));
     res.json({
       token,
       clientId: client.clientId,
@@ -568,11 +575,27 @@ router.post('/refresh', refreshLimiter, async (req, res) => {
     const client = await Client.findOne({ clientId: payload.clientId });
     if (!client) return res.status(401).json({ error: 'Account not found', code: 'TOKEN_INVALID' });
     if (client.blocked) return res.status(403).json({ error: 'This account has been blocked. Contact support.' });
-    res.json({ token: signToken(client), clientId: client.clientId });
+    // The session id travels with the refreshed token; an old token without one starts a session now.
+    const session = payload.sid ? { sid: payload.sid, sst: payload.sst || payload.iat } : beginSession(req, client);
+    res.json({ token: signToken(client, session), clientId: client.clientId });
   } catch (err) {
     console.error('[auth/refresh]', err);
     res.status(500).json({ error: 'Refresh failed' });
   }
+});
+
+// POST /api/auth/logout { reason?: 'switched' }
+// Ends the activity session of this login. Best-effort: the apps call it and never wait on it, and an
+// expired token still works (only the signature is checked) so a late logout is still recorded.
+router.post('/logout', refreshLimiter, (req, res) => {
+  res.json({ ok: true });
+  try {
+    const old = (req.headers.authorization || '').replace(/^Bearer /, '') || str(req.body && req.body.token);
+    const payload = jwt.verify(old, process.env.JWT_SECRET, { ignoreExpiration: true });
+    if (payload.type !== 'client' || payload.impersonatedBy || !payload.sid) return;
+    const reason = req.body && req.body.reason === 'switched' ? 'switched' : 'logout';
+    endSession(payload.sid, reason).catch(() => {});
+  } catch { /* logout never fails */ }
 });
 
 module.exports = router;

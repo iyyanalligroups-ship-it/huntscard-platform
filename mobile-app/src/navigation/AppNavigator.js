@@ -13,6 +13,8 @@ import { IconButton } from '../components/ui.js';
 import SplashOverlay from '../components/SplashOverlay.js';
 import { colors } from '../theme/colors.js';
 import { navigationRef } from './navigationRef.js';
+import { recordScreen } from '../lib/activityTracker.js';
+import MyActivityScreen from '../screens/MyActivityScreen.js';
 import LoginScreen from '../screens/LoginScreen.js';
 import RegisterScreen from '../screens/RegisterScreen.js';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen.js';
@@ -123,6 +125,12 @@ function makeTabs(member) {
   };
 }
 
+// Notes each screen the person opens in the activity log (names only; nothing from the screen itself).
+function trackScreen() {
+  const name = navigationRef.getCurrentRoute?.()?.name;
+  if (name) recordScreen(name);
+}
+
 const MemberTabs = makeTabs(true);
 const PublicTabs = makeTabs(false);
 
@@ -138,6 +146,7 @@ const memberPages = <>
   <Stack.Screen name="Track Orders" component={TrackScreen} />
   <Stack.Screen name="Settings" component={SettingsScreen} />
   <Stack.Screen name="Notifications" component={NotificationsScreen} />
+  <Stack.Screen name="My Activity" component={MyActivityScreen} />
   <Stack.Screen name="Device Protection Check" component={DeviceSafetyCheckScreen} />
   <Stack.Screen name="Contact Us" component={ContactUsScreen} />
 </>;
@@ -181,7 +190,7 @@ export default function AppNavigator() {
 
   return <View style={styles.flex}>
     {restoring ? <View style={styles.blank} /> : (
-      <NavigationContainer theme={navTheme} ref={navigationRef} linking={linking}>
+      <NavigationContainer theme={navTheme} ref={navigationRef} linking={linking} onReady={trackScreen} onStateChange={trackScreen}>
         <Stack.Navigator screenOptions={stackOptions}>
           {!session ? <>
             <Stack.Screen name="Public" component={PublicTabs} options={{ headerShown: false }} />

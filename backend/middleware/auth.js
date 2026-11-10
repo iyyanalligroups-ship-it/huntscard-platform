@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const Client = require('../models/Client');
 const Admin = require('../models/Admin');
+const { trackActivity } = require('../utils/activityLog');
 
 function getToken(req) {
   const header = req.headers.authorization || '';
@@ -37,7 +38,8 @@ async function requireAuth(req, res, next) {
       return res.status(403).json({ error: 'This account has been blocked. Contact support.' });
     }
 
-    req.user = payload; // { type: 'client', clientId, loginEmail, iat, exp }
+    req.user = payload; // { type: 'client', clientId, loginEmail, sid, sst, iat, exp }
+    trackActivity(req, res, payload); // records the step after the response is sent; never blocks
     next();
   } catch (err) {
     // TOKEN_EXPIRED tells the app it can call POST /api/auth/refresh instead of logging out.

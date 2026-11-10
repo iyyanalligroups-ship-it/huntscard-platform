@@ -10,8 +10,11 @@ const contactsRoutes = require('./routes/contacts');
 const appointmentsRoutes = require('./routes/appointments');
 const notificationsRoutes = require('./routes/notifications');
 const chatRoutes = require('./routes/chat');
+const activityRoutes = require('./routes/activity');
 const publicRoutes = require('./routes/public');
 const adminAuthRoutes = require('./routes/adminAuth');
+const adminActivityRoutes = require('./routes/adminActivity');
+const adminActivityBackupRoutes = require('./routes/adminActivityBackup');
 const adminRoutes = require('./routes/admin');
 const { createSitemapHandler } = require('./utils/sitemap');
 const couponRoutes = require('./routes/coupon'); // HuntsWorld free-card coupon claim -- separate feature
@@ -55,9 +58,12 @@ async function main() {
   app.use('/api/profile', appointmentsRoutes);
   app.use('/api/profile', notificationsRoutes);
   app.use('/api/profile', chatRoutes);
+  app.use('/api/profile', activityRoutes);
   app.use('/api/profile/coupon', couponRoutes);
   app.use('/api/public', publicRoutes);
   app.use('/api/admin/auth', adminAuthRoutes);
+  app.use('/api/admin/activity', adminActivityRoutes);
+  app.use('/api/admin/activity-backup', adminActivityBackupRoutes);
   app.use('/api/admin', adminRoutes);
 
   // Basic 404 + error handlers so the app doesn't crash on unexpected input
@@ -69,6 +75,8 @@ async function main() {
 
   const port = process.env.PORT || 4000;
   app.listen(port, () => console.log(`[server] huntsTAG backend listening on port ${port}`));
+  // Hourly check for the activity backup (and the 120-day clean-up). Set ACTIVITY_BACKUP_SCHEDULER=off to switch it off.
+  if (process.env.ACTIVITY_BACKUP_SCHEDULER !== 'off') require('./utils/activityBackup').startScheduler();
 }
 
 main().catch((err) => {
