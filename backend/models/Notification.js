@@ -14,6 +14,8 @@ const NotificationSchema = new mongoose.Schema(
     // model may grow other notification types later that aren't tied to a
     // specific contact.
     contactId: { type: mongoose.Schema.Types.ObjectId, ref: 'Contact' },
+    // Where clicking it should go (a dashboard path such as /dashboard/tickets). Optional.
+    link: { type: String, trim: true, default: null },
     read: { type: Boolean, default: false },
   },
   { timestamps: true }

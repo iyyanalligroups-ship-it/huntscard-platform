@@ -22,6 +22,7 @@ const ClientAddressSchema = new mongoose.Schema(
     city: { type: String, trim: true, required: true },
     // Manual entry, not looked up -- see routes/public.js's geo endpoints
     // comment for why there's no reliable free city -> pincode dataset.
+    district: { type: String, trim: true, default: '' },
     pincode: { type: String, trim: true, required: true },
     isDefault: { type: Boolean, default: false },
   },

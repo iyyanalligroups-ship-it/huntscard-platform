@@ -66,6 +66,7 @@ const MagicPosterOrderSchema = new mongoose.Schema(
       country: { type: String, trim: true, required: true },
       state: { type: String, trim: true, required: true },
       city: { type: String, trim: true, required: true },
+      district: { type: String, trim: true, default: '' },
       pincode: { type: String, trim: true, required: true },
     },
     trackingId: { type: String, default: null },

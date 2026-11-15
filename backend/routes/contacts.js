@@ -11,6 +11,17 @@ const Contact = require('../models/Contact');
 
 const router = express.Router();
 
+// Same address rule as the Contacts page form (optional; 5-200 chars, has a letter, ordinary punctuation only).
+function addressError(value) {
+  const v = (value || '').toString().trim();
+  if (!v) return '';
+  if (v.length < 5) return 'Address is too short -- add the street, city and state.';
+  if (v.length > 200) return 'Address must be 200 characters or fewer.';
+  if (!/[A-Za-z]/.test(v)) return 'Address must include letters, not just numbers.';
+  if (!/^[A-Za-z0-9\s,.\-/#()&'’:;_]+$/.test(v)) return 'Address has characters that are not allowed.';
+  return '';
+}
+
 // ---------------------------------------------------------------------
 // Personal phone-contacts backup, scoped to the logged-in client. Gets
 // data in via three paths: the browser's Contact Picker API, an
@@ -43,6 +54,21 @@ router.get('/contacts', requireAuth, async (req, res) => {
       const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
       const skip = Math.max(0, parseInt(req.query.skip, 10) || 0);
       const filter = { clientId: req.user.clientId };
+      // Optional search: ?q=text&field=name|phone|all (default all). Name matches name/first/last name;
+      // phone ignores spaces, dashes and the like, so "98765 43210" finds "+91-9876543210".
+      const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 60) : '';
+      const field = ['name', 'phone'].includes(req.query.field) ? req.query.field : 'all';
+      if (q) {
+        const escapeRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const nameRe = new RegExp(escapeRe(q), 'i');
+        const digits = q.replace(/\D/g, '');
+        const phoneRe = digits ? new RegExp(digits.split('').join('\\D*')) : null;
+        const nameClause = [{ name: nameRe }, { firstName: nameRe }, { lastName: nameRe }];
+        const phoneClause = phoneRe ? [{ phone: phoneRe }] : [];
+        if (field === 'name') filter.$or = nameClause;
+        else if (field === 'phone') filter.$or = phoneClause.length ? phoneClause : [{ _id: null }];
+        else filter.$or = [...nameClause, ...phoneClause];
+      }
       const [page, total] = await Promise.all([
         Contact.find(filter).sort({ name: 1, _id: 1 }).skip(skip).limit(limit),
         Contact.countDocuments(filter),
@@ -82,6 +108,9 @@ router.post('/contacts', requireAuth, async (req, res) => {
   const { firstName, lastName, phone, email, org, address, notes } = req.body || {};
   const trimmedPhone = (phone || '').toString().trim();
   if (!trimmedPhone) return res.status(400).json({ error: 'Phone number is required' });
+  if (!/^\d{10}$/.test(trimmedPhone)) return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
+  const addressProblem = addressError(address);
+  if (addressProblem) return res.status(400).json({ error: addressProblem });
 
   try {
     const existing = await Contact.findOne({ clientId: req.user.clientId, phone: trimmedPhone });
@@ -114,6 +143,9 @@ router.put('/contacts/:id', requireAuth, async (req, res) => {
   const { firstName, lastName, phone, email, org, address, notes } = req.body || {};
   const trimmedPhone = (phone || '').toString().trim();
   if (!trimmedPhone) return res.status(400).json({ error: 'Phone number is required' });
+  if (!/^\d{10}$/.test(trimmedPhone)) return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
+  const addressProblem = addressError(address);
+  if (addressProblem) return res.status(400).json({ error: addressProblem });
 
   try {
     const contact = await Contact.findOne({ _id: req.params.id, clientId: req.user.clientId });

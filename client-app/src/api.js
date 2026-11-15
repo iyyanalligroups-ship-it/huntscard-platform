@@ -190,6 +190,26 @@ async function parseUploadResponse(res, actionLabel = 'Upload') {
   return data;
 }
 
+async function openInvoicePreview(url) {
+  const win = window.open('', '_blank');
+  try {
+    const token = getToken();
+    const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Could not open the invoice (${res.status})`);
+    }
+    const blob = new Blob([await res.blob()], { type: 'application/pdf' });
+    const blobUrl = URL.createObjectURL(blob);
+    if (win) win.location.href = blobUrl;
+    else window.location.href = blobUrl; // pop-ups blocked: open in this tab instead
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch (err) {
+    if (win) win.close();
+    throw err;
+  }
+}
+
 export const api = {
   // identifier is either the login email or the phone number -- same
   // shared password either way.
@@ -376,7 +396,11 @@ export const api = {
 
   // Dashboard notification bell + Web Push subscription -- see
   // components/NotificationBell.jsx.
-  getNotifications: () => request('/api/profile/notifications'),
+  getNotifications: ({ limit, skip } = {}) =>
+    request(`/api/profile/notifications${limit ? `?limit=${limit}&skip=${skip || 0}` : ''}`),
+  markAllNotificationsRead: () => request('/api/profile/notifications/read-all', { method: 'POST' }),
+  deleteNotification: (id) => request(`/api/profile/notifications/${id}`, { method: 'DELETE' }),
+  clearNotifications: (scope) => request(`/api/profile/notifications?scope=${scope}`, { method: 'DELETE' }),
   markNotificationRead: (id) => request(`/api/profile/notifications/${id}/read`, { method: 'POST' }),
   getPushPublicKey: () => request('/api/profile/push/public-key'),
   subscribePush: (subscription) => request('/api/profile/push/subscribe', { method: 'POST', body: subscription }),
@@ -409,6 +433,10 @@ export const api = {
   // claim() actually redeems it and creates the request.
   previewCoupon: (code) => request('/api/profile/coupon/preview', { method: 'POST', body: { code } }),
   claimCoupon: (payload) => request('/api/profile/coupon/claim', { method: 'POST', body: payload }),
+  // Opens the invoice PDF in a new tab for a quick look (no download). The tab is opened straight away,
+  // inside the click, so pop-up blockers allow it, and pointed at the PDF once it has loaded.
+  viewCardInvoice: (requestId) => openInvoicePreview(`${API_URL}/api/profile/requests/${requestId}/invoice`),
+  viewMagicPosterInvoice: (orderId) => openInvoicePreview(`${API_URL}/api/profile/magic-poster/orders/${orderId}/invoice`),
   downloadCardInvoice: async (requestId, orderNumber) => {
     const token = getToken();
     const res = await fetch(`${API_URL}/api/profile/requests/${requestId}/invoice`, {
@@ -428,6 +456,12 @@ export const api = {
     a.remove();
     URL.revokeObjectURL(url);
   },
+
+  // Support tickets ("Raise a ticket")
+  listMyTickets: () => request('/api/profile/tickets'),
+  createTicket: (payload) => request('/api/profile/tickets', { method: 'POST', body: payload }),
+  getMyTicket: (id) => request(`/api/profile/tickets/${id}`),
+  replyToTicket: (id, text) => request(`/api/profile/tickets/${id}/reply`, { method: 'POST', body: { text } }),
 
   createNewCardOrder: (payload) => request('/api/profile/new-card-order', { method: 'POST', body: payload }),
   confirmNewCardPayment: (payload) => request('/api/profile/new-card-confirm', { method: 'POST', body: payload }),
@@ -491,8 +525,9 @@ export const api = {
   // dropdowns -- no login needed, it's just static reference data.
   getCountries: () => request('/api/public/geo/countries', { auth: false }),
   getStates: (country) => request(`/api/public/geo/states?country=${encodeURIComponent(country)}`, { auth: false }),
-  getCities: (country, state) =>
-    request(`/api/public/geo/cities?country=${encodeURIComponent(country)}&state=${encodeURIComponent(state)}`, { auth: false }),
+  getCities: (country, state, district) =>
+    request(`/api/public/geo/cities?country=${encodeURIComponent(country)}&state=${encodeURIComponent(state)}${district ? `&district=${encodeURIComponent(district)}` : ''}`, { auth: false }),
+  getDistricts: (stateIso) => request(`/api/public/geo/districts?state=${encodeURIComponent(stateIso)}`, { auth: false }),
   lookupPincode: (pincode) => request(`/api/public/geo/pincode/${encodeURIComponent(pincode)}`, { auth: false }),
 
   // Public shop -- no login required, this IS how a new visitor gets an account
@@ -590,7 +625,8 @@ export const api = {
   // new one). See pages/Contacts.jsx.
   listContacts: () => request('/api/profile/contacts'),
   // One page of contacts: { contacts, total, hasMore } -- the Contacts page loads 10 at a time.
-  listContactsPage: ({ limit = 10, skip = 0 } = {}) => request(`/api/profile/contacts?limit=${limit}&skip=${skip}`),
+  listContactsPage: ({ limit = 10, skip = 0, q = '', field = 'all' } = {}) =>
+    request(`/api/profile/contacts?limit=${limit}&skip=${skip}${q ? `&q=${encodeURIComponent(q)}&field=${field}` : ''}`),
   // "My activity": the logged-in person's own logins and steps (see backend/routes/activity.js)
   myActivity: ({ from, to, page } = {}) => {
     const q = new URLSearchParams();

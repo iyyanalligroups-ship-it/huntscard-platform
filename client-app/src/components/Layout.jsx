@@ -114,6 +114,7 @@ const NAV_GROUPS = [
     label: 'Help & settings',
     icon: 'chat',
     items: [
+      { to: '/dashboard/tickets', label: 'Raise a Ticket', icon: 'chat' },
       { to: '/chat', label: 'Chat Support', icon: 'chat' },
       { to: '/dashboard/account-settings', label: 'Settings', icon: 'settings' },
     ],
@@ -138,6 +139,7 @@ export default function Layout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [navSearch, setNavSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [activeResult, setActiveResult] = useState(0); // which search result the arrow keys have highlighted
   const [themeOpen, setThemeOpen] = useState(false);
   const topbarToolsRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -282,9 +284,23 @@ export default function Layout() {
   function submitSearch(event) {
     event.preventDefault();
     if (!searchResults.length) return;
-    navigate(searchResults[0].to);
+    navigate(searchResults[Math.min(activeResult, searchResults.length - 1)].to);
     setNavSearch('');
     setSearchOpen(false);
+  }
+
+  // Arrow keys move through the results; Enter (form submit) opens the highlighted one.
+  function handleSearchKeyDown(event) {
+    if (!searchResults.length) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setSearchOpen(true);
+      setActiveResult((i) => (i + 1) % searchResults.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setSearchOpen(true);
+      setActiveResult((i) => (i - 1 + searchResults.length) % searchResults.length);
+    }
   }
 
   return (
@@ -375,15 +391,21 @@ export default function Layout() {
                 type="search"
                 value={navSearch}
                 onFocus={() => setSearchOpen(true)}
-                onChange={(event) => { setNavSearch(event.target.value); setSearchOpen(true); }}
+                onChange={(event) => { setNavSearch(event.target.value); setSearchOpen(true); setActiveResult(0); }}
+                onKeyDown={handleSearchKeyDown}
+                role="combobox"
+                aria-expanded={searchOpen && Boolean(navSearch.trim())}
+                aria-controls="dash-search-results"
+                aria-activedescendant={searchResults.length ? `dash-search-opt-${activeResult}` : undefined}
+                autoComplete="off"
                 placeholder="Search pages..."
                 aria-label="Search dashboard pages"
               />
               <kbd>⌘K</kbd>
               {searchOpen && navSearch.trim() && (
-                <div className="dash-search-results">
-                  {searchResults.length ? searchResults.map((item) => (
-                    <button type="button" key={item.to} onClick={() => { navigate(item.to); setNavSearch(''); setSearchOpen(false); }}>
+                <div className="dash-search-results" id="dash-search-results" role="listbox">
+                  {searchResults.length ? searchResults.map((item, index) => (
+                    <button type="button" key={item.to} id={`dash-search-opt-${index}`} role="option" aria-selected={index === activeResult} className={index === activeResult ? 'is-active' : undefined} onMouseEnter={() => setActiveResult(index)} onClick={() => { navigate(item.to); setNavSearch(''); setSearchOpen(false); }}>
                       <span className="side-icon">{ICONS[item.icon]}</span>
                       <span>{item.label}</span>
                       <small>Open</small>

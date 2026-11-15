@@ -10,6 +10,7 @@ const contactsRoutes = require('./routes/contacts');
 const appointmentsRoutes = require('./routes/appointments');
 const notificationsRoutes = require('./routes/notifications');
 const chatRoutes = require('./routes/chat');
+const supportTicketsRoutes = require('./routes/supportTickets');
 const activityRoutes = require('./routes/activity');
 const publicRoutes = require('./routes/public');
 const adminAuthRoutes = require('./routes/adminAuth');
@@ -58,6 +59,7 @@ async function main() {
   app.use('/api/profile', appointmentsRoutes);
   app.use('/api/profile', notificationsRoutes);
   app.use('/api/profile', chatRoutes);
+  app.use('/api/profile', supportTicketsRoutes);
   app.use('/api/profile', activityRoutes);
   app.use('/api/profile/coupon', couponRoutes);
   app.use('/api/public', publicRoutes);
@@ -69,6 +71,12 @@ async function main() {
   // Basic 404 + error handlers so the app doesn't crash on unexpected input
   app.use((req, res) => res.status(404).json({ error: 'Not found' }));
   app.use((err, req, res, next) => {
+    // Upload rejections (oversize / wrong type) that a route didn't catch itself: a clear 400, not a 500.
+    if (err && err.name === 'MulterError') {
+      const msg = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large.' : err.message;
+      return res.status(400).json({ error: msg });
+    }
+    if (err && /^Only .* allowed/.test(err.message || '')) return res.status(400).json({ error: err.message });
     console.error('[unhandled]', err);
     res.status(500).json({ error: 'Internal server error' });
   });

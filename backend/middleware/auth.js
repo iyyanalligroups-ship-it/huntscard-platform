@@ -125,4 +125,15 @@ function requireAdminPrime(req, res, next) {
   });
 }
 
-module.exports = { requireAuth, requireAdmin, requireSeniorAdmin, requireEncodeAccess, requireAdminPrime };
+// Admin Prime or a regular Admin -- may add, edit, remove and reset the passwords of team members. The Admin
+// Prime account itself stays protected: only Prime can touch it (see the checks in routes/admin.js).
+function requireTeamManager(req, res, next) {
+  requireAdmin(req, res, () => {
+    if (!['primeadmin', 'admin'].includes(req.admin?.role)) {
+      return res.status(403).json({ error: 'Only an Admin or the Admin Prime can manage the team.' });
+    }
+    next();
+  });
+}
+
+module.exports = { requireAuth, requireAdmin, requireSeniorAdmin, requireEncodeAccess, requireAdminPrime, requireTeamManager };

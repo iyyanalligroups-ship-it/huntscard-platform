@@ -5,6 +5,7 @@ import { api, setSession } from '../api.js';
 import ThemedSelect from './ThemedSelect.jsx';
 import ThemeDatePicker from './ThemeDatePicker.jsx';
 import { trackEvent } from '../siteConfig.js';
+import { validateNewPassword, MIN_PASSWORD_LENGTH } from '../utils/passwordRules.js';
 
 // Matches the backend's own LOGIN_OTP_RESEND_COOLDOWN_MS (routes/auth.js)
 // -- purely a UX countdown here, the server enforces the real cooldown
@@ -104,6 +105,9 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
 
   function switchLoginMethod(next) {
     setLoginMethod(next);
+    // The identifier field is shared with the password tab, which accepts an email. OTP is phone-only,
+    // so carry over digits only (max 10) -- otherwise a typed email would sit in the phone box.
+    if (next === 'otp') setLoginEmail((v) => v.replace(/\D/g, '').slice(0, 10));
     setError('');
     setOtpSent(false);
     setOtp('');
@@ -246,6 +250,11 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
       setError('Verify your phone number before creating your account.');
       return;
     }
+    const pwProblem = validateNewPassword(regPassword);
+    if (pwProblem) {
+      setError(pwProblem);
+      return;
+    }
     setLoading(true);
     try {
       const res = await api.register({
@@ -291,7 +300,8 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
               <button
                 type="button"
                 onClick={() => switchLoginMethod('password')}
-                className={loginMethod === 'password' ? undefined : 'secondary'}
+                aria-pressed={loginMethod === 'password'}
+                className={loginMethod === 'password' ? 'auth-tab-active' : 'secondary'}
                 style={{ width: 'auto', padding: '6px 14px' }}
               >
                 Password
@@ -299,7 +309,8 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
               <button
                 type="button"
                 onClick={() => switchLoginMethod('otp')}
-                className={loginMethod === 'otp' ? undefined : 'secondary'}
+                aria-pressed={loginMethod === 'otp'}
+                className={loginMethod === 'otp' ? 'auth-tab-active' : 'secondary'}
                 style={{ width: 'auto', padding: '6px 14px' }}
               >
                 OTP (phone only)
@@ -568,8 +579,8 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                     id="modalRegPassword"
                     type={showRegPassword ? 'text' : 'password'}
                     autoComplete="new-password"
-                    minLength={8}
-                    placeholder="Create a password"
+                    minLength={MIN_PASSWORD_LENGTH}
+                    placeholder="At least 6 characters"
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
                     required
@@ -583,7 +594,7 @@ export default function AuthModal({ mode: initialMode, onClose, redirectTo }) {
                     {showRegPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
-                <p className="hint" style={{ marginBottom: 0 }}>At least 8 characters.</p>
+                <p className="hint" style={{ marginBottom: 0 }}>At least 6 characters.</p>
               </div>
               <button type="submit" disabled={loading || !regPhoneVerificationToken}>
                 {loading ? 'Creating account…' : regPhoneVerificationToken ? 'Create account' : 'Verify phone to continue'}

@@ -66,6 +66,7 @@ const CardRequestSchema = new mongoose.Schema(
       country: { type: String, trim: true },
       state: { type: String, trim: true },
       city: { type: String, trim: true },
+      district: { type: String, trim: true, default: '' },
       pincode: { type: String, trim: true },
     },
     // Shipment state belongs to this purchase, not to the client account as
@@ -98,6 +99,11 @@ const CardRequestSchema = new mongoose.Schema(
     // paymentStatus is still 'paid' (amountPaid: 0) so it displays/behaves
     // like any other paid request everywhere else; these two fields are
     // purely so admin can see WHY it's free.
+    // Set when an admin gifted this card (no payment, amount 0) or placed the paid order on the client's behalf
+    // from the admin panel. Purely so the order history shows WHY it is free / who placed it.
+    isGift: { type: Boolean, default: false },
+    giftedBy: { type: String, trim: true, default: null }, // admin email
+    placedByAdmin: { type: String, trim: true, default: null }, // admin email, for an order paid via the admin panel
     couponCode: { type: String, trim: true, default: null },
     couponSource: { type: String, trim: true, default: null }, // e.g. 'huntsworld'
   },

@@ -80,8 +80,15 @@ const ROUTES = [
   ['DELETE', /^\/api\/profile\/chat\/([^/]+)$/, 'Deleted a chat message'],
   ['GET', /^\/api\/profile\/notifications$/, 'Opened notifications', POLL],
   ['POST', /^\/api\/profile\/notifications\/([^/]+)\/read$/, 'Read a notification'],
+  ['POST', /^\/api\/profile\/notifications\/read-all$/, 'Marked all notifications read'],
+  ['DELETE', /^\/api\/profile\/notifications\/([^/]+)$/, 'Deleted a notification'],
+  ['DELETE', /^\/api\/profile\/notifications$/, 'Cleared notifications'],
   ['POST', /^\/api\/profile\/push\/subscribe$/, 'Turned notifications on'],
   ['POST', /^\/api\/profile\/push\/unsubscribe$/, 'Turned notifications off'],
+  // support tickets
+  ['POST', /^\/api\/profile\/tickets$/, 'Raised a support ticket'],
+  ['POST', /^\/api\/profile\/tickets\/([^/]+)\/reply$/, 'Replied to a support ticket'],
+  ['GET', /^\/api\/profile\/tickets\/([^/]+)$/, 'Opened a support ticket', POLL],
   // coupon
   ['POST', /^\/api\/profile\/coupon\/preview$/, 'Checked a coupon'],
   ['POST', /^\/api\/profile\/coupon\/claim$/, 'Claimed a coupon'],

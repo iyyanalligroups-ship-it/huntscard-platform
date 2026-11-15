@@ -7,6 +7,7 @@ import ParticleWaves from '../components/ParticleWaves.jsx';
 import ThemedSelect from '../components/ThemedSelect.jsx';
 import ThemeDatePicker from '../components/ThemeDatePicker.jsx';
 import { trackEvent } from '../siteConfig.js';
+import { validateNewPassword, MIN_PASSWORD_LENGTH } from '../utils/passwordRules.js';
 
 function todayDateValue() {
   const today = new Date();
@@ -104,6 +105,11 @@ export default function Register() {
     setError('');
     if (!phoneVerificationToken) {
       setError('Verify your phone number before creating your account.');
+      return;
+    }
+    const pwProblem = validateNewPassword(password);
+    if (pwProblem) {
+      setError(pwProblem);
       return;
     }
     setLoading(true);
@@ -285,8 +291,8 @@ export default function Register() {
                       id="password"
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="new-password"
-                      minLength={8}
-                      placeholder="At least 8 characters"
+                      minLength={MIN_PASSWORD_LENGTH}
+                      placeholder="At least 6 characters"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required

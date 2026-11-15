@@ -33,21 +33,55 @@ function loadImageDimsFromUrl(url) {
   });
 }
 
-function orderStage(p) {
+// Progress of the LATEST paid card order. The account-level flags on `p` (dispatched / delivered / chipEncoded)
+// describe the account's first card, so they only apply when the latest order IS the oldest one. A newer order
+// uses its own shipment data -- otherwise every new purchase showed as already delivered.
+function orderStage(p, orders) {
   if (!p?.paid) return -1; // no order yet
-  if (p.delivered) return 3;
-  if (p.dispatched) return 2;
-  if (p.chipEncoded) return 1;
+  const paid = (orders || []).filter((o) => o.type === 'upgrade' && o.paymentStatus === 'paid' && o.status !== 'rejected');
+  if (paid.length === 0) {
+    // Orders not loaded (yet) or none -- fall back to the account flags.
+    if (p.delivered) return 3;
+    if (p.dispatched) return 2;
+    if (p.chipEncoded) return 1;
+    return 0;
+  }
+  const byDate = [...paid].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  const latest = byDate[byDate.length - 1];
+  const isOldest = latest._id === byDate[0]._id;
+  const own = Boolean(latest.trackingId || latest.dispatchedAt || latest.deliveredAt);
+  const delivered = own ? Boolean(latest.deliveredAt) : isOldest && Boolean(p.delivered);
+  const dispatched = own ? Boolean(latest.dispatchedAt) : isOldest && Boolean(p.dispatched);
+  if (delivered) return 3;
+  if (dispatched) return 2;
+  if ((isOldest && p.chipEncoded) || own) return 1;
   return 0;
 }
 
 export default function DashboardHome() {
   const [profile, setProfile] = useState(null);
+  const [orders, setOrders] = useState([]); // this client's card/upgrade requests, newest data for Order progress
   const [cards, setCards] = useState([]); // every physical card this client owns -- see api.getMyCards()
   const [selectedCardNumber, setSelectedCardNumber] = useState(null); // which one the hero preview shows -- defaults to profile.primaryCardNumber once known
   const [cardCompositeUrl, setCardCompositeUrl] = useState(null); // data URL, once composited -- see the effect below
   const [heroImageDims, setHeroImageDims] = useState(null); // real pixel size of the currently-shown design image, see loadImageDimsFromUrl
   const [error, setError] = useState('');
+  // "See plans with Zing" -- plans that include Zing, listed under the Zing box once it's opened.
+  const [zingPlansOpen, setZingPlansOpen] = useState(false);
+  const [zingPlans, setZingPlans] = useState(null); // null = not loaded yet
+  const [zingPlansError, setZingPlansError] = useState('');
+
+  function toggleZingPlans() {
+    const next = !zingPlansOpen;
+    setZingPlansOpen(next);
+    if (next && zingPlans === null) {
+      setZingPlansError('');
+      api
+        .listShopPlans()
+        .then((all) => setZingPlans(all.filter((p) => p.zingEnabled)))
+        .catch((err) => setZingPlansError(err.message));
+    }
+  }
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState('');
   const toastTimeoutRef = useRef(null);
@@ -92,6 +126,7 @@ export default function DashboardHome() {
   // picker.
   useEffect(() => {
     api.getMyCards().then(setCards).catch(() => {});
+    api.listMyRequests().then(setOrders).catch(() => {}); // for the Order progress panel
   }, []);
 
   // Default the picker to whichever card cardFrontImageUrl/cardShape
@@ -287,11 +322,21 @@ export default function DashboardHome() {
   const totalFilled = groups.reduce((s, g) => s + g.filled, 0);
   const pct = Math.round((totalFilled / totalFields) * 100);
 
-  const stage = orderStage(profile);
+  const stage = orderStage(profile, orders);
   const planLabel = profile?.cardType
     ? profile.planName || profile.cardType.charAt(0).toUpperCase() + profile.cardType.slice(1)
     : 'No card yet';
   const statusLabel = stage === -1 ? 'No order yet' : ORDER_STAGES[stage];
+
+  // "Your plan" tile: the most recently issued ACTIVE card (highest card number), not just the
+  // account's first plan -- so buying a newer card is reflected here. Falls back to the account plan.
+  const latestActiveCard = [...cards].filter((c) => c.active).sort((a, b) => b.cardNumber - a.cardNumber)[0] || null;
+  const latestPlanLabel = latestActiveCard
+    ? latestActiveCard.planName || latestActiveCard.cardType || planLabel
+    : planLabel;
+  const latestPlanSub = latestActiveCard
+    ? `Card #${latestActiveCard.cardNumber}${latestActiveCard.variantName ? ` · ${latestActiveCard.variantName}` : ''}${profile?.paid ? ' · Paid' : ''}`
+    : profile?.paid ? 'Paid' : 'Not purchased yet';
 
   // Whichever card the hero picker (next to the bell) has selected --
   // falls back to profile's own (primary-card) fields ONLY while `cards`
@@ -347,8 +392,8 @@ export default function DashboardHome() {
     },
     {
       label: 'Your plan',
-      value: planLabel,
-      sub: profile?.paid ? 'Paid' : 'Not purchased yet',
+      value: latestPlanLabel,
+      sub: latestPlanSub,
       tone: 'blue',
       icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></svg>
@@ -458,9 +503,30 @@ export default function DashboardHome() {
                 </span>
               </div>
             ) : (
-              <Link to="/dashboard/upgrade" className="dash-hero-btn">See plans with Zing</Link>
+              <button type="button" className="dash-hero-btn zing-plans-btn" onClick={toggleZingPlans} aria-expanded={zingPlansOpen}>
+                {zingPlansOpen ? 'Hide Zing plans' : 'See plans with Zing'}
+              </button>
             )}
           </section>
+          {!profile?.zingEnabled && zingPlansOpen && (
+            <div className="zing-plans" style={{ marginTop: 12, padding: '14px 16px', borderRadius: 14, border: '1px solid var(--panel-border)', background: 'var(--panel)' }}>
+              <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600 }}>Plans that include Zing -- pick one to see it in the shop</p>
+              {zingPlansError && <p className="hint">{zingPlansError}</p>}
+              {zingPlans === null && !zingPlansError && <p className="hint">Loading plans…</p>}
+              {zingPlans && zingPlans.length === 0 && <p className="hint">No plan includes Zing right now.</p>}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {(zingPlans || []).map((p) => (
+                  <Link
+                    key={p.key}
+                    to={`/dashboard/upgrade?plan=${encodeURIComponent(p.key)}`}
+                    style={{ padding: '8px 14px', borderRadius: 999, border: '1px solid var(--panel-border)', fontSize: 13, fontWeight: 600, textDecoration: 'none', color: 'inherit', background: 'var(--panel-raised, transparent)' }}
+                  >
+                    {p.name}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {hasOwnedCard && (
@@ -491,9 +557,38 @@ export default function DashboardHome() {
                       backgroundPosition: 'center',
                       backgroundRepeat: 'no-repeat',
                     }
-                  : {}),
+                  : { position: 'relative' }),
               }}
             >
+              {!(cardCompositeUrl || heroCardDesignUrl) && (
+                <div
+                  role="status"
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    zIndex: 2,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: 16,
+                    textAlign: 'center',
+                    color: '#fff',
+                    textShadow: '0 1px 6px rgba(0,0,0,0.45)',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <strong style={{ fontSize: 14 }}>
+                    {selectedCard && !selectedCard.variantName ? 'Design not chosen yet' : 'Preview not available'}
+                  </strong>
+                  <span style={{ fontSize: 12, lineHeight: 1.4, opacity: 0.9 }}>
+                    {selectedCard && !selectedCard.variantName
+                      ? 'No card design has been assigned to this card yet. Please contact support.'
+                      : 'We could not load a design image for this card.'}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         )}

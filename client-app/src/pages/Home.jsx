@@ -189,7 +189,7 @@ export default function Home() {
   const [plans, setPlans] = useState(null);
   const [posters, setPosters] = useState([]);
   useEffect(() => {
-    api.getPublicMagicArt().then((list) => setPosters(Array.isArray(list) ? list.filter((p) => p.imageUrl) : [])).catch(() => setPosters([]));
+    api.getPublicMagicArt().then((list) => setPosters(Array.isArray(list) ? list.filter((p) => p.imageUrl && p.active) : [])).catch(() => setPosters([]));
   }, []);
   useEffect(() => {
     api.listPlans().then((list) => setPlans(Array.isArray(list) ? list.slice(0, 4) : [])).catch(() => setPlans([]));

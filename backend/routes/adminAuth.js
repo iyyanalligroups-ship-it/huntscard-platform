@@ -98,8 +98,8 @@ router.post('/change-password', requireAdmin, async (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ error: 'currentPassword and newPassword are required' });
     }
-    if (newPassword.length < 10) {
-      return res.status(400).json({ error: 'New password must be at least 10 characters' });
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
     }
 
     const admin = await Admin.findById(req.admin.adminId);

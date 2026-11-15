@@ -102,17 +102,44 @@ function rowToContact(row) {
   };
 }
 
+// Address (optional): 5-200 characters, at least one letter, only ordinary address punctuation.
+function validateAddress(value) {
+  const v = (value || '').trim();
+  if (!v) return '';
+  if (v.length < 5) return 'Address is too short -- add the street, city and state.';
+  if (v.length > 200) return 'Address must be 200 characters or fewer.';
+  if (!/[A-Za-z]/.test(v)) return 'Address must include letters, not just numbers.';
+  if (!/^[A-Za-z0-9\s,.\-/#()&'’:;_]+$/.test(v)) return 'Address has characters that are not allowed.';
+  return '';
+}
+
 const PAGE_SIZE = 10; // contacts shown at first, and added by each "Load more"
 
 const EMPTY_FORM = { firstName: '', lastName: '', phone: '', email: '', org: '', address: '', notes: '' };
 
 export default function Contacts() {
   const [contacts, setContacts] = useState([]); // the pages loaded so far, not necessarily everything
-  const [total, setTotal] = useState(0); // how many contacts exist in all
+  const [total, setTotal] = useState(0); // how many contacts match the current filter (all of them when there is none)
+  const [totalAll, setTotalAll] = useState(0); // how many contacts exist in all, whatever the filter
+  const [toast, setToast] = useState(null); // { text, kind: 'error' | 'success' }
+  const toastTimerRef = useRef(null);
+  function showToast(text, kind = 'success') {
+    if (!text) return;
+    setToast({ text, kind });
+    clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), kind === 'error' ? 5000 : 3000);
+  }
+  useEffect(() => () => clearTimeout(toastTimerRef.current), []);
+  const [searchText, setSearchText] = useState('');
+  const [activeQuery, setActiveQuery] = useState(''); // searchText after a short typing pause -- what the list is actually filtered by
   const [loadingMore, setLoadingMore] = useState(false);
   const [excelExporting, setExcelExporting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  useEffect(() => {
+    if (error) showToast(error, 'error');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error]);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [exporting, setExporting] = useState(false);
@@ -166,10 +193,11 @@ export default function Contacts() {
   function loadContacts({ keep = false } = {}) {
     const limit = keep ? Math.min(50, Math.max(PAGE_SIZE, contacts.length)) : PAGE_SIZE;
     return api
-      .listContactsPage({ limit, skip: 0 })
+      .listContactsPage({ limit, skip: 0, q: activeQuery })
       .then((r) => {
         setContacts(r.contacts);
         setTotal(r.total);
+        if (!activeQuery) setTotalAll(r.total);
       })
       .catch((err) => setError(err.message));
   }
@@ -178,7 +206,7 @@ export default function Contacts() {
     setError('');
     setLoadingMore(true);
     try {
-      const r = await api.listContactsPage({ limit: PAGE_SIZE, skip: contacts.length });
+      const r = await api.listContactsPage({ limit: PAGE_SIZE, skip: contacts.length, q: activeQuery });
       // skip a row that is already on screen (the list may have changed since the last page was loaded)
       setContacts((list) => {
         const seen = new Set(list.map((c) => c._id));
@@ -194,7 +222,25 @@ export default function Contacts() {
 
   useEffect(() => {
     loadContacts().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Typing pause: apply the search text 300ms after the last keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setActiveQuery(searchText.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchText]);
+
+  // Re-run the list whenever the applied filter changes (skip the very first run -- the effect above loads it).
+  const filterFirstRun = useRef(true);
+  useEffect(() => {
+    if (filterFirstRun.current) {
+      filterFirstRun.current = false;
+      return;
+    }
+    loadContacts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeQuery]);
 
   useEffect(() => {
     if (!CONTACT_PICKER_SUPPORTED) return;
@@ -331,7 +377,9 @@ export default function Contacts() {
       await api.deleteContact(id);
       setContacts((list) => list.filter((c) => c._id !== id));
       setTotal((t) => Math.max(0, t - 1));
+      setTotalAll((t) => Math.max(0, t - 1));
       setDeleteTarget(null);
+      showToast('Contact deleted successfully.');
     } catch (err) {
       setError(err.message);
       setDeleteTarget(null);
@@ -401,7 +449,7 @@ export default function Contacts() {
     setForm({
       firstName: contact.firstName || '',
       lastName: contact.lastName || '',
-      phone: contact.phone || '',
+      phone: (contact.phone || '').replace(/\D/g, '').slice(-10),
       email: contact.email || '',
       org: contact.org || '',
       address: contact.address || '',
@@ -442,6 +490,15 @@ export default function Contacts() {
       setFormError('Phone number is required');
       return;
     }
+    if (!/^\d{10}$/.test(form.phone)) {
+      setFormError('Enter a valid 10-digit phone number.');
+      return;
+    }
+    const addressProblem = validateAddress(form.address);
+    if (addressProblem) {
+      setFormError(addressProblem);
+      return;
+    }
     setFormError('');
     setFormSaving(true);
     try {
@@ -455,6 +512,7 @@ export default function Contacts() {
       }
 
       await loadContacts({ keep: formMode === 'edit' });
+      showToast(formMode === 'edit' ? 'Contact updated successfully.' : 'Contact added successfully.');
       closeForm();
     } catch (err) {
       setFormError(err.message);
@@ -473,7 +531,6 @@ export default function Contacts() {
         restore them.
       </p>
 
-      {error && <div className="error-banner">{error}</div>}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -491,7 +548,7 @@ export default function Contacts() {
             className="secondary"
             style={{ width: 'auto' }}
             onClick={handleExport}
-            disabled={exporting || total === 0}
+            disabled={exporting || totalAll === 0}
           >
             {exporting ? 'Preparing…' : 'Export contacts'}
           </button>
@@ -532,7 +589,7 @@ export default function Contacts() {
             className="secondary"
             style={{ width: 'auto' }}
             onClick={handleExcelExport}
-            disabled={total === 0 || excelExporting}
+            disabled={totalAll === 0 || excelExporting}
           >
             {excelExporting ? 'Preparing…' : 'Export to Excel'}
           </button>
@@ -617,7 +674,7 @@ export default function Contacts() {
               </div>
               <div className="field">
                 <label htmlFor="cPhone">Phone number</label>
-                <input id="cPhone" type="tel" required placeholder="e.g. +91 98765 43210" value={form.phone} onChange={(e) => updateFormField('phone', e.target.value)} />
+                <input id="cPhone" type="tel" inputMode="numeric" required maxLength={10} pattern="[0-9]{10}" title="Enter exactly 10 digits" placeholder="e.g. 9876543210" value={form.phone} onChange={(e) => updateFormField('phone', e.target.value.replace(/\D/g, '').slice(0, 10))} />
               </div>
               <div className="field">
                 <label htmlFor="cEmail">Email</label>
@@ -629,7 +686,8 @@ export default function Contacts() {
               </div>
               <div className="field">
                 <label htmlFor="cAddress">Address</label>
-                <input id="cAddress" placeholder="Street, city, state, PIN code" value={form.address} onChange={(e) => updateFormField('address', e.target.value)} />
+                <input id="cAddress" maxLength={200} placeholder="Street, city, state, PIN code" value={form.address} onChange={(e) => updateFormField('address', e.target.value)} />
+                {validateAddress(form.address) && <p className="hint" style={{ margin: '6px 0 0', color: 'var(--danger, #c62828)' }}>{validateAddress(form.address)}</p>}
               </div>
             </div>
             <div className="field">
@@ -666,9 +724,28 @@ export default function Contacts() {
         )}
       </div>
 
+      {toast && (
+        <div className={`profile-toast profile-toast--${toast.kind}`} role={toast.kind === 'error' ? 'alert' : 'status'}>
+          <span>{toast.text}</span>
+          <button type="button" aria-label="Dismiss" onClick={() => setToast(null)}>×</button>
+        </div>
+      )}
+
       <div className="card">
+        {totalAll > 0 && (
+          <div className="contact-filter">
+            <input
+              type="search"
+              className="contact-filter-input"
+              placeholder="Search by name or phone number"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              aria-label="Search contacts by name or phone number"
+            />
+          </div>
+        )}
         {contacts.length === 0 ? (
-          <p className="hint" style={{ margin: 0 }}>No contacts saved yet — use Import to add some from this phone.</p>
+          <p className="hint" style={{ margin: 0 }}>{activeQuery ? 'No contacts match this search.' : 'No contacts saved yet — use Import to add some from this phone.'}</p>
         ) : (
           <div className="contact-list">
             {contacts.map((c) => (

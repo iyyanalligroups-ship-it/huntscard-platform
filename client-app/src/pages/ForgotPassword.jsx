@@ -14,6 +14,8 @@ import {
   Wifi,
 } from 'lucide-react';
 import { api } from '../api.js';
+import PasswordInput from '../components/PasswordInput.jsx';
+import { validateNewPassword, MIN_PASSWORD_LENGTH } from '../utils/passwordRules.js';
 import WaveBackdrop from '../components/WaveBackdrop.jsx';
 import ParticleWaves from '../components/ParticleWaves.jsx';
 
@@ -99,8 +101,9 @@ export default function ForgotPassword() {
   async function handleSetPassword(event) {
     event.preventDefault();
     setError('');
-    if (newPassword !== confirmPassword) {
-      setError('Passwords do not match');
+    const problem = validateNewPassword(newPassword, confirmPassword);
+    if (problem) {
+      setError(problem);
       return;
     }
     setLoading(true);
@@ -136,7 +139,7 @@ export default function ForgotPassword() {
     password: {
       eyebrow: 'Secure your account',
       title: 'Create a new password',
-      description: 'Choose a strong password with at least 8 characters.',
+      description: 'Choose a password with at least 6 characters.',
     },
     done: {
       eyebrow: 'Recovery complete',
@@ -265,12 +268,9 @@ export default function ForgotPassword() {
                   <label htmlFor="newPassword">New password</label>
                   <div className="login-input">
                     <LockKeyhole size={18} aria-hidden="true" />
-                    <input
-                      id="newPassword"
-                      type="password"
+                    <PasswordInput wrap={false} id="newPassword"
                       autoComplete="new-password"
-                      minLength={8}
-                      placeholder="Minimum 8 characters"
+                      placeholder="Minimum 6 characters"
                       value={newPassword}
                       onChange={(event) => setNewPassword(event.target.value)}
                       required
@@ -281,11 +281,8 @@ export default function ForgotPassword() {
                   <label htmlFor="confirmPassword">Confirm new password</label>
                   <div className="login-input">
                     <BadgeCheck size={18} aria-hidden="true" />
-                    <input
-                      id="confirmPassword"
-                      type="password"
+                    <PasswordInput wrap={false} id="confirmPassword"
                       autoComplete="new-password"
-                      minLength={8}
                       placeholder="Repeat your new password"
                       value={confirmPassword}
                       onChange={(event) => setConfirmPassword(event.target.value)}

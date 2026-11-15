@@ -431,7 +431,7 @@ export default function HomeV3() {
   useEffect(() => {
     api.listPlans().then((l) => setPlans(Array.isArray(l) ? l.slice(0, 6) : [])).catch(() => setPlans([]));
     api.getPublicFaq().then((l) => setFaqs(Array.isArray(l) ? l : [])).catch(() => setFaqs([]));
-    api.getPublicMagicArt().then((l) => setPosters(Array.isArray(l) ? l.filter((p) => p.imageUrl).slice(0, 3) : [])).catch(() => setPosters([]));
+    api.getPublicMagicArt().then((l) => setPosters(Array.isArray(l) ? l.filter((p) => p.imageUrl && p.active).slice(0, 3) : [])).catch(() => setPosters([]));
   }, []);
 
   const proof = [

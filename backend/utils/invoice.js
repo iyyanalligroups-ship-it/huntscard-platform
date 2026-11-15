@@ -103,6 +103,7 @@ function normalizeCardInvoiceOrder(request, client, plan, savedAddress, fallback
         country: sourceAddress.country || 'India',
         state: sourceAddress.state || 'Not recorded',
         city: sourceAddress.city || 'Not recorded',
+        district: sourceAddress.district || '',
         pincode: sourceAddress.pincode || 'Not recorded',
       }
     : {
@@ -198,7 +199,7 @@ function buildInvoicePdf(order, client, res, options = {}) {
   doc.font('Helvetica').fontSize(7.7).fillColor(C.textDim);
   const addressLine = `${order.delivery.line1}${order.delivery.line2 ? `, ${order.delivery.line2}` : ''}`;
   doc.text(addressLine, buyerX + 14, detailY + 47, { width: detailW - 28, lineGap: 1 });
-  doc.text(`${order.delivery.city}, ${order.delivery.state}`, buyerX + 14, detailY + 70, { width: detailW - 28 });
+  doc.text([order.delivery.city, order.delivery.district, order.delivery.state].filter(Boolean).join(', '), buyerX + 14, detailY + 70, { width: detailW - 28 });
   doc.text(`${order.delivery.country} - ${order.delivery.pincode}`, buyerX + 14, detailY + 82, { width: detailW - 28 });
   doc.font('Helvetica-Bold').fontSize(7.7).fillColor(C.ink).text(`Phone: ${order.delivery.phone}`, buyerX + 14, detailY + 96, { width: detailW - 28 });
 

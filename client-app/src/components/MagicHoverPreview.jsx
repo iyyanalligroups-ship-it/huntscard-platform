@@ -26,7 +26,9 @@ const PORTRAIT_ASPECT = 1080 / 1350; // matches admin's own fallback -- see Magi
 // percentages) so that corner of the crop lands on the box's own
 // top-left corner. `objectFit: 'fill'` matches the WebGL version's
 // non-uniform stretch.
-export default function MagicHoverPreview({ imageUrl, overlays, imageWidth, imageHeight, alt, onClick, className, style }) {
+// withSound: play the clip's own audio on hover. Browsers only allow sound after the person has clicked or
+// tapped somewhere on the page once; until then the clip falls back to playing silently instead of failing.
+export default function MagicHoverPreview({ imageUrl, overlays, imageWidth, imageHeight, alt, onClick, className, style, withSound = false }) {
   const [hovering, setHovering] = useState(false);
   const videoRefs = useRef({});
   const list = (overlays || []).filter((o) => o.videoUrl);
@@ -35,7 +37,15 @@ export default function MagicHoverPreview({ imageUrl, overlays, imageWidth, imag
 
   function handleEnter() {
     setHovering(true);
-    Object.values(videoRefs.current).forEach((v) => v?.play().catch(() => {}));
+    Object.values(videoRefs.current).forEach((v) => {
+      if (!v) return;
+      v.muted = !withSound;
+      v.play().catch(() => {
+        // Sound was blocked by the browser (no click on the page yet) -- play muted rather than not at all.
+        v.muted = true;
+        v.play().catch(() => {});
+      });
+    });
   }
   function handleLeave() {
     setHovering(false);
@@ -104,7 +114,7 @@ export default function MagicHoverPreview({ imageUrl, overlays, imageWidth, imag
               key={overlay.videoUrl}
               ref={(el) => (videoRefs.current[overlay.videoUrl] = el)}
               src={overlay.videoUrl}
-              muted
+              muted={!withSound}
               loop
               playsInline
               style={{

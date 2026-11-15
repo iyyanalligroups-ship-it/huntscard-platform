@@ -25,6 +25,7 @@ const EMPTY_FORM = {
   countryName: COUNTRY_NAME,
   stateIso: '',
   stateName: '',
+  districtName: '',
   cityName: '',
   pincode: '',
 };
@@ -48,6 +49,27 @@ export default function MagicPosterCart() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [states, setStates] = useState([]);
   const [cities, setCities] = useState([]);
+  const [districts, setDistricts] = useState([]);
+  const [districtsReady, setDistrictsReady] = useState(false);
+
+  // City follows the district: it loads once a district is chosen (or straight away for a state with no district list).
+  useEffect(() => {
+    if (!form.stateIso) {
+      setCities([]);
+      return undefined;
+    }
+    if (!districtsReady) return undefined;
+    if (districts.length > 0 && !form.districtName) {
+      setCities([]);
+      return undefined;
+    }
+    let alive = true;
+    api
+      .getCities(COUNTRY_ISO, form.stateIso, form.districtName || undefined)
+      .then((list) => alive && setCities(list))
+      .catch(() => alive && setCities([]));
+    return () => { alive = false; };
+  }, [form.stateIso, form.districtName, districts, districtsReady]);
   const [savingAddress, setSavingAddress] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -97,9 +119,14 @@ export default function MagicPosterCart() {
   }, [loggedIn, selectedAddress?.state, cart.items]);
 
   function handleStateChange(option) {
-    setForm((f) => ({ ...f, stateIso: option.value, stateName: option.label, cityName: '' }));
+    setForm((f) => ({ ...f, stateIso: option.value, stateName: option.label, districtName: '', cityName: '' }));
     setCities([]);
-    api.getCities(COUNTRY_ISO, option.value).then(setCities).catch(() => {});
+    setDistricts([]);
+    setDistrictsReady(false);
+    api
+      .getDistricts(option.value)
+      .then((list) => { setDistricts(list); setDistrictsReady(true); })
+      .catch(() => { setDistricts([]); setDistrictsReady(true); });
   }
 
   function handleCityChange(option) {
@@ -135,6 +162,10 @@ export default function MagicPosterCart() {
       setError('Choose a country, state and city.');
       return;
     }
+    if (districts.length > 0 && !form.districtName) {
+      setError('Choose a district.');
+      return;
+    }
     setSavingAddress(true);
     try {
       const created = await api.createAddress({
@@ -145,6 +176,7 @@ export default function MagicPosterCart() {
         line2: form.line2,
         country: form.countryName,
         state: form.stateName,
+        district: form.districtName,
         city: form.cityName,
         pincode: form.pincode,
         isDefault: (addresses?.length || 0) === 0,
@@ -214,6 +246,7 @@ export default function MagicPosterCart() {
               line2: selected.line2,
               country: selected.country,
               state: selected.state,
+              district: selected.district,
               city: selected.city,
               pincode: selected.pincode,
             }
@@ -431,6 +464,17 @@ export default function MagicPosterCart() {
                     />
                   </label>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, flex: 1, minWidth: 140 }}>
+                    District
+                    <GeoSelect
+                      value={form.districtName}
+                      options={districts.map((districtName) => ({ value: districtName, label: districtName }))}
+                      onChange={(option) => setForm((f) => ({ ...f, districtName: option.value, cityName: '' }))}
+                      placeholder="Select district"
+                      searchPlaceholder="Search districts…"
+                      disabled={!form.stateIso}
+                    />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, flex: 1, minWidth: 140 }}>
                     City
                     <GeoSelect
                       value={form.cityName}
@@ -438,7 +482,7 @@ export default function MagicPosterCart() {
                       onChange={handleCityChange}
                       placeholder="Select city"
                       searchPlaceholder="Search cities…"
-                      disabled={!form.stateIso}
+                      disabled={!form.stateIso || (districts.length > 0 && !form.districtName)}
                     />
                   </label>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, flex: 1, minWidth: 100 }}>

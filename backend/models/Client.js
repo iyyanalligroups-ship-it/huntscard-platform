@@ -47,6 +47,7 @@ const ClientSchema = new mongoose.Schema(
     addressState: { type: String, trim: true },
     addressStateCode: { type: String, trim: true, uppercase: true },
     addressCity: { type: String, trim: true },
+    addressDistrict: { type: String, trim: true },
     addressPincode: { type: String, trim: true, maxlength: 6 },
     googleMapsUrl: { type: String, trim: true },
     // "Expertise & Highlights" tags shown as #hashtags under bio on the

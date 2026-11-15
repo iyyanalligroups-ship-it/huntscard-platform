@@ -3,6 +3,10 @@
 // show a system notification while the dashboard tab isn't focused.
 // Registered from NotificationBell.jsx via navigator.serviceWorker.register('/sw.js').
 
+// Activate immediately on first install so subscribing doesn't wait for a reload.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+
 self.addEventListener('push', (event) => {
   let data = { title: 'huntsTAG', body: 'You have a new notification' };
   try {

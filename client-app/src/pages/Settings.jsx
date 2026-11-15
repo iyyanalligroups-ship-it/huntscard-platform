@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { api } from '../api.js';
+import { validateNewPassword, MIN_PASSWORD_LENGTH } from '../utils/passwordRules.js';
 
 export default function Settings() {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -63,8 +64,9 @@ export default function Settings() {
     setError('');
     setSaved(false);
 
-    if (newPassword !== confirmPassword) {
-      setError("New passwords don't match.");
+    const problem = validateNewPassword(newPassword, confirmPassword);
+    if (problem) {
+      setError(problem);
       return;
     }
 
@@ -142,7 +144,7 @@ export default function Settings() {
               id="newPassword"
               type={showNew ? 'text' : 'password'}
               autoComplete="new-password"
-              minLength={8}
+              minLength={MIN_PASSWORD_LENGTH}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
@@ -151,7 +153,7 @@ export default function Settings() {
               {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
-          <p className="hint" style={{ marginBottom: 0 }}>At least 8 characters.</p>
+          <p className="hint" style={{ marginBottom: 0 }}>At least {MIN_PASSWORD_LENGTH} characters.</p>
         </div>
         <div className="field">
           <label htmlFor="confirmPassword">Confirm new password</label>
@@ -225,7 +227,7 @@ export default function Settings() {
                     )}
                   </div>
                   <div className="hint" style={{ margin: '2px 0 0' }}>
-                    {card.cardType || 'No plan set'} · {card.encoded ? 'Encoded' : 'Not yet encoded'}
+                    {card.planName || card.cardType || 'No plan set'} · {card.encoded ? 'Encoded' : 'Not yet encoded'}
                   </div>
                 </div>
                 <button

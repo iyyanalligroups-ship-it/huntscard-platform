@@ -215,6 +215,16 @@ function uploadErrorMessage(err, maxSizeLabel) {
   return err.message;
 }
 
+// Used as route middleware: turns a multer error (oversize / wrong type) into a clear 400
+// instead of letting it fall through to the global handler's "Internal server error".
+function uploadGuard(middleware, maxSizeLabel) {
+  return (req, res, next) =>
+    middleware(req, res, (err) => {
+      if (err) return res.status(400).json({ error: uploadErrorMessage(err, maxSizeLabel) });
+      next();
+    });
+}
+
 // Every mutation route below returns the updated client so the dashboard
 // can setProfile(updated) straight from the response instead of refetching
 // -- but a raw Client document doesn't carry arEnabled/zingEnabled (those
@@ -526,6 +536,7 @@ const EDITABLE_FIELDS = [
   'addressCountryCode',
   'addressState',
   'addressStateCode',
+  'addressDistrict',
   'addressCity',
   'addressPincode',
   'googleMapsUrl',
@@ -930,7 +941,7 @@ router.post('/magic-card/deactivate', requireAuth, async (req, res) => {
 // other plan's design comes from the purchased variant (see
 // utils/cardVariant.js) and isn't client-uploadable; this route 403s for
 // those instead of silently accepting a file nothing will ever show.
-router.post('/magic-card/image', requireAuth, magicCardImageUpload.single('image'), async (req, res) => {
+router.post('/magic-card/image', requireAuth, uploadGuard(magicCardImageUpload.single('image'), '50MB'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const loaded = await loadMyCard(req, res);
@@ -973,7 +984,7 @@ router.delete('/magic-card/image', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/magic-card/video', requireAuth, magicCardVideoUpload.single('video'), async (req, res) => {
+router.post('/magic-card/video', requireAuth, uploadGuard(magicCardVideoUpload.single('video'), '80MB'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const loaded = await loadMyCard(req, res);
@@ -1018,7 +1029,7 @@ router.delete('/magic-card/video', requireAuth, async (req, res) => {
 // own comment. Mirrors routes/admin.js's admin-only equivalent, now
 // exposed here too so the client can set/replace their own without
 // needing admin to do it for them.
-router.post('/magic-card/model', requireAuth, magicCardModelUpload.single('model'), async (req, res) => {
+router.post('/magic-card/model', requireAuth, uploadGuard(magicCardModelUpload.single('model'), '50MB'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const loaded = await loadMyCard(req, res);
@@ -1122,6 +1133,7 @@ router.put('/me', requireAuth, async (req, res) => {
           country: client.addressCountry || 'India',
           state: client.addressState || '',
           city: client.addressCity || '',
+          district: client.addressDistrict || '',
           pincode: client.addressPincode,
         };
         const existingProfileAddr = await ClientAddress.findOne({ clientId: req.user.clientId, label: 'Profile Address' });
@@ -1404,6 +1416,7 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
           country: client.addressCountry || 'India',
           state: client.addressState || '',
           city: client.addressCity || '',
+          district: client.addressDistrict || '',
           pincode: client.addressPincode,
         };
       }
@@ -1423,6 +1436,7 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
           country: client.addressCountry || 'India',
           state: client.addressState || '',
           city: client.addressCity || '',
+          district: client.addressDistrict || '',
           pincode: client.addressPincode,
         };
       }
@@ -1468,6 +1482,7 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
       requestedPlan: plan.key,
       status: 'pending',
       paymentStatus: 'unpaid',
+      placedByAdmin: req.user.impersonatedBy || null,
       razorpayOrderId: order.id,
       orderNumber: await nextOrderNumber(),
       quantity,
@@ -1486,6 +1501,7 @@ router.post('/upgrade-order', requireAuth, async (req, res) => {
         country: deliveryAddress.country,
         state: deliveryAddress.state,
         city: deliveryAddress.city,
+        district: deliveryAddress.district || '',
         pincode: deliveryAddress.pincode,
       },
     });
@@ -1710,6 +1726,7 @@ router.get('/addresses', requireAuth, async (req, res) => {
         country: client.addressCountry || 'India',
         state: client.addressState || '',
         city: client.addressCity || '',
+        district: client.addressDistrict || '',
         pincode: client.addressPincode,
         isDefault: true,
         isFromProfile: true,
@@ -1723,7 +1740,7 @@ router.get('/addresses', requireAuth, async (req, res) => {
 // POST /api/profile/addresses
 router.post('/addresses', requireAuth, async (req, res) => {
   try {
-    const { label, name, phone, line1, line2, country, state, city, pincode, isDefault } = req.body;
+    const { label, name, phone, line1, line2, country, state, district, city, pincode, isDefault } = req.body;
     if (!name || !phone || !line1 || !country || !state || !city || !pincode) {
       return res.status(400).json({ error: 'Name, phone, address line 1, country, state, city and pincode are required.' });
     }
@@ -1739,6 +1756,7 @@ router.post('/addresses', requireAuth, async (req, res) => {
       line2,
       country,
       state,
+      district: district || '',
       city,
       pincode,
       isDefault: Boolean(isDefault),
@@ -1756,7 +1774,7 @@ router.patch('/addresses/:id', requireAuth, async (req, res) => {
     const address = await ClientAddress.findOne({ _id: req.params.id, clientId: req.user.clientId });
     if (!address) return res.status(404).json({ error: 'Address not found' });
     const addressBefore = address.toObject();
-    for (const field of ['label', 'name', 'phone', 'line1', 'line2', 'country', 'state', 'city', 'pincode']) {
+    for (const field of ['label', 'name', 'phone', 'line1', 'line2', 'country', 'state', 'district', 'city', 'pincode']) {
       if (req.body[field] !== undefined) address[field] = req.body[field];
     }
     if (req.body.isDefault === true) {
@@ -1767,7 +1785,7 @@ router.patch('/addresses/:id', requireAuth, async (req, res) => {
     }
     await address.save();
     try {
-      noteChanges(req, diffFields(addressBefore, address.toObject(), ['label', 'name', 'phone', 'line1', 'line2', 'country', 'state', 'city', 'pincode', 'isDefault']));
+      noteChanges(req, diffFields(addressBefore, address.toObject(), ['label', 'name', 'phone', 'line1', 'line2', 'country', 'state', 'district', 'city', 'pincode', 'isDefault']));
     } catch { /* activity log only */ }
     res.json(address);
   } catch (err) {
@@ -1876,6 +1894,7 @@ router.post('/magic-poster/order', requireAuth, async (req, res) => {
     for (const raw of items) {
       const piece = pieceById[raw.magicArtId];
       if (!piece) return res.status(400).json({ error: 'One of the posters in your cart no longer exists.' });
+      if (!piece.active) return res.status(400).json({ error: `"${piece.name || 'This poster'}" is not available right now. Please remove it from your cart.` });
       const unitPrice = getMagicArtChargeAmount(piece);
       if (!unitPrice) return res.status(400).json({ error: `"${piece.name || 'This poster'}" isn't available for purchase yet.` });
       const quantity = Math.min(MAX_MAGIC_POSTER_ITEM_QUANTITY, Math.max(1, parseInt(raw.quantity, 10) || 1));
@@ -1917,7 +1936,7 @@ router.post('/magic-poster/order', requireAuth, async (req, res) => {
       amount: totals.amount,
       razorpayOrderId: order.id,
       delivery: {
-        name: d.name, phone: d.phone, line1: d.line1, line2: d.line2 || '', country: d.country, state: d.state, city: d.city, pincode: d.pincode,
+        name: d.name, phone: d.phone, line1: d.line1, line2: d.line2 || '', country: d.country, state: d.state, district: d.district || '', city: d.city, pincode: d.pincode,
       },
     });
 
@@ -2293,6 +2312,9 @@ router.get('/requests', requireAuth, async (req, res) => {
     .select('cardType purchaseRequestId orderNumber trackingId dispatchedAt deliveredAt createdAt')
     .sort({ createdAt: -1 });
   const usedLegacyCardIds = new Set();
+  // Plan names for the orders (a plan's key is internal -- e.g. the "Premium" plan's key is "basic").
+  const planNameDocs = await CardPlan.find({ key: { $in: [...new Set(requests.map((r) => r.requestedPlan).filter(Boolean))] } }).select('key name').lean();
+  const planNameByKey = Object.fromEntries(planNameDocs.map((p) => [p.key, p.name]));
 
   const result = requests.map((request) => {
     const obj = request.toObject();
@@ -2325,6 +2347,7 @@ router.get('/requests', requireAuth, async (req, res) => {
     const primaryShipment = shipmentCards.find((card) => card.trackingId) || shipmentCards[0];
     return {
       ...obj,
+      planName: planNameByKey[obj.requestedPlan] || null,
       trackingId: obj.trackingId || primaryShipment?.trackingId || null,
       dispatchedAt: obj.dispatchedAt || primaryShipment?.dispatchedAt || null,
       deliveredAt: obj.deliveredAt || primaryShipment?.deliveredAt || null,
@@ -2427,7 +2450,7 @@ router.get('/ar-layout', requireAuth, async (req, res) => {
     } else {
       // QR is a physical print position, not a client-editable layout
       // preference. Correct legacy layouts when the selected card changes.
-      layout = { ...layout.toObject(), qr };
+      layout = { ...layout.toObject({ flattenMaps: true }), qr };
     }
     res.json(layout);
   } catch (err) {

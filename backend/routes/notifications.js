@@ -19,9 +19,16 @@ const router = express.Router();
 // dashboard bell dropdown, not a full history page).
 router.get('/notifications', requireAuth, async (req, res) => {
   try {
-    const notifications = await Notification.find({ clientId: req.user.clientId }).sort({ createdAt: -1 }).limit(50);
-    const unreadCount = await Notification.countDocuments({ clientId: req.user.clientId, read: false });
-    res.json({ notifications, unreadCount });
+    // The bell asks for the default (latest 50); the "all notifications" page pages through with ?limit=&skip=.
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const skip = Math.max(0, parseInt(req.query.skip, 10) || 0);
+    const filter = { clientId: req.user.clientId };
+    const [notifications, unreadCount, total] = await Promise.all([
+      Notification.find(filter).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit),
+      Notification.countDocuments({ clientId: req.user.clientId, read: false }),
+      Notification.countDocuments(filter),
+    ]);
+    res.json({ notifications, unreadCount, total, hasMore: skip + notifications.length < total });
   } catch (err) {
     console.error('[notifications GET]', err);
     res.status(500).json({ error: 'Failed to load notifications' });
@@ -41,6 +48,43 @@ router.post('/notifications/:id/read', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[notifications read POST]', err);
     res.status(500).json({ error: 'Failed to mark notification read' });
+  }
+});
+
+// POST /api/profile/notifications/read-all -- mark every unread notification read.
+router.post('/notifications/read-all', requireAuth, async (req, res) => {
+  try {
+    const r = await Notification.updateMany({ clientId: req.user.clientId, read: false }, { $set: { read: true } });
+    res.json({ ok: true, marked: r.modifiedCount || 0 });
+  } catch (err) {
+    console.error('[notifications read-all POST]', err);
+    res.status(500).json({ error: 'Failed to mark notifications read' });
+  }
+});
+
+// DELETE /api/profile/notifications/:id -- delete one of this client's notifications.
+router.delete('/notifications/:id', requireAuth, async (req, res) => {
+  try {
+    const removed = await Notification.findOneAndDelete({ _id: req.params.id, clientId: req.user.clientId });
+    if (!removed) return res.status(404).json({ error: 'Notification not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[notifications DELETE]', err);
+    res.status(500).json({ error: 'Failed to delete the notification' });
+  }
+});
+
+// DELETE /api/profile/notifications?scope=all|read -- clear them all, or only the ones already read.
+router.delete('/notifications', requireAuth, async (req, res) => {
+  try {
+    const filter = { clientId: req.user.clientId };
+    if (req.query.scope === 'read') filter.read = true;
+    else if (req.query.scope !== 'all') return res.status(400).json({ error: 'scope must be "all" or "read"' });
+    const r = await Notification.deleteMany(filter);
+    res.json({ ok: true, deleted: r.deletedCount || 0 });
+  } catch (err) {
+    console.error('[notifications clear DELETE]', err);
+    res.status(500).json({ error: 'Failed to clear notifications' });
   }
 });
 

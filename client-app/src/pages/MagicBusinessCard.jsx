@@ -505,6 +505,28 @@ export default function MagicBusinessCard() {
     }
   }
 
+  // The QR image comes from the backend's origin, so a plain <a download> link is ignored by the
+  // browser and just opens the image in a new tab. Fetch it as a blob and save that instead.
+  async function handleDownloadQr() {
+    if (!qrUrl) return;
+    setError('');
+    try {
+      const res = await fetch(qrUrl);
+      if (!res.ok) throw new Error('Could not download the QR. Please try again.');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `huntsTAG-ar-qr-${clientId}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message || 'Could not download the QR. Please try again.');
+    }
+  }
+
   async function handleRemoveVideo() {
     setBusy(true);
     setError('');
@@ -724,11 +746,15 @@ export default function MagicBusinessCard() {
             style={{ width: 160, height: 160, border: '1px solid var(--border)', borderRadius: 8, background: '#fff' }}
           />
           <div style={{ marginTop: 10 }}>
-            <a href={qrUrl} download={`huntsTAG-ar-qr-${clientId}.png`}>
-              <button type="button" className="secondary" style={{ width: 'auto', fontSize: 12, padding: '6px 14px' }}>
-                Download QR only
-              </button>
-            </a>
+            <button
+              type="button"
+              className="secondary"
+              style={{ width: 'auto', fontSize: 12, padding: '6px 14px' }}
+              onClick={handleDownloadQr}
+              disabled={busy}
+            >
+              Download QR only
+            </button>
           </div>
         </div>
       )}
@@ -789,6 +815,7 @@ export default function MagicBusinessCard() {
                   imageWidth={imageDims?.width}
                   imageHeight={imageDims?.height}
                   alt="Your Magic Business Card"
+                  withSound
                   style={{ borderRadius: box.borderRadius, boxShadow: '0 10px 24px rgba(0,0,0,0.35)' }}
                 />
                 {/* Fixed QR placement -- position isn't client-editable

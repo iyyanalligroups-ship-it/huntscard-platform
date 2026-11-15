@@ -9,7 +9,7 @@ const ExcelJS = require('exceljs'); // required up front (not inside the backup 
 const { ZipArchive } = require('archiver'); // archiver v8 exports classes, not a factory function
 const { PassThrough } = require('stream');
 const { nanoid } = require('nanoid');
-const { requireAdmin, requireSeniorAdmin, requireEncodeAccess, requireAdminPrime } = require('../middleware/auth');
+const { requireAdmin, requireSeniorAdmin, requireEncodeAccess, requireAdminPrime, requireTeamManager } = require('../middleware/auth');
 const Client = require('../models/Client');
 const Admin = require('../models/Admin');
 const CardPlan = require('../models/CardPlan');
@@ -29,6 +29,15 @@ const Contact = require('../models/Contact');
 const VideoShort = require('../models/VideoShort');
 const Card = require('../models/Card');
 const CardTicket = require('../models/CardTicket');
+const SupportTicket = require('../models/SupportTicket');
+const Notification = require('../models/Notification');
+const { deleteClientData } = require('../utils/clientCascade');
+const ClientVerificationOtp = require('../models/ClientVerificationOtp');
+const { sendSms } = require('../utils/sms');
+const { sendEmail } = require('../utils/email');
+const { limiter: makeLimiter } = require('../utils/upload');
+const { sendTicketReply, sendTicketResolved } = require('../utils/supportMail');
+const mongoose = require('mongoose');
 const ChatMessage = require('../models/ChatMessage');
 const CardInventory = require('../models/CardInventory');
 const MagicLayoutDefault = require('../models/MagicLayoutDefault');
@@ -55,6 +64,7 @@ const FaqEntry = require('../models/FaqEntry');
 const cardCrypto = require('../utils/crypto'); // named apart from the built-in `crypto` above (line 4)
 const { getChargeAmount, getMagicArtChargeAmount } = require('../utils/pricing');
 const createCardsForPurchase = require('../utils/createCardsForPurchase');
+const { nextOrderNumber } = require('../utils/orderNumber');
 
 const router = express.Router();
 
@@ -433,7 +443,8 @@ router.delete('/faq/:id', requireAdmin, async (req, res) => {
 router.get('/stats', requireAdmin, async (req, res) => {
   const now = new Date();
   const monthWindowStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
-  const [totalClients, paid, encoded, adminCount, planCount, latestClient, monthlyAgg, pendingRequests, cardsByPlanAgg, recentClients, unclaimedOrders, unreadMessages, openCardTickets, unreadChats, pendingMagicPosterOrders] = await Promise.all([
+  const [totalClients, paid, encoded, adminCount, planCount, latestClient, monthlyAgg, pendingRequests, cardsByPlanAgg, recentClients, unclaimedOrders, unreadMessages, openCardTickets, unreadChats, pendingMagicPosterOrders, openSupportTickets] = await Promise.all([
+    // (declared last so the order of the counts above is unchanged)
     Client.countDocuments({}),
     Client.countDocuments({ paid: true }),
     Client.countDocuments({ chipEncoded: true }),
@@ -486,6 +497,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
     // "1 conversation waiting").
     ChatMessage.distinct('clientId', { sender: 'client', read: false }).then((ids) => ids.length),
     MagicPosterOrder.countDocuments({ paymentStatus: 'paid', status: 'ordered' }),
+    SupportTicket.countDocuments({ status: { $ne: 'resolved' } }),
   ]);
 
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -535,6 +547,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
     openCardTickets,
     unreadChats,
     pendingMagicPosterOrders,
+    openSupportTickets,
   };
 
   // Revenue -- Admin Prime only (see models/Admin.js's role comment).
@@ -1142,11 +1155,122 @@ catalogEntryImageSlotRoutes('back', 'backImageUrl');
 // Creates a client account and returns the plaintext temp password ONCE,
 // in this response only -- it is never stored or retrievable again after
 // this call. Admin is responsible for passing it on to the client.
+// ---------------------------------------------------------------------------------------------------------
+// Verify a client's phone (and email, if given) before an admin creates their account. The client receives a
+// one-time code and reads it to the admin; the admin enters it on the Create client form. A successful check
+// returns a short-lived signed token, which POST /clients below requires and checks against what was typed.
+// ---------------------------------------------------------------------------------------------------------
+const CLIENT_VERIFY_TTL_MS = 10 * 60 * 1000;
+const CLIENT_VERIFY_COOLDOWN_MS = 45 * 1000;
+const CLIENT_VERIFY_MAX_ATTEMPTS = 5;
+const CLIENT_VERIFY_TOKEN_TTL = '30m';
+const verifyLimiter = makeLimiter(60, 60, 'Too many verification attempts. Please wait a while and try again.');
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function cleanTarget(channel, raw) {
+  const v = String(raw || '').trim();
+  if (channel === 'phone') {
+    const digits = v.replace(/\D/g, '');
+    return /^\d{10}$/.test(digits) ? digits : null;
+  }
+  if (channel === 'email') return EMAIL_RE.test(v) ? v.toLowerCase() : null;
+  return null;
+}
+
+// Checks a verification token from the form against the value being saved.
+function tokenProves(token, channel, target) {
+  try {
+    const p = jwt.verify(String(token || ''), process.env.JWT_SECRET);
+    return p.type === 'admin-client-verify' && p.channel === channel && p.target === target;
+  } catch {
+    return false;
+  }
+}
+
+// POST /api/admin/clients/verify/request { channel: 'phone' | 'email', target }
+router.post('/clients/verify/request', requireAdmin, verifyLimiter, async (req, res) => {
+  try {
+    const channel = req.body.channel;
+    if (!['phone', 'email'].includes(channel)) return res.status(400).json({ error: 'Invalid channel' });
+    const target = cleanTarget(channel, req.body.target);
+    if (!target) {
+      return res.status(400).json({ error: channel === 'phone' ? 'Phone number must be exactly 10 digits.' : 'Enter a valid email address.' });
+    }
+    const taken = channel === 'phone' ? await Client.exists({ phone: target }) : await Client.exists({ loginEmail: target });
+    if (taken) {
+      return res.status(409).json({ error: channel === 'phone' ? 'A client with this phone number already exists.' : 'A client with this email already exists.' });
+    }
+    const pending = await ClientVerificationOtp.findOne({ channel, target });
+    if (pending?.lastSentAt && Date.now() - pending.lastSentAt.getTime() < CLIENT_VERIFY_COOLDOWN_MS) {
+      return res.status(429).json({ error: 'Please wait a moment before sending another code.' });
+    }
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    await ClientVerificationOtp.findOneAndUpdate(
+      { channel, target },
+      { otpHash: await bcrypt.hash(otp, 10), expiresAt: new Date(Date.now() + CLIENT_VERIFY_TTL_MS), attempts: 0, lastSentAt: new Date() },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    if (channel === 'phone') {
+      await sendSms(target, `Your OTP for login/verification is ${otp}. Please do not share this with anyone. – HUNTSWORLD`);
+    } else {
+      await sendEmail(target, 'Your HuntsTAG verification code', `Your HuntsTAG verification code is ${otp}. It is valid for 10 minutes. Please do not share it with anyone.`);
+    }
+    res.json({ ok: true, message: channel === 'phone' ? 'A code has been sent to the phone.' : 'A code has been sent to the email.' });
+  } catch (err) {
+    console.error('[admin/clients verify request]', err);
+    res.status(500).json({ error: 'Failed to send the verification code' });
+  }
+});
+
+// POST /api/admin/clients/verify/confirm { channel, target, otp } -> { verificationToken }
+router.post('/clients/verify/confirm', requireAdmin, verifyLimiter, async (req, res) => {
+  try {
+    const channel = req.body.channel;
+    const target = cleanTarget(channel, req.body.target);
+    const otp = String(req.body.otp || '').trim();
+    if (!['phone', 'email'].includes(channel) || !target || !/^\d{6}$/.test(otp)) {
+      return res.status(400).json({ error: 'Enter the 6-digit code.' });
+    }
+    const pending = await ClientVerificationOtp.findOne({ channel, target });
+    if (!pending) return res.status(400).json({ error: 'Invalid or expired code. Send a new one.' });
+    if (pending.expiresAt < new Date()) {
+      await ClientVerificationOtp.deleteOne({ _id: pending._id });
+      return res.status(400).json({ error: 'Code expired. Send a new one.' });
+    }
+    if (pending.attempts >= CLIENT_VERIFY_MAX_ATTEMPTS) return res.status(429).json({ error: 'Too many incorrect attempts. Send a new code.' });
+    if (!(await bcrypt.compare(otp, pending.otpHash))) {
+      pending.attempts += 1;
+      await pending.save();
+      return res.status(401).json({ error: 'Incorrect code' });
+    }
+    await ClientVerificationOtp.deleteOne({ _id: pending._id });
+    const verificationToken = jwt.sign({ type: 'admin-client-verify', channel, target }, process.env.JWT_SECRET, { expiresIn: CLIENT_VERIFY_TOKEN_TTL });
+    res.json({ ok: true, verificationToken });
+  } catch (err) {
+    console.error('[admin/clients verify confirm]', err);
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
 router.post('/clients', requireAdmin, async (req, res) => {
   try {
-    const { fullName, loginEmail, cardType, phone, cardVariantId } = req.body;
-    if (!fullName || !loginEmail) {
-      return res.status(400).json({ error: 'fullName and loginEmail are required' });
+    const { fullName, cardType, cardVariantId } = req.body;
+    // Phone is the primary login (10 digits, numbers only). Email is optional. The admin can set the first
+    // password (at least 6 characters); left blank, one is generated. Same rules as self-registration.
+    const phone = String(req.body.phone || '').replace(/\D/g, '');
+    const loginEmail = String(req.body.loginEmail || '').trim().toLowerCase();
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+    const requireChange = req.body.requireChange !== false && req.body.requireChange !== 'false';
+    if (!fullName || !String(fullName).trim()) return res.status(400).json({ error: 'Full name is required.' });
+    if (!/^\d{10}$/.test(phone)) return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
+    if (loginEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail)) return res.status(400).json({ error: 'Enter a valid email address, or leave it blank.' });
+    if (password && password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    // The phone (and the email, when given) must have been verified with a code the client received.
+    if (!tokenProves(req.body.phoneVerificationToken, 'phone', phone)) {
+      return res.status(400).json({ error: 'Verify the phone number with the code the client received before creating the account.' });
+    }
+    if (loginEmail && !tokenProves(req.body.emailVerificationToken, 'email', loginEmail)) {
+      return res.status(400).json({ error: 'Verify the email address with the code the client received, or clear the email.' });
     }
 
     let resolvedVariantId = null;
@@ -1161,24 +1285,26 @@ router.post('/clients', requireAdmin, async (req, res) => {
       }
     }
 
-    const existing = await Client.findOne({ loginEmail: loginEmail.toLowerCase() });
-    if (existing) {
-      return res.status(409).json({ error: 'A client with this email already exists' });
+    if (await Client.exists({ phone })) {
+      return res.status(409).json({ error: 'A client with this phone number already exists.' });
+    }
+    if (loginEmail && (await Client.exists({ loginEmail }))) {
+      return res.status(409).json({ error: 'A client with this email already exists.' });
     }
 
-    const tempPassword = generateTempPassword();
+    const tempPassword = password || generateTempPassword();
     const passwordHash = await bcrypt.hash(tempPassword, 12);
     const clientId = nanoid(10); // this becomes the tap URL: /c/{clientId}
 
     const client = await Client.create({
       clientId,
-      loginEmail: loginEmail.toLowerCase(),
+      ...(loginEmail ? { loginEmail } : {}),
       passwordHash,
-      fullName,
+      fullName: String(fullName).trim(),
       phone,
       cardType: cardType ? cardType.toLowerCase() : null,
       cardVariantId: resolvedVariantId,
-      mustChangePassword: true,
+      mustChangePassword: requireChange,
     });
 
     // Give a plan picked at creation an actual Card #1 too -- see the
@@ -1205,8 +1331,10 @@ router.post('/clients', requireAdmin, async (req, res) => {
 
     res.status(201).json({
       clientId: client.clientId,
-      loginEmail: client.loginEmail,
+      phone: client.phone,
+      loginEmail: client.loginEmail || '',
       tempPassword, // shown once -- copy it now to send to the client
+      generated: !password,
       cardType: client.cardType,
       publicUrl: `${process.env.PUBLIC_BASE_URL}/c/${client.clientId}`,
     });
@@ -1282,7 +1410,15 @@ router.patch('/clients/:clientId', requireAdmin, async (req, res) => {
     let unsetLoginEmail = false;
 
     if (fullName !== undefined) updates.fullName = fullName;
-    if (phone !== undefined) updates.phone = phone;
+    if (phone !== undefined) {
+      // Same rule as everywhere else: a 10-digit number (digits only) that no other client already uses.
+      const digits = String(phone || '').replace(/\D/g, '');
+      if (!/^\d{10}$/.test(digits)) return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
+      if (await Client.exists({ phone: digits, clientId: { $ne: req.params.clientId } })) {
+        return res.status(409).json({ error: 'Another client already uses this phone number.' });
+      }
+      updates.phone = digits;
+    }
     if (blocked !== undefined) updates.blocked = blocked;
     // Deliberately narrow: chipEncoded can only be reset to FALSE here (to
     // allow writing a replacement/second physical card for someone who
@@ -1293,7 +1429,13 @@ router.patch('/clients/:clientId', requireAdmin, async (req, res) => {
     if (jobTitle !== undefined) updates.jobTitle = jobTitle;
     if (bio !== undefined) updates.bio = bio;
     if (whatsapp !== undefined) updates.whatsapp = whatsapp;
-    if (publicEmail !== undefined) updates.publicEmail = publicEmail;
+    if (publicEmail !== undefined) {
+      // An email an admin sets here is trusted as verified (the customer proves theirs with a code).
+      const clean = String(publicEmail || '').trim().toLowerCase();
+      if (clean && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) return res.status(400).json({ error: 'Enter a valid public email address.' });
+      updates.publicEmail = clean;
+      updates.publicEmailVerified = Boolean(clean);
+    }
     if (instagramUrl !== undefined) updates.instagramUrl = instagramUrl;
     if (twitterUrl !== undefined) updates.twitterUrl = twitterUrl;
     if (portfolioUrl !== undefined) updates.portfolioUrl = portfolioUrl;
@@ -1417,6 +1559,118 @@ router.post('/clients/:clientId/reset-password', requireAdmin, async (req, res) 
 // carries `impersonatedBy` so it's traceable to which admin started it,
 // even though nothing here persists that beyond this log line -- adding a
 // real audit trail is a bigger, separate feature if ever needed.
+// POST /api/admin/clients/:clientId/gift-card
+// Gives a client a card for free: a paid-status order for 0 rupees (like the free coupon claim) marked as a gift,
+// so it shows in Fulfillment and the client's order history. Same effects as a paid checkout: the card record(s),
+// the legacy card mirror on the client, and the design images for a Custom Card.
+// body: { requestedPlan, quantity?, variants?: [{ variantId, quantity }], designFrontUrl?, designBackUrl?, deliveryAddressId? }
+const GIFT_MAX_QUANTITY = 20;
+router.post('/clients/:clientId/gift-card', requireAdmin, async (req, res) => {
+  try {
+    const client = await Client.findOne({ clientId: req.params.clientId });
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    if (client.blocked) return res.status(403).json({ error: 'This account is blocked -- unblock it first.' });
+
+    const requestedPlan = String(req.body.requestedPlan || '').toLowerCase();
+    const plan = await CardPlan.findOne({ key: requestedPlan, active: true });
+    if (!plan) return res.status(400).json({ error: 'Choose an active card plan.' });
+
+    // Quantity, split by style when the plan has styles (same rules as the Shop checkout).
+    let quantity;
+    let variantBreakdown = [];
+    if (plan.variants.length > 0) {
+      const raw = Array.isArray(req.body.variants) ? req.body.variants : [];
+      const valid = new Set(plan.variants.map((v) => v._id.toString()));
+      let total = 0;
+      for (const entry of raw) {
+        const variantId = String(entry?.variantId || '');
+        const qty = Math.max(1, parseInt(entry?.quantity, 10) || 1);
+        if (!valid.has(variantId)) return res.status(400).json({ error: 'One of the chosen card styles is not part of this plan.' });
+        variantBreakdown.push({ variantId, quantity: qty });
+        total += qty;
+      }
+      if (variantBreakdown.length === 0) return res.status(400).json({ error: 'Choose at least one card style and quantity.' });
+      if (total > GIFT_MAX_QUANTITY) return res.status(400).json({ error: `At most ${GIFT_MAX_QUANTITY} cards per gift.` });
+      quantity = total;
+    } else {
+      quantity = Math.min(GIFT_MAX_QUANTITY, Math.max(1, parseInt(req.body.quantity, 10) || 1));
+    }
+
+    const { designFrontUrl, designBackUrl } = req.body;
+    if (plan.requiresDesignUpload && !(designFrontUrl && designBackUrl)) {
+      return res.status(400).json({ error: 'Upload both a front and back design for this plan.' });
+    }
+
+    // The delivery address is optional for a gift (it can be added later); when given it must be the client's own.
+    let delivery;
+    const addressId = req.body.deliveryAddressId;
+    if (addressId) {
+      let a = null;
+      if (addressId === 'profile') {
+        if (client.addressLine1 && client.addressCity && client.addressPincode) {
+          a = { name: client.fullName, phone: client.phone, line1: client.addressLine1, line2: client.addressLine2, country: client.addressCountry || 'India', state: client.addressState, district: client.addressDistrict || '', city: client.addressCity, pincode: client.addressPincode };
+        }
+      } else if (mongoose.isValidObjectId(addressId)) {
+        a = await ClientAddress.findOne({ _id: addressId, clientId: client.clientId });
+      }
+      if (!a) return res.status(400).json({ error: 'The selected delivery address was not found.' });
+      delivery = { name: a.name, phone: a.phone, line1: a.line1, line2: a.line2 || '', country: a.country, state: a.state, district: a.district || '', city: a.city, pincode: a.pincode };
+    }
+
+    const variantName = (id) => plan.variants.find((v) => v._id.toString() === String(id))?.name || 'Card';
+    const invoiceItems = variantBreakdown.length > 0
+      ? variantBreakdown.map((e) => ({ name: `${plan.name} - ${variantName(e.variantId)}`, unitPrice: 0, quantity: e.quantity }))
+      : [{ name: plan.name, unitPrice: 0, quantity }];
+
+    const hadAnyCardsBefore = Boolean(await Card.exists({ clientId: client.clientId }));
+    const request = await CardRequest.create({
+      clientId: client.clientId,
+      type: 'upgrade',
+      requestedPlan: plan.key,
+      status: 'approved',
+      paymentStatus: 'paid',
+      orderNumber: await nextOrderNumber(),
+      quantity,
+      variantBreakdown,
+      invoiceItems,
+      subtotal: 0,
+      deliveryFee: 0,
+      gstPercent: 0,
+      gstAmount: 0,
+      amount: 0,
+      amountPaid: 0,
+      isGift: true,
+      giftedBy: req.admin?.email || 'admin',
+      ...(delivery ? { delivery } : {}),
+    });
+
+    const updates = { paid: true };
+    if (!hadAnyCardsBefore) {
+      updates.cardType = plan.key;
+      updates.cardVariantId = plan.variants.length > 0 ? variantBreakdown[0].variantId : null;
+    }
+    if (plan.requiresDesignUpload) {
+      updates.customDesignFrontUrl = designFrontUrl;
+      updates.customDesignBackUrl = designBackUrl;
+    }
+    await Client.updateOne({ _id: client._id }, { $set: updates });
+
+    await createCardsForPurchase({
+      clientId: client.clientId,
+      cardType: plan.key,
+      quantity,
+      variantBreakdown,
+      purchaseRequestId: request._id,
+      orderNumber: request.orderNumber,
+    });
+
+    res.status(201).json(request);
+  } catch (err) {
+    console.error('[admin/clients gift-card POST]', err);
+    res.status(500).json({ error: 'Failed to gift the card' });
+  }
+});
+
 router.post('/clients/:clientId/impersonate', requireAdmin, async (req, res) => {
   try {
     const client = await Client.findOne({ clientId: req.params.clientId }).select('clientId loginEmail fullName blocked');
@@ -1447,13 +1701,21 @@ router.post('/clients/:clientId/impersonate', requireAdmin, async (req, res) => 
 // left for the caller: if the card was already physically encoded, its
 // tap URL (/c/{clientId}) will show "Card not found" after this, since
 // the chip's URL never changes and can't point anywhere else without
-// re-encoding. CardRequest history for this clientId is left in place
-// (Requests already shows "(deleted client)" for orphaned entries) --
-// not cascade-deleted, since that's a real audit trail of what happened.
+// re-encoding. Everything that belongs to the client is deleted with them (cards, orders, addresses, contacts,
+// AR layouts, magic cards, chat, tickets, notifications, push subscriptions, activity and uploaded files) -- see
+// utils/clientCascade.js. Related data goes first, so if that fails the client is still there and the delete can
+// simply be retried.
 router.delete('/clients/:clientId', requireAdmin, async (req, res) => {
-  const client = await Client.findOneAndDelete({ clientId: req.params.clientId });
-  if (!client) return res.status(404).json({ error: 'Client not found' });
-  res.json({ ok: true, wasEncoded: client.chipEncoded });
+  try {
+    const client = await Client.findOne({ clientId: req.params.clientId });
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    const removed = await deleteClientData(client.toObject());
+    await Client.deleteOne({ _id: client._id });
+    res.json({ ok: true, wasEncoded: client.chipEncoded, removed });
+  } catch (err) {
+    console.error('[admin/clients DELETE]', err);
+    res.status(500).json({ error: 'Failed to delete the client and their data. Nothing was lost -- try again.' });
+  }
 });
 
 // GET /api/admin/clients/:clientId/contacts -- read-only view into a
@@ -1698,6 +1960,57 @@ router.get('/team', requireAdmin, async (req, res) => {
   res.json(team);
 });
 
+// Email check for a new team member: send a 6-digit code to the address, the person reads it out, the admin
+// types it in. Same mechanism as for clients, but the address must not already belong to a team account.
+router.post('/team/verify/request', requireTeamManager, verifyLimiter, async (req, res) => {
+  try {
+    const target = cleanTarget('email', req.body.target);
+    if (!target) return res.status(400).json({ error: 'Enter a valid email address.' });
+    if (await Admin.exists({ email: target })) return res.status(409).json({ error: 'A team member with this email already exists.' });
+    const pending = await ClientVerificationOtp.findOne({ channel: 'email', target });
+    if (pending?.lastSentAt && Date.now() - pending.lastSentAt.getTime() < CLIENT_VERIFY_COOLDOWN_MS) {
+      return res.status(429).json({ error: 'Please wait a moment before sending another code.' });
+    }
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    await ClientVerificationOtp.findOneAndUpdate(
+      { channel: 'email', target },
+      { otpHash: await bcrypt.hash(otp, 10), expiresAt: new Date(Date.now() + CLIENT_VERIFY_TTL_MS), attempts: 0, lastSentAt: new Date() },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    await sendEmail(target, 'Your HuntsTAG verification code', `Your HuntsTAG verification code is ${otp}. It is valid for 10 minutes. Please do not share it with anyone.`);
+    res.json({ ok: true, message: 'A code has been sent to the email.' });
+  } catch (err) {
+    console.error('[admin/team verify request]', err);
+    res.status(500).json({ error: 'Failed to send the verification code' });
+  }
+});
+
+router.post('/team/verify/confirm', requireTeamManager, verifyLimiter, async (req, res) => {
+  try {
+    const target = cleanTarget('email', req.body.target);
+    const otp = String(req.body.otp || '').trim();
+    if (!target || !/^\d{6}$/.test(otp)) return res.status(400).json({ error: 'Enter the 6-digit code.' });
+    const pending = await ClientVerificationOtp.findOne({ channel: 'email', target });
+    if (!pending) return res.status(400).json({ error: 'Invalid or expired code. Send a new one.' });
+    if (pending.expiresAt < new Date()) {
+      await ClientVerificationOtp.deleteOne({ _id: pending._id });
+      return res.status(400).json({ error: 'Code expired. Send a new one.' });
+    }
+    if (pending.attempts >= CLIENT_VERIFY_MAX_ATTEMPTS) return res.status(429).json({ error: 'Too many incorrect attempts. Send a new code.' });
+    if (!(await bcrypt.compare(otp, pending.otpHash))) {
+      pending.attempts += 1;
+      await pending.save();
+      return res.status(401).json({ error: 'Incorrect code' });
+    }
+    await ClientVerificationOtp.deleteOne({ _id: pending._id });
+    const verificationToken = jwt.sign({ type: 'admin-team-verify', channel: 'email', target }, process.env.JWT_SECRET, { expiresIn: CLIENT_VERIFY_TOKEN_TTL });
+    res.json({ ok: true, verificationToken });
+  } catch (err) {
+    console.error('[admin/team verify confirm]', err);
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
 // POST /api/admin/team
 // Invites a new admin/subadmin/employee account -- Admin Prime only (see
 // models/Admin.js's role comment). Role determines fulfillment pipeline
@@ -1706,11 +2019,24 @@ router.get('/team', requireAdmin, async (req, res) => {
 // is deliberately NOT an accepted value here -- it's a singleton, never
 // created via ordinary invite, only via POST /team/:id/promote-to-prime.
 // Returns the temp password once, same handoff pattern as client creation.
-router.post('/team', requireAdminPrime, async (req, res) => {
+router.post('/team', requireTeamManager, async (req, res) => {
   try {
     const { name, email, role } = req.body;
     if (!name || !email) {
       return res.status(400).json({ error: 'name and email are required' });
+    }
+    const emailProof = (() => {
+      try {
+        const t = jwt.verify(String(req.body.emailVerificationToken || ''), process.env.JWT_SECRET);
+        return t.type === 'admin-team-verify' && t.target === String(email).trim().toLowerCase();
+      } catch {
+        return false;
+      }
+    })();
+    if (!emailProof) return res.status(400).json({ error: 'Verify the email address first.' });
+    const chosenPassword = typeof req.body.password === 'string' ? req.body.password : '';
+    if (chosenPassword && chosenPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters.' });
     }
     if (role && !['admin', 'subadmin', 'employee'].includes(role)) {
       return res.status(400).json({ error: "role must be 'admin', 'subadmin', or 'employee'" });
@@ -1721,7 +2047,7 @@ router.post('/team', requireAdminPrime, async (req, res) => {
       return res.status(409).json({ error: 'An admin with this email already exists' });
     }
 
-    const tempPassword = generateTempPassword();
+    const tempPassword = chosenPassword || generateTempPassword();
     const passwordHash = await bcrypt.hash(tempPassword, 12);
 
     await Admin.create({
@@ -1729,7 +2055,7 @@ router.post('/team', requireAdminPrime, async (req, res) => {
       passwordHash,
       name,
       role: role || 'admin',
-      mustChangePassword: true,
+      mustChangePassword: req.body.requireChange !== false,
     });
 
     res.status(201).json({ email: email.toLowerCase(), tempPassword, name, role: role || 'admin' });
@@ -1747,10 +2073,11 @@ router.post('/team', requireAdminPrime, async (req, res) => {
 // mid-session); and the last remaining admin account can't be deleted at
 // all (avoids locking EVERYONE out with no way back in short of touching
 // the database directly).
-router.delete('/team/:id', requireAdminPrime, async (req, res) => {
+router.delete('/team/:id', requireTeamManager, async (req, res) => {
   try {
     const target = await Admin.findById(req.params.id).select('role');
     if (!target) return res.status(404).json({ error: 'Admin not found' });
+    if (target.role === 'primeadmin' && req.admin.role !== 'primeadmin') return res.status(403).json({ error: 'Only the Admin Prime can change the Admin Prime account.' });
     if (target.role === 'primeadmin') {
       return res.status(400).json({ error: "The Admin Prime account can't be deleted." });
     }
@@ -1776,10 +2103,11 @@ router.delete('/team/:id', requireAdminPrime, async (req, res) => {
 // 'admin'/'subadmin'/'employee', but this route will never set OR change
 // AWAY FROM 'primeadmin' -- that's exclusively handled by the dedicated
 // promote-to-prime transfer above, which also guarantees the singleton.
-router.patch('/team/:id', requireAdminPrime, async (req, res) => {
+router.patch('/team/:id', requireTeamManager, async (req, res) => {
   try {
     const target = await Admin.findById(req.params.id).select('role');
     if (!target) return res.status(404).json({ error: 'Admin not found' });
+    if (target.role === 'primeadmin' && req.admin.role !== 'primeadmin') return res.status(403).json({ error: 'Only the Admin Prime can change the Admin Prime account.' });
 
     const { name, email, role } = req.body || {};
     const updates = {};
@@ -1812,10 +2140,11 @@ router.patch('/team/:id', requireAdminPrime, async (req, res) => {
 // a new temp password and sets mustChangePassword, same handoff pattern
 // as inviting a new account (POST /team) -- shown once in the response,
 // never stored/logged in plaintext.
-router.post('/team/:id/reset-password', requireAdminPrime, async (req, res) => {
+router.post('/team/:id/reset-password', requireTeamManager, async (req, res) => {
   try {
-    const target = await Admin.findById(req.params.id).select('email name');
+    const target = await Admin.findById(req.params.id).select('email name role');
     if (!target) return res.status(404).json({ error: 'Admin not found' });
+    if (target.role === 'primeadmin' && req.admin.role !== 'primeadmin') return res.status(403).json({ error: 'Only the Admin Prime can change the Admin Prime account.' });
 
     const tempPassword = generateTempPassword();
     const passwordHash = await bcrypt.hash(tempPassword, 12);
@@ -1828,10 +2157,9 @@ router.post('/team/:id/reset-password', requireAdminPrime, async (req, res) => {
   }
 });
 
-// POST /api/admin/team/:id/promote-to-prime -- Admin Prime only. A
-// TRANSFER, not a duplication: atomically promotes the target and demotes
-// the current Prime (the requester) to 'admin' in the same operation, so
-// there is never more than one Admin Prime at a time by construction.
+// POST /api/admin/team/:id/promote-to-prime -- Admin Prime only. Makes the target an Admin Prime as well
+// (the requester stays Prime). There can be several Admin Primes; each can later undo another with
+// /demote-from-prime below.
 router.post('/team/:id/promote-to-prime', requireAdminPrime, async (req, res) => {
   try {
     const target = await Admin.findById(req.params.id).select('role email');
@@ -1843,13 +2171,33 @@ router.post('/team/:id/promote-to-prime', requireAdminPrime, async (req, res) =>
       return res.status(400).json({ error: 'You are already Admin Prime.' });
     }
 
-    await Admin.updateOne({ _id: req.admin.adminId }, { $set: { role: 'admin' } });
+    if (target.role === 'primeadmin') {
+      return res.status(400).json({ error: 'This person is already an Admin Prime.' });
+    }
     await Admin.updateOne({ _id: target._id }, { $set: { role: 'primeadmin' } });
 
     res.json({ ok: true, newPrime: target.email });
   } catch (err) {
     console.error('[admin/team promote-to-prime POST]', err);
-    res.status(500).json({ error: 'Failed to transfer Admin Prime' });
+    res.status(500).json({ error: 'Failed to make this person Admin Prime' });
+  }
+});
+
+// POST /api/admin/team/:id/demote-from-prime -- Admin Prime only. Puts another Admin Prime back to a normal
+// Admin. You can't do it to yourself, so at least one Admin Prime always remains.
+router.post('/team/:id/demote-from-prime', requireAdminPrime, async (req, res) => {
+  try {
+    const target = await Admin.findById(req.params.id).select('role email');
+    if (!target) return res.status(404).json({ error: 'Admin not found' });
+    if (target.role !== 'primeadmin') return res.status(400).json({ error: 'This person is not an Admin Prime.' });
+    if (String(target._id) === req.admin.adminId) {
+      return res.status(400).json({ error: "You can't remove your own Admin Prime role. Ask another Admin Prime to do it." });
+    }
+    await Admin.updateOne({ _id: target._id }, { $set: { role: 'admin' } });
+    res.json({ ok: true, email: target.email });
+  } catch (err) {
+    console.error('[admin/team demote-from-prime POST]', err);
+    res.status(500).json({ error: 'Failed to remove the Admin Prime role' });
   }
 });
 
@@ -2214,6 +2562,20 @@ router.get('/contact-messages', requireAdmin, async (req, res) => {
     if (req.query.endDate) filter.createdAt.$lte = new Date(`${req.query.endDate}T23:59:59.999Z`);
   }
 
+  const and = [];
+  if (['new', 'in_progress', 'resolved'].includes(req.query.status)) {
+    // a message saved before statuses existed counts as "new"
+    if (req.query.status === 'new') and.push({ $or: [{ status: 'new' }, { status: { $exists: false } }] });
+    else and.push({ status: req.query.status });
+  }
+  // ?taken=none (nobody attending) or ?taken=me (this admin)
+  if (req.query.taken === 'none') and.push({ 'attendedBy.email': { $in: ['', null] } });
+  else if (req.query.taken === 'me') {
+    const me = await Admin.findById(req.admin.adminId).select('email');
+    and.push({ 'attendedBy.email': me?.email || '__none__' });
+  }
+  if (and.length) filter.$and = and;
+
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
   const skip = Math.max(0, parseInt(req.query.skip, 10) || 0);
 
@@ -2234,12 +2596,126 @@ router.get('/contact-messages', requireAdmin, async (req, res) => {
   });
 });
 
-// PATCH /api/admin/contact-messages/:id -- mark read/unread
+// Who is acting (for "attended by" and note authors): the admin's display name, falling back to their email.
+async function actingAdmin(req) {
+  const a = await Admin.findById(req.admin.adminId).select('name email');
+  return { name: a?.name || a?.email || 'Admin', email: a?.email || '' };
+}
+
+// PATCH /api/admin/contact-messages/:id -- { read?, status? }. Only the fields sent are changed. Taking a
+// message (status in progress or resolved) records who attended it and marks it read.
 router.patch('/contact-messages/:id', requireAdmin, async (req, res) => {
-  const { read } = req.body;
-  const message = await ContactMessage.findByIdAndUpdate(req.params.id, { $set: { read: !!read } }, { new: true });
-  if (!message) return res.status(404).json({ error: 'Message not found' });
-  res.json(message);
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Message not found' });
+    const { read, status } = req.body || {};
+    if (status !== undefined && !['new', 'in_progress', 'resolved'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    const message = await ContactMessage.findById(req.params.id);
+    if (!message) return res.status(404).json({ error: 'Message not found' });
+    if (read !== undefined) message.read = !!read;
+    if (status !== undefined && status !== message.status) {
+      message.status = status;
+      if (status !== 'new') {
+        const who = await actingAdmin(req);
+        message.attendedBy = { name: who.name, email: who.email, at: new Date() };
+        message.read = true;
+      } else {
+        message.attendedBy = { name: '', email: '', at: null };
+      }
+    }
+    await message.save();
+    res.json(message);
+  } catch (err) {
+    console.error('[admin contact-messages PATCH]', err);
+    res.status(500).json({ error: 'Failed to update the message' });
+  }
+});
+
+// POST /api/admin/contact-messages/:id/notes { text } -- a note on what was done. Adding a note to a new message
+// also takes it (in progress, attended by this admin).
+router.post('/contact-messages/:id/notes', requireAdmin, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Message not found' });
+    const text = typeof req.body.text === 'string' ? req.body.text.trim() : '';
+    if (text.length < 1 || text.length > 1000) return res.status(400).json({ error: 'Write a note of up to 1000 characters.' });
+    const message = await ContactMessage.findById(req.params.id);
+    if (!message) return res.status(404).json({ error: 'Message not found' });
+    if (message.notes.length >= 100) return res.status(400).json({ error: 'This message already has 100 notes.' });
+    const who = await actingAdmin(req);
+    message.notes.push({ text, byName: who.name, byEmail: who.email });
+    if (!message.status || message.status === 'new') {
+      message.status = 'in_progress';
+      message.attendedBy = { name: who.name, email: who.email, at: new Date() };
+    }
+    message.read = true;
+    await message.save();
+    res.status(201).json(message);
+  } catch (err) {
+    console.error('[admin contact-messages notes POST]', err);
+    res.status(500).json({ error: 'Failed to add the note' });
+  }
+});
+
+// POST /api/admin/contact-messages/:id/assign { email } -- give the message to a chosen admin or subadmin.
+// Leaves a note ("Assigned to X") so the log shows who changed it.
+router.post('/contact-messages/:id/assign', requireAdmin, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Message not found' });
+    const target = await Admin.findOne({ email: String(req.body.email || '').trim().toLowerCase() }).select('name email role');
+    if (!target || target.role === 'employee') return res.status(400).json({ error: 'Choose an admin or subadmin account.' });
+    const message = await ContactMessage.findById(req.params.id);
+    if (!message) return res.status(404).json({ error: 'Message not found' });
+    const who = await actingAdmin(req);
+    const targetName = target.name || target.email;
+    message.attendedBy = { name: targetName, email: target.email, at: new Date() };
+    if (!message.status || message.status === 'new') message.status = 'in_progress';
+    message.read = true;
+    if (message.notes.length < 100) message.notes.push({ text: `Assigned to ${targetName}.`, byName: who.name, byEmail: who.email });
+    await message.save();
+    res.json(message);
+  } catch (err) {
+    console.error('[admin contact-messages assign POST]', err);
+    res.status(500).json({ error: 'Failed to assign the message' });
+  }
+});
+
+// POST /api/admin/contact-messages/:id/take -- this admin takes the message (or takes it over from someone else).
+router.post('/contact-messages/:id/take', requireAdmin, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Message not found' });
+    const message = await ContactMessage.findById(req.params.id);
+    if (!message) return res.status(404).json({ error: 'Message not found' });
+    const who = await actingAdmin(req);
+    const was = message.attendedBy?.name;
+    message.attendedBy = { name: who.name, email: who.email, at: new Date() };
+    if (!message.status || message.status === 'new') message.status = 'in_progress';
+    message.read = true;
+    if (message.notes.length < 100) message.notes.push({ text: was && was !== who.name ? `Took over from ${was}.` : 'Took this message.', byName: who.name, byEmail: who.email });
+    await message.save();
+    res.json(message);
+  } catch (err) {
+    console.error('[admin contact-messages take POST]', err);
+    res.status(500).json({ error: 'Failed to take the message' });
+  }
+});
+
+// POST /api/admin/contact-messages/:id/unassign -- undo: nobody is attending it. The status is left as it is.
+router.post('/contact-messages/:id/unassign', requireAdmin, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Message not found' });
+    const message = await ContactMessage.findById(req.params.id);
+    if (!message) return res.status(404).json({ error: 'Message not found' });
+    const who = await actingAdmin(req);
+    const was = message.attendedBy?.name;
+    message.attendedBy = { name: '', email: '', at: null };
+    if (was && message.notes.length < 100) message.notes.push({ text: `Removed the assignment (was ${was}).`, byName: who.name, byEmail: who.email });
+    await message.save();
+    res.json(message);
+  } catch (err) {
+    console.error('[admin contact-messages unassign POST]', err);
+    res.status(500).json({ error: 'Failed to remove the assignment' });
+  }
 });
 
 // DELETE /api/admin/contact-messages/:id
@@ -2463,6 +2939,203 @@ router.patch('/card-tickets/:id', requireAdmin, async (req, res) => {
   const ticket = await CardTicket.findByIdAndUpdate(req.params.id, { $set: { status } }, { new: true });
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
   res.json(ticket);
+});
+
+// -----------------------------------------------------------------------
+// Support tickets raised by logged-in clients ("Raise a ticket" in their dashboard), with a two-way
+// conversation. Client side: routes/supportTickets.js.
+// -----------------------------------------------------------------------
+const SUPPORT_STATUSES = ['open', 'in_progress', 'resolved'];
+
+// A ticket's conversation is returned one window at a time: `limit` messages ending `offset` messages before the
+// newest. totalMessages / hasOlder tell the page whether scrolling up has more to load.
+function messageWindow(o, limit = 10, offset = 0) {
+  const total = o.messages.length;
+  const end = Math.max(0, total - offset);
+  const start = Math.max(0, end - limit);
+  return { ...o, messages: o.messages.slice(start, end), totalMessages: total, hasOlder: start > 0 };
+}
+
+async function withClientNames(tickets) {
+  const ids = [...new Set(tickets.map((t) => t.clientId))];
+  const clients = await Client.find({ clientId: { $in: ids } }).select('clientId fullName phone loginEmail');
+  const map = Object.fromEntries(clients.map((c) => [c.clientId, c]));
+  return tickets.map((t) => {
+    const o = t.toObject();
+    const last = o.messages[o.messages.length - 1];
+    return {
+      ...o,
+      clientName: map[o.clientId]?.fullName || '(deleted client)',
+      clientPhone: map[o.clientId]?.phone || '',
+      clientEmail: map[o.clientId]?.loginEmail || '',
+      lastMessageFrom: last ? last.from : null,
+      messageCount: o.messages.length,
+      preview: last ? last.text.slice(0, 140) : '',
+    };
+  });
+}
+
+// GET /api/admin/support-tickets?status=open|in_progress|resolved&q=text&limit=10&skip=0
+// One page per call (default 10, newest activity first); the page scrolls down to fetch the next.
+router.get('/support-tickets', requireAdmin, async (req, res) => {
+  try {
+    const filter = {};
+    if (SUPPORT_STATUSES.includes(req.query.status)) filter.status = req.query.status;
+    // ?taken=none (nobody has it yet) or ?taken=me (this admin has it)
+    if (req.query.taken === 'none') filter['takenBy.email'] = { $in: ['', null] };
+    else if (req.query.taken === 'me') {
+      const me = await Admin.findById(req.admin.adminId).select('email');
+      filter['takenBy.email'] = me?.email || '__none__';
+    }
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 60) : '';
+    if (q) {
+      const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      const matchingClients = await Client.find({ $or: [{ fullName: re }, { phone: re }] }).select('clientId').limit(50);
+      filter.$or = [{ ticketNumber: re }, { subject: re }, { orderNumber: re }, { clientId: re }, { clientId: { $in: matchingClients.map((c) => c.clientId) } }];
+    }
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const skip = Math.max(0, parseInt(req.query.skip, 10) || 0);
+    const [tickets, total, counts] = await Promise.all([
+      SupportTicket.find(filter).sort({ lastActivityAt: -1, _id: -1 }).skip(skip).limit(limit),
+      SupportTicket.countDocuments(filter),
+      SupportTicket.aggregate([{ $group: { _id: '$status', n: { $sum: 1 } } }]),
+    ]);
+    // Rows only need the last message as a preview, not the whole conversation.
+    const rows = (await withClientNames(tickets)).map(({ messages, ...row }) => row);
+    res.json({ tickets: rows, total, hasMore: skip + tickets.length < total, counts: Object.fromEntries(counts.map((c) => [c._id, c.n])) });
+  } catch (err) {
+    console.error('[admin support-tickets GET]', err);
+    res.status(500).json({ error: 'Failed to load tickets' });
+  }
+});
+
+// GET /api/admin/support-tickets/:id?limit=10&offset=0 -- the newest `limit` messages (offset = how many of the
+// newest are already on screen, to fetch older ones). Opening the latest window clears the unread dot.
+router.get('/support-tickets/:id', requireAdmin, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Ticket not found' });
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const ticket = offset === 0
+      ? await SupportTicket.findByIdAndUpdate(req.params.id, { $set: { adminUnread: false } }, { new: true })
+      : await SupportTicket.findById(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    res.json(messageWindow((await withClientNames([ticket]))[0], limit, offset));
+  } catch (err) {
+    console.error('[admin support-tickets/:id GET]', err);
+    res.status(500).json({ error: 'Failed to load the ticket' });
+  }
+});
+
+// POST /api/admin/support-tickets/:id/reply { text } -- also moves an open ticket to in progress and tells the client.
+router.post('/support-tickets/:id/reply', requireAdmin, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Ticket not found' });
+    const text = typeof req.body.text === 'string' ? req.body.text.trim() : '';
+    if (text.length < 1 || text.length > 2000) return res.status(400).json({ error: 'Write a reply of up to 2000 characters.' });
+    const ticket = await SupportTicket.findById(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    // Who replied (internal only -- the customer just sees "Support team"): the admin's display name.
+    const replier = await Admin.findById(req.admin.adminId).select('name email');
+    ticket.messages.push({ from: 'admin', text, byName: replier?.name || replier?.email || 'Support' });
+    if (!ticket.takenBy?.email) ticket.takenBy = { name: replier?.name || replier?.email || 'Admin', email: replier?.email || '', at: new Date() };
+    if (ticket.status === 'open') ticket.status = 'in_progress';
+    ticket.clientUnread = true;
+    ticket.lastActivityAt = new Date();
+    await ticket.save();
+    Client.findOne({ clientId: ticket.clientId }).select('clientId fullName loginEmail').then((client) => {
+      sendTicketReply({ ticket, client, text });
+    }).catch(() => {});
+    try {
+      await Notification.create({ clientId: ticket.clientId, message: `Support replied to your ticket ${ticket.ticketNumber}.`, link: '/dashboard/tickets' });
+    } catch { /* the reply is saved; a missing bell notification is not worth failing it */ }
+    res.json(messageWindow((await withClientNames([ticket]))[0]));
+  } catch (err) {
+    console.error('[admin support-tickets reply POST]', err);
+    res.status(500).json({ error: 'Failed to send the reply' });
+  }
+});
+
+// POST /api/admin/support-tickets/:id/take -- this admin takes the ticket (or takes it over from someone else).
+router.post('/support-tickets/:id/take', requireAdmin, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Ticket not found' });
+    const ticket = await SupportTicket.findById(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    const who = await Admin.findById(req.admin.adminId).select('name email');
+    ticket.takenBy = { name: who?.name || who?.email || 'Admin', email: who?.email || '', at: new Date() };
+    if (ticket.status === 'open') ticket.status = 'in_progress';
+    await ticket.save();
+    res.json(messageWindow((await withClientNames([ticket]))[0]));
+  } catch (err) {
+    console.error('[admin support-tickets take POST]', err);
+    res.status(500).json({ error: 'Failed to take the ticket' });
+  }
+});
+
+// POST /api/admin/support-tickets/:id/assign { email } -- give the ticket to a chosen admin or subadmin.
+router.post('/support-tickets/:id/assign', requireAdmin, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Ticket not found' });
+    const target = await Admin.findOne({ email: String(req.body.email || '').trim().toLowerCase() }).select('name email role');
+    if (!target || target.role === 'employee') return res.status(400).json({ error: 'Choose an admin or subadmin account.' });
+    const ticket = await SupportTicket.findById(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    ticket.takenBy = { name: target.name || target.email, email: target.email, at: new Date() };
+    if (ticket.status === 'open') ticket.status = 'in_progress';
+    await ticket.save();
+    res.json(messageWindow((await withClientNames([ticket]))[0]));
+  } catch (err) {
+    console.error('[admin support-tickets assign POST]', err);
+    res.status(500).json({ error: 'Failed to assign the ticket' });
+  }
+});
+
+// POST /api/admin/support-tickets/:id/release -- hand the ticket back (nobody has it).
+router.post('/support-tickets/:id/release', requireAdmin, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Ticket not found' });
+    const ticket = await SupportTicket.findById(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    ticket.takenBy = { name: '', email: '', at: null };
+    await ticket.save();
+    res.json(messageWindow((await withClientNames([ticket]))[0]));
+  } catch (err) {
+    console.error('[admin support-tickets release POST]', err);
+    res.status(500).json({ error: 'Failed to release the ticket' });
+  }
+});
+
+// PATCH /api/admin/support-tickets/:id/status { status }
+router.patch('/support-tickets/:id/status', requireAdmin, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Ticket not found' });
+    const status = req.body.status;
+    if (!SUPPORT_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    const ticket = await SupportTicket.findById(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    ticket.status = status;
+    if (status !== 'open' && !ticket.takenBy?.email) {
+      const who = await Admin.findById(req.admin.adminId).select('name email');
+      ticket.takenBy = { name: who?.name || who?.email || 'Admin', email: who?.email || '', at: new Date() };
+    }
+    ticket.resolvedAt = status === 'resolved' ? new Date() : null;
+    ticket.lastActivityAt = new Date();
+    if (status === 'resolved') ticket.clientUnread = true;
+    await ticket.save();
+    if (status === 'resolved') {
+      Client.findOne({ clientId: ticket.clientId }).select('clientId fullName loginEmail').then((client) => {
+        sendTicketResolved({ ticket, client });
+      }).catch(() => {});
+      try {
+        await Notification.create({ clientId: ticket.clientId, message: `Your ticket ${ticket.ticketNumber} was marked resolved.`, link: '/dashboard/tickets' });
+      } catch { /* see above */ }
+    }
+    res.json(messageWindow((await withClientNames([ticket]))[0]));
+  } catch (err) {
+    console.error('[admin support-tickets status PATCH]', err);
+    res.status(500).json({ error: 'Failed to update the ticket' });
+  }
 });
 
 // DELETE /api/admin/card-tickets/:id

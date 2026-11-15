@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
+import PasswordInput from '../components/PasswordInput.jsx';
+import { validateNewPassword, MIN_PASSWORD_LENGTH } from '../utils/passwordRules.js';
 import WaveBackdrop from '../components/WaveBackdrop.jsx';
 import ParticleWaves from '../components/ParticleWaves.jsx';
 
@@ -19,8 +21,9 @@ export default function ResetPassword() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
-    if (newPassword !== confirmPassword) {
-      setError('Passwords do not match');
+    const problem = validateNewPassword(newPassword, confirmPassword);
+    if (problem) {
+      setError(problem);
       return;
     }
     setLoading(true);
@@ -74,27 +77,21 @@ export default function ResetPassword() {
             <form className="card" onSubmit={handleSubmit}>
               <div className="field">
                 <label htmlFor="newPassword">New password</label>
-                <input
-                  id="newPassword"
-                  type="password"
+                <PasswordInput id="newPassword"
+                  
                   autoComplete="new-password"
-                  minLength={8}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                />
+                  required />
               </div>
               <div className="field">
                 <label htmlFor="confirmPassword">Confirm new password</label>
-                <input
-                  id="confirmPassword"
-                  type="password"
+                <PasswordInput id="confirmPassword"
+                  
                   autoComplete="new-password"
-                  minLength={8}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                />
+                  required />
               </div>
               <button type="submit" disabled={loading}>
                 {loading ? 'Resetting…' : 'Reset password'}

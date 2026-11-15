@@ -36,6 +36,8 @@ const Profile = lazy(() => import('./pages/Profile.jsx'));
 const Track = lazy(() => import('./pages/Track.jsx'));
 const Settings = lazy(() => import('./pages/Settings.jsx'));
 const MyActivity = lazy(() => import('./pages/MyActivity.jsx'));
+const SupportTickets = lazy(() => import('./pages/SupportTickets.jsx'));
+const Notifications = lazy(() => import('./pages/Notifications.jsx'));
 const ArLayout = lazy(() => import('./pages/ArLayout.jsx'));
 const Contacts = lazy(() => import('./pages/Contacts.jsx'));
 const Appointments = lazy(() => import('./pages/Appointments.jsx'));
@@ -387,6 +389,8 @@ export default function App() {
         <Route path="magic-poster-orders" element={<Navigate to="/dashboard/upgrade?history=poster" replace />} />
         <Route path="account-settings" element={<Lazy><Settings /></Lazy>} />
         <Route path="activity" element={<Lazy><MyActivity /></Lazy>} />
+        <Route path="tickets" element={<Lazy><SupportTickets /></Lazy>} />
+        <Route path="notifications" element={<Lazy><Notifications /></Lazy>} />
         <Route path="contacts" element={<Lazy><Contacts /></Lazy>} />
       </Route>
 

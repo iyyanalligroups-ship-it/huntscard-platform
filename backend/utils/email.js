@@ -35,6 +35,7 @@ async function sendEmail(to, subject, body) {
       subject,
       text: content?.text || '',
       ...(content?.html ? { html: content.html } : {}),
+      ...(content?.replyTo ? { replyTo: content.replyTo } : {}),
     });
     console.log(`[EMAIL] sent to ${to}: ${subject}`);
   } catch (err) {

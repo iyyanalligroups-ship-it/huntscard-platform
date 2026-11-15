@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 
 // No WebSocket/real-time infra exists anywhere in this codebase (Socket.io
@@ -35,6 +36,7 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 export default function NotificationBell() {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
@@ -136,33 +138,59 @@ export default function NotificationBell() {
     }
   }
 
+  // Clicking a notification marks it read (so it leaves this list) and, if it points somewhere, opens that page.
+  async function openNotification(n) {
+    if (!n.read) handleMarkRead(n._id);
+    if (n.link) {
+      setOpen(false);
+      navigate(n.link);
+    }
+  }
+
+  function handleMarkAllRead() {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnreadCount(0);
+    api.markAllNotificationsRead().catch(() => loadNotifications());
+  }
+
+  function viewAll() {
+    setOpen(false);
+    navigate('/dashboard/notifications');
+  }
+
   function dismissPushPrompt() {
     setShowPushPrompt(false);
     localStorage.setItem(PUSH_PROMPT_DISMISSED_KEY, '1');
   }
 
+  // The browser permission prompt is the only step the person actually waits on. Once they allow it,
+  // close the banner straight away and finish subscribing (service worker + push service + our API)
+  // in the background -- those network steps can take seconds and don't need a spinner.
   async function handleEnablePush() {
     setPushBusy(true);
+    let permission;
     try {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        dismissPushPrompt();
-        return;
-      }
-      const publicKey = pushPublicKey || (await api.getPushPublicKey()).publicKey;
-      const registration = swRegistrationRef.current || (await navigator.serviceWorker.register('/sw.js'));
-      await navigator.serviceWorker.ready;
+      permission = await Notification.requestPermission();
+    } catch {
+      permission = 'denied';
+    }
+    dismissPushPrompt();
+    setPushBusy(false);
+    if (permission !== 'granted') return;
+    try {
+      const [{ publicKey }, registration] = await Promise.all([
+        pushPublicKey ? Promise.resolve({ publicKey: pushPublicKey }) : api.getPushPublicKey(),
+        swRegistrationRef.current ? Promise.resolve(swRegistrationRef.current) : navigator.serviceWorker.register('/sw.js'),
+      ]);
+      // Only wait for activation if the worker isn't already active.
+      if (!registration.active) await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey),
       });
       await api.subscribePush(subscription.toJSON());
-      dismissPushPrompt();
     } catch (err) {
       console.error('[push] enable failed:', err);
-      dismissPushPrompt();
-    } finally {
-      setPushBusy(false);
     }
   }
 
@@ -264,26 +292,41 @@ export default function NotificationBell() {
                   zIndex: 1000,
                 }}
               >
-                <div style={{ padding: '12px 14px', fontWeight: 700, fontSize: 13, borderBottom: '1px solid var(--panel-border)' }}>Notifications</div>
-                {notifications.length === 0 ? (
-                  <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>No notifications yet.</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--panel-border)' }}>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>Notifications</span>
+                  {unreadCount > 0 && (
+                    <button type="button" className="secondary" style={{ width: 'auto', padding: '4px 10px', fontSize: 11.5 }} onClick={handleMarkAllRead}>
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+                {notifications.filter((n) => !n.read).length === 0 ? (
+                  <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>You're all caught up. No new notifications.</div>
                 ) : (
-                  notifications.map((n) => (
-                    <div
-                      key={n._id}
-                      onClick={() => !n.read && handleMarkRead(n._id)}
-                      style={{
-                        padding: '10px 14px',
-                        cursor: n.read ? 'default' : 'pointer',
-                        background: n.read ? 'transparent' : 'rgba(79, 142, 247, 0.1)',
-                        borderBottom: '1px solid var(--panel-border)',
-                      }}
-                    >
-                      <div style={{ fontSize: 13 }}>{n.message}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>{timeAgo(n.createdAt)}</div>
-                    </div>
-                  ))
+                  notifications
+                    .filter((n) => !n.read)
+                    .slice(0, 6)
+                    .map((n) => (
+                      <div
+                        key={n._id}
+                        onClick={() => openNotification(n)}
+                        style={{
+                          padding: '10px 14px',
+                          cursor: 'pointer',
+                          background: 'rgba(79, 142, 247, 0.1)',
+                          borderBottom: '1px solid var(--panel-border)',
+                        }}
+                      >
+                        <div style={{ fontSize: 13 }}>{n.message}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>{timeAgo(n.createdAt)}</div>
+                      </div>
+                    ))
                 )}
+                <div style={{ padding: '8px 14px', textAlign: 'center' }}>
+                  <button type="button" className="secondary" style={{ width: '100%', padding: '7px 10px', fontSize: 12.5 }} onClick={viewAll}>
+                    View all notifications
+                  </button>
+                </div>
               </div>
             )}
           </div>,

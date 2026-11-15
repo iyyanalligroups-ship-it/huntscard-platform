@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   Sparkles,
   Ticket,
+  Eye,
   Truck,
   Volume2,
   X,
@@ -47,6 +48,7 @@ const EMPTY_ADDRESS_FORM = {
   countryName: COUNTRY_NAME,
   stateIso: '',
   stateName: '',
+  districtName: '',
   cityName: '',
   pincode: '',
 };
@@ -309,6 +311,27 @@ export default function Shop() {
   const [addressForm, setAddressForm] = useState(EMPTY_ADDRESS_FORM);
   const [states, setStates] = useState([]);
   const [cities, setCities] = useState([]);
+  const [districts, setDistricts] = useState([]);
+  const [districtsReady, setDistrictsReady] = useState(false);
+
+  // City follows the district: it loads once a district is chosen (or straight away for a state with no district list).
+  useEffect(() => {
+    if (!addressForm.stateIso) {
+      setCities([]);
+      return undefined;
+    }
+    if (!districtsReady) return undefined;
+    if (districts.length > 0 && !addressForm.districtName) {
+      setCities([]);
+      return undefined;
+    }
+    let alive = true;
+    api
+      .getCities(COUNTRY_ISO, addressForm.stateIso, addressForm.districtName || undefined)
+      .then((list) => alive && setCities(list))
+      .catch(() => alive && setCities([]));
+    return () => { alive = false; };
+  }, [addressForm.stateIso, addressForm.districtName, districts, districtsReady]);
   const [savingAddress, setSavingAddress] = useState(false);
   const [checkoutPricing, setCheckoutPricing] = useState(null);
   const [expandedRequestId, setExpandedRequestId] = useState(null);
@@ -390,9 +413,13 @@ export default function Shop() {
   useEffect(() => {
     const planKey = searchParams.get('plan');
     if (!planKey || plans.length === 0) return;
-    if (plans.some((p) => p.key === planKey)) selectPlan(planKey);
+    if (plans.some((p) => p.key === planKey)) {
+      selectPlan(planKey);
+      // Bring the chosen plan's detail panel into view (the page opens at the top).
+      setTimeout(() => document.querySelector('.plan-detail-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plans]);
+  }, [plans, searchParams]);
 
   // Deep-link from a HuntsWorld coupon email (/dashboard/upgrade?plan=
   // <key>&coupon=<code>) -- the ?plan= param above already pre-selects the
@@ -455,6 +482,10 @@ export default function Shop() {
   // showing what they're on), otherwise just the first plan in the list.
   useEffect(() => {
     if (loading || selectedKey || visiblePlans.length === 0) return;
+    // A ?plan= deep link wins over the default -- otherwise this effect runs in the
+    // same commit as the deep-link one and overwrites it with the first plan.
+    const wanted = searchParams.get('plan');
+    if (wanted && visiblePlans.some((p) => p.key === wanted)) return;
     const current = loggedIn && hasCard ? visiblePlans.find((p) => ownedPlanKeys.has(p.key)) : null;
     setSelectedKey((current || visiblePlans[0]).key);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -599,9 +630,14 @@ export default function Shop() {
   }
 
   function handleAddressStateChange(option) {
-    setAddressForm((current) => ({ ...current, stateIso: option.value, stateName: option.label, cityName: '' }));
+    setAddressForm((current) => ({ ...current, stateIso: option.value, stateName: option.label, districtName: '', cityName: '' }));
     setCities([]);
-    api.getCities(COUNTRY_ISO, option.value).then(setCities).catch(() => {});
+    setDistricts([]);
+    setDistrictsReady(false);
+    api
+      .getDistricts(option.value)
+      .then((list) => { setDistricts(list); setDistrictsReady(true); })
+      .catch(() => { setDistricts([]); setDistrictsReady(true); });
   }
 
   async function handleSaveAddress() {
@@ -622,6 +658,10 @@ export default function Shop() {
       setError('Choose a state and city.');
       return;
     }
+    if (districts.length > 0 && !addressForm.districtName) {
+      setError('Choose a district.');
+      return;
+    }
 
     setSavingAddress(true);
     try {
@@ -633,6 +673,7 @@ export default function Shop() {
         line2: addressForm.line2,
         country: COUNTRY_NAME,
         state: addressForm.stateName,
+        district: addressForm.districtName,
         city: addressForm.cityName,
         pincode: addressForm.pincode,
         isDefault: (addresses?.length || 0) === 0,
@@ -975,7 +1016,7 @@ export default function Shop() {
                       id="designFront"
                       type="file"
                       accept="image/jpeg,image/png,image/webp"
-                      onChange={(e) => handleDesignUpload('front', e.target.files[0])}
+                      onChange={(e) => { handleDesignUpload('front', e.target.files[0]); e.target.value = ''; }}
                       disabled={uploadingDesign === 'front'}
                     />
                     {uploadingDesign === 'front' && <p className="hint">Uploading…</p>}
@@ -989,7 +1030,7 @@ export default function Shop() {
                       id="designBack"
                       type="file"
                       accept="image/jpeg,image/png,image/webp"
-                      onChange={(e) => handleDesignUpload('back', e.target.files[0])}
+                      onChange={(e) => { handleDesignUpload('back', e.target.files[0]); e.target.value = ''; }}
                       disabled={uploadingDesign === 'back'}
                     />
                     {uploadingDesign === 'back' && <p className="hint">Uploading…</p>}
@@ -997,7 +1038,7 @@ export default function Shop() {
                       <img src={designBackUrl} alt="Back design preview" style={{ width: 120, marginTop: 8, borderRadius: 6 }} />
                     )}
                   </div>
-                  <p className="hint">We'll print this artwork on your card exactly as uploaded.</p>
+                  <p className="hint">JPEG, PNG, or WEBP. Max 10MB per side. We'll print this artwork on your card exactly as uploaded.</p>
                 </>
               )}
               {selectedPlan.chargeAmount && !hasVariants && !couponMode && (
@@ -1137,6 +1178,17 @@ export default function Shop() {
                         />
                       </label>
                       <label>
+                        District
+                        <GeoSelect
+                          value={addressForm.districtName}
+                          options={districts.map((district) => ({ value: district, label: district }))}
+                          onChange={(option) => setAddressForm((current) => ({ ...current, districtName: option.value, cityName: '' }))}
+                          placeholder="Select district"
+                          searchPlaceholder="Search districts…"
+                          disabled={!addressForm.stateIso}
+                        />
+                      </label>
+                      <label>
                         City
                         <GeoSelect
                           value={addressForm.cityName}
@@ -1144,7 +1196,7 @@ export default function Shop() {
                           onChange={(option) => updateAddressField('cityName', option.value)}
                           placeholder="Select city"
                           searchPlaceholder="Search cities…"
-                          disabled={!addressForm.stateIso}
+                          disabled={!addressForm.stateIso || (districts.length > 0 && !addressForm.districtName)}
                         />
                       </label>
                       <label>
@@ -1262,7 +1314,7 @@ export default function Shop() {
             <p className="subtitle" style={{ margin: '12px 0 0' }}>You haven't purchased a card yet.</p>
           ) : requests.map((r) => {
             const requestPlan = visiblePlans.find((p) => p.key === r.requestedPlan);
-            const planName = requestPlan?.name || r.requestedPlan;
+            const planName = requestPlan?.name || r.planName || r.requestedPlan;
             const expanded = expandedRequestId === r._id;
             const items = r.invoiceItems && r.invoiceItems.length > 0 ? r.invoiceItems : [{ name: planName, unitPrice: null, quantity: r.quantity }];
             const selectedVariants = (r.variantBreakdown || []).map((selection, index) => {
@@ -1300,6 +1352,14 @@ export default function Shop() {
                   <span className="card-request-actions">
                     <span className="request-status">{r.status}</span>
                     {r.paymentStatus === 'paid' && (
+                      <>
+                      <button
+                        type="button"
+                        className="secondary card-invoice-button"
+                        onClick={(e) => { e.stopPropagation(); api.viewCardInvoice(r._id).catch((err) => setError(err.message)); }}
+                      >
+                        <Eye size={14} aria-hidden="true" />View
+                      </button>
                       <button
                         type="button"
                         className="secondary card-invoice-button"
@@ -1307,6 +1367,7 @@ export default function Shop() {
                       >
                         <Download size={14} aria-hidden="true" />Invoice
                       </button>
+                      </>
                     )}
                     <ChevronDown size={16} className="request-row-chevron" aria-hidden="true" style={{ transform: expanded ? 'rotate(180deg)' : 'none' }} />
                   </span>
@@ -1330,7 +1391,6 @@ export default function Shop() {
                       <div className="purchase-detail-plan">
                         <span className="purchase-detail-kicker">Purchased plan</span>
                         <h3>{planName}</h3>
-                        <code>{r.requestedPlan}</code>
                         {requestPlan?.description && <p>{requestPlan.description}</p>}
                         <div className="purchase-detail-meta">
                           <div><span>Quantity</span><strong>{r.quantity || 1}</strong></div>

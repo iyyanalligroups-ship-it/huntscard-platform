@@ -9,17 +9,18 @@ import {
   Check,
   Copy,
   ExternalLink,
+  Fingerprint,
   Globe2,
   IdCard,
   ImagePlus,
   Link2,
   Mail,
+  MapPin,
   MessageCircle,
   Pencil,
   Phone,
   Send,
   ShieldCheck,
-  Sparkles,
   UserRound,
 } from 'lucide-react';
 import { api, API_URL } from '../api.js';
@@ -177,12 +178,12 @@ export default function Dashboard() {
       label: profile.publicEmail,
       href: `mailto:${profile.publicEmail}`,
     },
-    dashboardAddressLabel && {
-      icon: <Globe2 size={15} />,
-      label: dashboardAddressLabel,
-      href: dashboardAddressHref,
-    },
   ].filter(Boolean);
+
+  // Address has its own tab (same as the public card), not a row buried under Contact.
+  const addressRows = dashboardAddressLabel
+    ? [{ icon: <MapPin size={15} />, label: dashboardAddressLabel, href: dashboardAddressHref }]
+    : [];
 
   const socialRows = [
     profile?.instagramUrl && { icon: <Camera size={15} />, label: 'Instagram', href: profile.instagramUrl },
@@ -214,17 +215,21 @@ export default function Dashboard() {
   const portfolioCustomRows = customRowsFor('portfolio');
   const socialCustomRows = customRowsFor('social');
   const huntsworldCustomRows = customRowsFor('huntsworld');
+  const addressCustomRows = customRowsFor('address');
 
   // Only show tabs for sections that actually have content -- matches the
   // real public tap page's behaviour exactly, since this IS a preview of it.
   const tabs = [];
-  if (profile?.bio) tabs.push({ label: 'My Bio', key: 'bio' });
+  const highlightTags = Array.isArray(profile?.highlights) ? profile.highlights.filter(Boolean) : [];
+  if (profile?.bio || highlightTags.length) tabs.push({ label: 'My Bio', key: 'bio' });
   if (contactRows.length || contactCustomRows.length) tabs.push({ label: 'Contact', key: 'contact' });
   if (profile?.portfolioUrl || portfolioCustomRows.length) tabs.push({ label: 'Portfolio', key: 'portfolio' });
   if (socialRows.length || socialCustomRows.length) tabs.push({ label: 'Social', key: 'social' });
   // Huntsworld is a business listing platform -- featured in its own tab,
   // mirroring backend/public-tap/index.html exactly.
   if (profile?.huntsworldUrl || huntsworldCustomRows.length) tabs.push({ label: 'Huntsworld', key: 'huntsworld' });
+
+  if (addressRows.length || addressCustomRows.length) tabs.push({ label: 'Address', key: 'address' });
 
   // Sections an admin added beyond the original four (see the admin
   // Attributes page) -- no hardcoded fields of their own, just whatever
@@ -278,7 +283,7 @@ export default function Dashboard() {
       <header className="client-profile-hero">
         <div className="client-profile-hero__icon"><UserRound size={24} /></div>
         <div className="client-profile-hero__copy">
-          <span><Sparkles size={13} /> Digital identity</span>
+          <span><Fingerprint size={13} /> Digital identity</span>
           <h1>Your HuntsTAG profile</h1>
           <p>Preview exactly what people see when they tap or scan your card.</p>
         </div>
@@ -330,6 +335,7 @@ export default function Dashboard() {
           <div className="pv-title">
             {[profile?.designation, profile?.jobTitle].filter(Boolean).join(' · ') || '\u00A0'}
           </div>
+          {profile?.headline && <p className="pv-headline">{profile.headline}</p>}
           {profile?.clientId && (
             <div className="pv-qr-inline">
               <img src={`${API_URL}/api/public/qr/${profile.clientId}`} alt="QR code for this card" />
@@ -461,7 +467,21 @@ export default function Dashboard() {
         </div>
 
         <div className="pv-panel" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-          {currentKey === 'bio' && <p className="pv-bio">{profile.bio}</p>}
+          {currentKey === 'bio' && (
+            <>
+              {profile.bio && <p className="pv-bio">{profile.bio}</p>}
+              {highlightTags.length > 0 && (
+                <>
+                  <div className="pv-section-label">Expertise &amp; Highlights</div>
+                  <div className="pv-tags">
+                    {highlightTags.map((tag) => (
+                      <span key={tag} className="pv-tag">#{tag}</span>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
 
           {currentKey === 'contact' && (
             <>
@@ -533,6 +553,20 @@ export default function Dashboard() {
           {currentKey && customSectionRows[currentKey] && (
             <>
               {customSectionRows[currentKey].map((row) => (
+                <CustomRow key={row.key} row={row} />
+              ))}
+            </>
+          )}
+
+          {currentKey === 'address' && (
+            <>
+              {addressRows.map((row) => (
+                <a className="pv-contact-row" key={row.label} href={row.href} target="_blank" rel="noopener noreferrer">
+                  <span className="pv-icon">{row.icon}</span>
+                  <span className="pv-contact-label">{row.label}</span>
+                </a>
+              ))}
+              {addressCustomRows.map((row) => (
                 <CustomRow key={row.key} row={row} />
               ))}
             </>

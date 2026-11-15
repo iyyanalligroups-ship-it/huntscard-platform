@@ -31,9 +31,11 @@ const { safeExt, str, limiter } = require('../utils/upload');
 // Unauthenticated writes (orders, contact form, leads): bounded per IP so they can't be used to spam or fill the DB.
 const publicWriteLimiter = limiter(40, 15);
 const { Country, State, City } = require('country-state-city');
+const { localitiesFor } = require('../utils/localities');
 const { getGlobalMagicLayoutDefault, mergeMagicLayout } = require('../utils/magicLayout');
 const { buildVariantMap, resolveCardVariant } = require('../utils/cardVariant');
 
+const { getDistricts: getIndiaDistricts } = require('india-state-district');
 const router = express.Router();
 
 function getRazorpay() {
@@ -474,6 +476,7 @@ router.post('/leads/:clientId', publicWriteLimiter, async (req, res) => {
     const trimmedPhone = (phone || '').toString().trim();
     if (!trimmedName) return res.status(400).json({ error: 'Name is required' });
     if (!trimmedPhone) return res.status(400).json({ error: 'Phone number is required' });
+    if (!/^\d{10}$/.test(trimmedPhone)) return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
 
     // Upsert, not create -- a repeat scan by the same visitor (same phone,
     // same owner) refreshes their info instead of hitting the {clientId,
@@ -499,7 +502,7 @@ router.post('/leads/:clientId', publicWriteLimiter, async (req, res) => {
     // same "don't await" rule appointments.js already follows for its own
     // email/SMS notifications.
     const message = `${trimmedName} shared their contact with you`;
-    Notification.create({ clientId: client.clientId, message, contactId: contact._id }).catch((err) =>
+    Notification.create({ clientId: client.clientId, message, contactId: contact._id, link: '/dashboard/contacts' }).catch((err) =>
       console.error('[public/leads] notification create failed:', err.message)
     );
     sendPushToClient(client.clientId, { title: 'New contact shared', body: message }).catch((err) =>
@@ -607,9 +610,9 @@ router.get('/ar-layout/:clientId', async (req, res) => {
       ? { x: magicCard.qrX, y: magicCard.qrY, z: fallback.qr?.z ?? 0 }
       : { ...resolved.defaultQrPosition, z: fallback.qr?.z ?? 0 };
     if (!layout) {
-      layout = { ...fallback.toObject(), qr };
+      layout = { ...fallback.toObject({ flattenMaps: true }), qr };
     } else {
-      layout = { ...layout.toObject(), qr };
+      layout = { ...layout.toObject({ flattenMaps: true }), qr };
     }
     // HuntsAR World re-fetches this on every scan -- a stale cached copy
     // after the client just edited their layout would look exactly like a
@@ -673,11 +676,27 @@ router.get('/geo/states', (req, res) => {
   res.json(State.getStatesOfCountry(country).map((s) => ({ name: s.name, isoCode: s.isoCode })));
 });
 
-// GET /api/public/geo/cities?country=IN&state=TN
+// GET /api/public/geo/districts?state=TN -- the districts of an Indian state (state = its ISO code, as in /geo/states).
+router.get('/geo/districts', (req, res) => {
+  const state = String(req.query.state || '').trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(state)) return res.status(400).json({ error: 'state is required' });
+  res.set('Cache-Control', 'public, max-age=86400');
+  const list = getIndiaDistricts(state);
+  res.json((Array.isArray(list) ? [...list] : []).sort((a, b) => a.localeCompare(b)));
+});
+
+// GET /api/public/geo/cities?country=IN&state=TN[&district=Cuddalore]
+// With a district (India), the list is the towns and areas of THAT district (India Post office directory). A
+// district the directory does not know (for example one created recently) falls back to the whole state's cities.
 router.get('/geo/cities', (req, res) => {
-  const { country, state } = req.query;
+  const { country, state, district } = req.query;
   if (!country || !state) return res.status(400).json({ error: 'country and state are required' });
   res.set('Cache-Control', 'public, max-age=86400');
+  if (district && String(country).toUpperCase() === 'IN') {
+    const stateInfo = State.getStateByCodeAndCountry(String(state).toUpperCase(), 'IN');
+    const areas = stateInfo ? localitiesFor(stateInfo.name, String(district)) : [];
+    if (areas.length > 0) return res.json(areas);
+  }
   res.json(City.getCitiesOfState(country, state).map((c) => c.name));
 });
 

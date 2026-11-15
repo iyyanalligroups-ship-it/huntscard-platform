@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, ChevronDown, Clock3, CreditCard, Download, Image, MapPin, ShoppingBag, Truck } from 'lucide-react';
+import { ArrowRight, ChevronDown, Clock3, CreditCard, Download, Eye, Image, MapPin, ShoppingBag, Truck } from 'lucide-react';
 import { api } from '../api.js';
 
 const PAGE_SIZE = 10;
@@ -108,6 +108,13 @@ export default function MyMagicPosterOrders({ embedded = false }) {
                   </span>
                   <span className="card-request-actions">
                     <span className="request-status">{status}</span>
+                    <button
+                      type="button"
+                      className="secondary card-invoice-button"
+                      onClick={(e) => { e.stopPropagation(); api.viewMagicPosterInvoice(o._id).catch((err) => setError(err.message)); }}
+                    >
+                      <Eye size={14} aria-hidden="true" />View
+                    </button>
                     <button
                       type="button"
                       className="secondary card-invoice-button"

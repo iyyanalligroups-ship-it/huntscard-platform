@@ -14,8 +14,8 @@ const AdminSchema = new mongoose.Schema(
     // before (create clients, encode tool, everything) EXCEPT claiming,
     // assigning, or dispatching orders -- they can only complete work
     // that's already been assigned to them.
-    // 'primeadmin' is a genuine singleton (never more than one at a
-    // time, see POST /api/admin/team/:id/promote-to-prime) -- alone
+    // 'primeadmin' -- there can be more than one; an Admin Prime can make another admin Prime
+    // (POST /api/admin/team/:id/promote-to-prime) and undo it for someone else (/demote-from-prime) -- alone
     // controls the admin/employee roster, revenue visibility, the blank-
     // card inventory, and the encode-tool installer upload. Can't be
     // deleted by anyone, including itself (see DELETE /team/:id).

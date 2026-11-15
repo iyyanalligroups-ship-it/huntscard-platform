@@ -7,6 +7,7 @@ const { nanoid } = require('nanoid');
 const { requireAuth } = require('../middleware/auth');
 const { str } = require('../utils/upload');
 const Client = require('../models/Client');
+const Admin = require('../models/Admin');
 const RegistrationOtp = require('../models/RegistrationOtp');
 const { sendSms } = require('../utils/sms');
 const { sendEmail } = require('../utils/email');
@@ -202,8 +203,8 @@ router.post('/register', registerLimiter, async (req, res) => {
     if (!/^\d{10}$/.test(normalizedPhone)) {
       return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
     }
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
     if (gender && !['male', 'female', 'other'].includes(gender)) {
       return res.status(400).json({ error: 'gender must be male, female, or other' });
@@ -309,7 +310,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 // request and a password reset in flight at the same time can't clobber
 // each other. This endpoint intentionally tells the UI when a number is not
 // registered, so the user can be directed to registration first.
-router.post('/login-otp/request', otpLimiter, async (req, res) => {
+router.post('/login-otp/request', async (req, res) => {
   try {
     const phone = normalizePhone(req.body.phone);
     if (!/^\d{10}$/.test(phone)) {
@@ -354,7 +355,7 @@ router.post('/login-otp/request', otpLimiter, async (req, res) => {
 // POST /api/auth/login-otp/verify
 // Same response shape as POST /login, so the frontend's existing session
 // handling works unchanged regardless of which method logged the client in.
-router.post('/login-otp/verify', otpLimiter, async (req, res) => {
+router.post('/login-otp/verify', async (req, res) => {
   try {
     const phone = str(req.body.phone);
     const otp = str(req.body.otp);
@@ -412,8 +413,8 @@ router.post('/change-password', requireAuth, async (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ error: 'currentPassword and newPassword are required' });
     }
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
     }
 
     const client = await Client.findOne({ clientId: req.user.clientId });
@@ -447,6 +448,11 @@ router.post('/forgot-password', otpLimiter, async (req, res) => {
     if (!loginEmail) return res.status(400).json({ error: 'loginEmail is required' });
 
     const client = await Client.findOne({ loginEmail: loginEmail.toLowerCase() });
+    // Password reset here is for client accounts only. An admin/staff email must not get a code
+    // (admins reset through the admin panel), so say so instead of pretending a code was sent.
+    if (!client && (await Admin.exists({ email: loginEmail.trim().toLowerCase() }))) {
+      return res.status(403).json({ error: 'This email belongs to an admin account. Password reset here is for client accounts only.' });
+    }
     const withinCooldown =
       client?.resetOtpLastSentAt && Date.now() - client.resetOtpLastSentAt.getTime() < RESET_OTP_RESEND_COOLDOWN_MS;
     if (client && !withinCooldown) {
@@ -529,8 +535,8 @@ router.post('/reset-password', otpLimiter, async (req, res) => {
     if (!token || !newPassword) {
       return res.status(400).json({ error: 'token and newPassword are required' });
     }
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
     }
 
     const resetTokenHash = hashResetToken(token);

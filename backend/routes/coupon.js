@@ -105,6 +105,7 @@ router.post('/claim', requireAuth, async (req, res) => {
           country: client.addressCountry || 'India',
           state: client.addressState || '',
           city: client.addressCity || '',
+          district: client.addressDistrict || '',
           pincode: client.addressPincode,
         };
       }
@@ -120,6 +121,7 @@ router.post('/claim', requireAuth, async (req, res) => {
         country: client.addressCountry || 'India',
         state: client.addressState || '',
         city: client.addressCity || '',
+        district: client.addressDistrict || '',
         pincode: client.addressPincode,
       };
     }
@@ -169,6 +171,7 @@ router.post('/claim', requireAuth, async (req, res) => {
         country: deliveryAddress.country,
         state: deliveryAddress.state,
         city: deliveryAddress.city,
+        district: deliveryAddress.district || '',
         pincode: deliveryAddress.pincode,
       },
       couponCode: code.toUpperCase(),

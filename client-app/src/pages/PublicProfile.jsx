@@ -606,6 +606,10 @@ export default function PublicProfile() {
       setLeadError('Name and phone number are required');
       return;
     }
+    if (!/^\d{10}$/.test(leadPhone)) {
+      setLeadError('Enter a valid 10-digit phone number.');
+      return;
+    }
     setLeadSubmitting(true);
     setLeadError('');
     try {
@@ -1406,10 +1410,12 @@ export default function PublicProfile() {
                   type="tel"
                   autoComplete="tel"
                   inputMode="numeric"
-                  maxLength={15}
-                  placeholder="e.g. +1 555-0199"
+                  maxLength={10}
+                  pattern="[0-9]{10}"
+                  title="Enter exactly 10 digits"
+                  placeholder="e.g. 9876543210"
                   value={leadPhone}
-                  onChange={(e) => setLeadPhone(e.target.value)}
+                  onChange={(e) => setLeadPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                   required
                 />
               </div>

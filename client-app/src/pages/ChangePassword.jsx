@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
+import PasswordInput from '../components/PasswordInput.jsx';
+import { validateNewPassword, MIN_PASSWORD_LENGTH } from '../utils/passwordRules.js';
 
 export default function ChangePassword() {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -13,8 +15,9 @@ export default function ChangePassword() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
-    if (newPassword !== confirm) {
-      setError('New passwords do not match.');
+    const problem = validateNewPassword(newPassword, confirm);
+    if (problem) {
+      setError(problem);
       return;
     }
     setLoading(true);
@@ -45,38 +48,30 @@ export default function ChangePassword() {
       <form className="card" onSubmit={handleSubmit}>
         <div className="field">
           <label htmlFor="current">Temporary password</label>
-          <input
-            id="current"
-            type="password"
+          <PasswordInput id="current"
+            
             autoComplete="current-password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
-            required
-          />
+            required />
         </div>
         <div className="field">
           <label htmlFor="new">New password</label>
-          <input
-            id="new"
-            type="password"
+          <PasswordInput id="new"
+            
             autoComplete="new-password"
-            minLength={8}
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            required
-          />
+            required />
         </div>
         <div className="field">
           <label htmlFor="confirm">Confirm new password</label>
-          <input
-            id="confirm"
-            type="password"
+          <PasswordInput id="confirm"
+            
             autoComplete="new-password"
-            minLength={8}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
-            required
-          />
+            required />
         </div>
         <button type="submit" disabled={loading}>
           {loading ? 'Saving…' : 'Set password and continue'}

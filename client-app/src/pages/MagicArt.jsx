@@ -57,7 +57,7 @@ export default function MagicArt({ embedded = false }) {
   useEffect(() => {
     api
       .getPublicMagicArt()
-      .then(setPieces)
+      .then((list) => setPieces((Array.isArray(list) ? list : []).filter((p) => p.active))) // only artworks the admin has activated
       .catch((err) => setError(err.message));
   }, []);
 

@@ -20,6 +20,7 @@ const ADDRESS_FIELDS = [
   'addressCountryCode',
   'addressState',
   'addressStateCode',
+  'addressDistrict',
   'addressCity',
   'addressPincode',
   'googleMapsUrl',
@@ -76,6 +77,22 @@ const BASE_TABS = [
   { key: 'address', label: 'Address' },
 ];
 
+// Fields that count toward the profile score -- same list the dashboard's completeness donut uses,
+// each with the tab it lives on and the element to jump to.
+const SCORE_FIELDS = [
+  { key: 'fullName', label: 'Full name', tab: null, target: 'fullName' },
+  { key: 'jobTitle', label: 'Company name', tab: null, target: 'jobTitle' },
+  { key: 'bio', label: 'About (short bio)', tab: 'bio', target: 'bio' },
+  { key: 'photoUrl', label: 'Profile photo', tab: null, target: 'photoInput' },
+  { key: 'phone', label: 'Phone number', tab: 'contact', target: 'phone' },
+  { key: 'whatsapp', label: 'WhatsApp number', tab: 'contact', target: 'whatsapp' },
+  { key: 'publicEmail', label: 'Verified public email', tab: 'contact', target: 'publicEmail' },
+  { key: 'instagramUrl', label: 'Instagram link', tab: 'social', target: 'instagramUrl' },
+  { key: 'twitterUrl', label: 'Twitter / X link', tab: 'social', target: 'twitterUrl' },
+  { key: 'portfolioUrl', label: 'Portfolio link', tab: 'portfolio', target: 'portfolioUrl' },
+  { key: 'huntsworldUrl', label: 'Huntsworld profile link', tab: 'huntsworld', target: 'huntsworldUrl' },
+];
+
 // Admin's `fieldType` values map straight onto <input type="..."> except
 // 'phone', which HTML spells 'tel'.
 const INPUT_TYPE = { text: 'text', phone: 'tel', url: 'url', email: 'email' };
@@ -104,6 +121,36 @@ export default function Profile() {
   const [arModelUploading, setArModelUploading] = useState(false);
   const [arModelSaved, setArModelSaved] = useState(false);
   const [activeTab, setActiveTab] = useState('bio');
+  const [pendingJump, setPendingJump] = useState(null); // { target, tab } -- set when an incomplete-field chip is clicked
+
+  // Errors / status messages on this page show as a toast instead of an inline banner.
+  const [toast, setToast] = useState(null); // { text, kind: 'error' | 'success' }
+  const toastTimerRef = useRef(null);
+  function showToast(text, kind = 'error') {
+    if (!text) return;
+    setToast({ text, kind });
+    clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), kind === 'error' ? 5000 : 3000);
+  }
+  useEffect(() => () => clearTimeout(toastTimerRef.current), []);
+
+  // After switching to the right tab (if needed) and rendering it, scroll to the field and flash it.
+  useEffect(() => {
+    if (!pendingJump) return;
+    if (pendingJump.tab && pendingJump.tab !== activeTab) return; // wait for the tab to switch first
+    const t = setTimeout(() => {
+      const el = document.getElementById(pendingJump.target);
+      if (el) {
+        const box = el.closest('.field') || el.closest('.card') || el;
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (el.focus && el.type !== 'file') el.focus({ preventScroll: true });
+        box.classList.add('field-flash');
+        setTimeout(() => box.classList.remove('field-flash'), 1800);
+      }
+      setPendingJump(null);
+    }, 60);
+    return () => clearTimeout(t);
+  }, [pendingJump, activeTab]);
   const [attributes, setAttributes] = useState([]); // admin-defined extra fields, see AttributeDefinition
   const [emailOtp, setEmailOtp] = useState('');
   const [emailOtpSent, setEmailOtpSent] = useState(false);
@@ -112,9 +159,24 @@ export default function Profile() {
   const [emailOtpCooldown, setEmailOtpCooldown] = useState(0);
   const [emailVerificationError, setEmailVerificationError] = useState('');
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
+
+  useEffect(() => {
+    if (error) showToast(error, 'error');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error]);
+  useEffect(() => {
+    if (emailVerificationError) showToast(emailVerificationError, 'error');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailVerificationError]);
+  useEffect(() => {
+    if (emailVerificationMessage) showToast(emailVerificationMessage, 'success');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailVerificationMessage]);
   const [addressCountries, setAddressCountries] = useState([]);
   const [addressStates, setAddressStates] = useState([]);
   const [addressCities, setAddressCities] = useState([]);
+  const [addressDistricts, setAddressDistricts] = useState([]);
+  const [addressDistrictsReady, setAddressDistrictsReady] = useState(false);
   const [pincodeLookupStatus, setPincodeLookupStatus] = useState('');
   const fileInputRef = useRef(null);
   const bannerInputRef = useRef(null);
@@ -166,11 +228,36 @@ export default function Profile() {
       setAddressCities([]);
       return undefined;
     }
+    // In India the city list follows the district: wait for the district list, and for a district to be chosen.
+    const byDistrict = countryCode === 'IN';
+    if (byDistrict && !addressDistrictsReady) return undefined;
+    if (byDistrict && addressDistricts.length > 0 && !form.addressDistrict) {
+      setAddressCities([]);
+      return undefined;
+    }
     let cancelled = false;
     api
-      .getCities(countryCode, stateCode)
+      .getCities(countryCode, stateCode, byDistrict ? form.addressDistrict || undefined : undefined)
       .then((items) => !cancelled && setAddressCities(items))
       .catch(() => !cancelled && setAddressCities([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [form.addressCountryCode, form.addressStateCode, form.addressDistrict, addressDistricts, addressDistrictsReady]);
+
+  // Districts of the chosen state (India only).
+  useEffect(() => {
+    if ((form.addressCountryCode || 'IN') !== 'IN' || !form.addressStateCode) {
+      setAddressDistricts([]);
+      setAddressDistrictsReady(true);
+      return undefined;
+    }
+    let cancelled = false;
+    setAddressDistrictsReady(false);
+    api
+      .getDistricts(form.addressStateCode)
+      .then((items) => { if (!cancelled) { setAddressDistricts(items); setAddressDistrictsReady(true); } })
+      .catch(() => { if (!cancelled) { setAddressDistricts([]); setAddressDistrictsReady(true); } });
     return () => {
       cancelled = true;
     };
@@ -236,10 +323,12 @@ export default function Profile() {
       addressCountry: option.label,
       addressStateCode: '',
       addressState: '',
+      addressDistrict: '',
       addressCity: '',
       addressPincode: '',
     }));
     setAddressCities([]);
+    setAddressDistricts([]);
     setPincodeLookupStatus('');
     setSaved(false);
   }
@@ -249,9 +338,16 @@ export default function Profile() {
       ...current,
       addressStateCode: option.value,
       addressState: option.label,
+      addressDistrict: '',
       addressCity: '',
     }));
     setAddressCities([]);
+    setAddressDistricts([]);
+    setSaved(false);
+  }
+
+  function handleAddressDistrictChange(option) {
+    setForm((current) => ({ ...current, addressDistrict: option.value, addressCity: '' }));
     setSaved(false);
   }
 
@@ -283,6 +379,7 @@ export default function Profile() {
               addressCountryCode: 'IN',
               addressState: location.state || current.addressState,
               addressStateCode: matchingState?.isoCode || current.addressStateCode,
+              addressDistrict: location.city || current.addressDistrict,
               addressCity: location.city || current.addressCity,
             }
           : current,
@@ -551,6 +648,25 @@ export default function Profile() {
     profile?.publicEmailVerified &&
       (form.publicEmail || '').trim().toLowerCase() === (profile.publicEmail || '').trim().toLowerCase(),
   );
+  // Profile score -- live from the form, so it moves as the person types.
+  const scoreItems = SCORE_FIELDS.map((f) => {
+    let done;
+    if (f.key === 'photoUrl') done = Boolean(profile?.photoUrl);
+    else if (f.key === 'publicEmail') done = publicEmailIsVerified && Boolean((form.publicEmail || '').trim());
+    else done = Boolean(String(form[f.key] || '').trim());
+    return { ...f, done };
+  });
+  const scoreDone = scoreItems.filter((i) => i.done).length;
+  const scorePct = Math.round((scoreDone / scoreItems.length) * 100);
+  const missing = scoreItems.filter((i) => !i.done);
+  const incompleteKeys = new Set(missing.map((i) => i.key));
+  const missingByTab = {};
+  missing.forEach((i) => { if (i.tab) missingByTab[i.tab] = (missingByTab[i.tab] || 0) + 1; });
+  function jumpTo(item) {
+    if (item.tab) setActiveTab(item.tab);
+    setPendingJump({ target: item.target, tab: item.tab });
+  }
+
   // Resolution order: a fresh local pick, then the new one-slot field, then
   // the legacy video-only field (implicitly 'video') for clients who
   // uploaded before this existed -- never falls back to the general
@@ -572,7 +688,31 @@ export default function Profile() {
         your card. Changes go live immediately after saving.
       </p>
 
-      {error && <div className="error-banner">{error}</div>}
+
+      <div className="card profile-score" style={{ marginBottom: 16 }}>
+        <div className="profile-score-head">
+          <strong>Profile score</strong>
+          <span className="profile-score-pct">{scorePct}%</span>
+        </div>
+        <div className="profile-score-bar" role="progressbar" aria-valuenow={scorePct} aria-valuemin={0} aria-valuemax={100}>
+          <span style={{ width: `${scorePct}%` }} />
+        </div>
+        <p className="hint" style={{ margin: '8px 0 0' }}>
+          {missing.length === 0
+            ? 'Your profile is complete.'
+            : `${scoreDone} of ${scoreItems.length} done. Tap an item below to jump to it -- remember to Save changes.`}
+        </p>
+        {missing.length > 0 && (
+          <div className="profile-score-missing">
+            {missing.map((item) => (
+              <button type="button" key={item.key} className="profile-score-chip" onClick={() => jumpTo(item)}>
+                {item.label}
+                {item.tab ? <small> · {(tabs.find((t) => t.key === item.tab) || {}).label}</small> : null}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       {/* --- photo + banner: both upload immediately on selection --- */}
       <div className="card" style={{ marginBottom: 16 }}>
         <label style={{ marginBottom: 8 }}>Banner (shown behind your photo on the card)</label>
@@ -929,7 +1069,7 @@ export default function Profile() {
             it isn't part of any one of the card's five tabs. */}
         <div className="field-grid" style={{ marginBottom: 20 }}>
           {IDENTITY_FIELDS.map(({ key, label, type, required, maxLength, placeholder }) => (
-            <div className="field" key={key}>
+            <div className={`field${incompleteKeys.has(key) ? ' field-incomplete' : ''}`} key={key}>
               <div className="bio-field-heading">
                 <label htmlFor={key}>{label}</label>
                 {maxLength && (
@@ -1009,12 +1149,13 @@ export default function Profile() {
               style={{ width: 'auto', padding: '8px 14px' }}
             >
               {tab.label}
+              {missingByTab[tab.key] ? <span className="tab-missing-badge" title="Incomplete fields">{missingByTab[tab.key]}</span> : null}
             </button>
           ))}
         </div>
 
         {activeTab === 'bio' && (
-          <div className="field">
+          <div className={`field${incompleteKeys.has('bio') ? ' field-incomplete' : ''}`}>
             <div className="bio-field-heading">
               <label htmlFor="bio">About (short bio)</label>
               <span
@@ -1142,6 +1283,17 @@ export default function Profile() {
                   />
                 </div>
                 <div className="field">
+                  <label>District</label>
+                  <GeoSelect
+                    value={form.addressDistrict || ''}
+                    options={addressDistricts.map((district) => ({ value: district, label: district }))}
+                    onChange={handleAddressDistrictChange}
+                    placeholder="Select district"
+                    searchPlaceholder="Search districts…"
+                    disabled={!form.addressStateCode}
+                  />
+                </div>
+                <div className="field">
                   <label>City</label>
                   <GeoSelect
                     value={form.addressCity || ''}
@@ -1149,7 +1301,7 @@ export default function Profile() {
                     onChange={handleAddressCityChange}
                     placeholder="Select city"
                     searchPlaceholder="Search cities…"
-                    disabled={!form.addressStateCode}
+                    disabled={!form.addressStateCode || (addressDistricts.length > 0 && !form.addressDistrict)}
                   />
                 </div>
                 <div className="field">
@@ -1184,7 +1336,7 @@ export default function Profile() {
           <div className="field-grid">
             {(SECTION_FIELDS[activeTab] || []).map(({ key, label, type }) =>
               key === 'publicEmail' ? (
-                <div className="field public-email-verification" key={key}>
+                <div className={`field public-email-verification${incompleteKeys.has(key) ? ' field-incomplete' : ''}`} key={key}>
                   <div className="public-email-label">
                     <label htmlFor={key}>{label}</label>
                     <span className={publicEmailIsVerified ? 'is-verified' : 'is-unverified'}>
@@ -1236,11 +1388,9 @@ export default function Profile() {
                       </button>
                     </div>
                   )}
-                  {emailVerificationMessage && <p className="hint public-email-success">{emailVerificationMessage}</p>}
-                  {emailVerificationError && <p className="hint public-email-error">{emailVerificationError}</p>}
                 </div>
               ) : (
-                <div className="field" key={key}>
+                <div className={`field${incompleteKeys.has(key) ? ' field-incomplete' : ''}`} key={key}>
                   <label htmlFor={key}>{label}</label>
                   <input id={key} type={type} value={form[key] || ''} onChange={(e) => updateField(key, e.target.value)} />
                 </div>
@@ -1265,12 +1415,14 @@ export default function Profile() {
         <button type="submit" disabled={saving} style={{ marginTop: 20 }}>
           {saving ? 'Saving…' : saved && !error ? '✓ Saved' : 'Save changes'}
         </button>
-        {error && (
-          <p className="hint" style={{ margin: '10px 0 0', color: 'var(--danger)' }}>
-            Couldn't save: {error}
-          </p>
-        )}
       </form>
+
+      {toast && (
+        <div className={`profile-toast profile-toast--${toast.kind}`} role={toast.kind === 'error' ? 'alert' : 'status'}>
+          <span>{toast.text}</span>
+          <button type="button" aria-label="Dismiss" onClick={() => setToast(null)}>×</button>
+        </div>
+      )}
 
       {profile?.clientId && (
         <p className="hint" style={{ marginTop: 16 }}>
