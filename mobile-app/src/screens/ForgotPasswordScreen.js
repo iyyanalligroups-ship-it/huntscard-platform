@@ -3,13 +3,14 @@ import { StyleSheet, Text } from 'react-native';
 import { api } from '../api/client.js';
 import { Button, Card, Field, Message, PasswordField, Screen, Title } from '../components/ui.js';
 import { colors } from '../theme/colors.js';
+import { MIN_PASSWORD_LENGTH, newPasswordError, confirmError } from '../lib/passwordRules.js';
 
 const COOLDOWN = 45;
 
 const COPY = {
   email: ['Forgot your password?', "Enter your account email and we'll send a secure 6-digit verification code."],
   otp: ['Enter your code', 'Enter the 6-digit code we emailed you to continue.'],
-  password: ['Create a new password', 'Choose a strong password with at least 8 characters.'],
+  password: ['Create a new password', 'Choose a password with at least 6 characters.'],
   done: ['Password updated', 'Your password has been changed successfully. You can now sign in with it.'],
 };
 
@@ -58,9 +59,9 @@ export default function ForgotPasswordScreen({ navigation }) {
       <Button kind="ghost" title="Change email" onPress={() => { setStep('email'); setOtp(''); setError(''); clearInterval(timer.current); setCooldown(0); }} />
     </> : null}
     {step === 'password' ? <>
-      <PasswordField label="New password" placeholder="Minimum 8 characters" value={password} onChangeText={setPassword} />
-      <PasswordField label="Confirm new password" placeholder="Repeat your new password" value={confirm} onChangeText={setConfirm} />
-      <Button title={busy ? 'Resetting…' : 'Reset password'} disabled={busy || password.length < 8} onPress={reset} />
+      <PasswordField label="New password" placeholder={`Minimum ${MIN_PASSWORD_LENGTH} characters`} value={password} onChangeText={setPassword} error={newPasswordError(password)} />
+      <PasswordField label="Confirm new password" placeholder="Repeat your new password" value={confirm} onChangeText={setConfirm} error={confirmError(password, confirm)} />
+      <Button title={busy ? 'Resetting…' : 'Reset password'} disabled={busy || password.length < MIN_PASSWORD_LENGTH || password !== confirm} onPress={reset} />
     </> : null}
     {step === 'done' ? <Button title="Continue to login" onPress={() => navigation.navigate('Login')} /> : <Button kind="ghost" title="Back to login" onPress={() => navigation.navigate('Login')} />}
   </Card></Screen>;

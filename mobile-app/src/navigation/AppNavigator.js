@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Image, Linking, StyleSheet, Text, View } from 'react-native';
+import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -9,7 +9,9 @@ import { api, WEB_URL } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.js';
 import { useCart } from '../cart/CartContext.js';
 import { Glyph } from '../components/Glyph.js';
-import { IconButton } from '../components/ui.js';
+import { Button, IconButton, Sheet } from '../components/ui.js';
+import { timeAgo } from '../lib/format.js';
+import SupportTicketsScreen from '../screens/SupportTicketsScreen.js';
 import SplashOverlay from '../components/SplashOverlay.js';
 import { colors } from '../theme/colors.js';
 import { navigationRef } from './navigationRef.js';
@@ -76,19 +78,44 @@ function BrandTitle() {
 function HeaderRight({ member, navigation }) {
   const cart = useCart();
   const [unread, setUnread] = useState(0);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [unreadList, setUnreadList] = useState([]);
 
   useEffect(() => {
     if (!member) return undefined;
     let alive = true;
-    const poll = () => api.getNotifications().then((d) => alive && setUnread(d.unreadCount || 0)).catch(() => {});
+    const poll = () => api.getNotifications().then((d) => { if (!alive) return; setUnread(d.unreadCount || 0); setUnreadList((d.notifications || []).filter((n) => !n.read).slice(0, 6)); }).catch(() => {});
     poll();
     const timer = setInterval(poll, 30000);
     return () => { alive = false; clearInterval(timer); };
   }, [member]);
 
+  // Tapping a notification marks it read (so it leaves this short list); "Mark all read" clears the list at once.
+  function readOne(n) {
+    setUnreadList((list) => list.filter((x) => x._id !== n._id));
+    setUnread((u) => Math.max(0, u - 1));
+    api.markNotificationRead(n._id).catch(() => {});
+  }
+  function readAll() {
+    setUnreadList([]); setUnread(0);
+    api.markAllNotificationsRead().catch(() => {});
+  }
+  function viewAll() { setBellOpen(false); navigation.navigate('Notifications'); }
+
   return <View style={styles.headerRight}>
     <IconButton name="cart" badge={cart.totalCount} onPress={() => navigation.navigate('Magic Poster Cart')} />
-    {member ? <IconButton name="bell" badge={unread} onPress={() => navigation.navigate('Notifications')} /> : null}
+    {member ? <IconButton name="bell" badge={unread} onPress={() => setBellOpen(true)} /> : null}
+    {member ? <Sheet visible={bellOpen} onClose={() => setBellOpen(false)} title="Notifications"
+      footer={<View style={{ gap: 8, paddingTop: 10 }}>
+        {unread > 0 ? <Button compact kind="secondary" title="Mark all read" onPress={readAll} /> : null}
+        <Button compact title="View all notifications" onPress={viewAll} />
+      </View>}>
+      {unreadList.length === 0
+        ? <Text style={styles.bellEmpty}>You're all caught up. No new notifications.</Text>
+        : unreadList.map((n) => <Pressable key={n._id} onPress={() => readOne(n)} style={styles.bellItem}>
+          <Text style={styles.bellMsg}>{n.message}</Text><Text style={styles.bellTime}>{timeAgo(n.createdAt)}</Text>
+        </Pressable>)}
+    </Sheet> : null}
   </View>;
 }
 
@@ -146,6 +173,7 @@ const memberPages = <>
   <Stack.Screen name="Track Orders" component={TrackScreen} />
   <Stack.Screen name="Settings" component={SettingsScreen} />
   <Stack.Screen name="Notifications" component={NotificationsScreen} />
+  <Stack.Screen name="Raise a Ticket" component={SupportTicketsScreen} options={{ title: 'Raise a ticket' }} />
   <Stack.Screen name="My Activity" component={MyActivityScreen} />
   <Stack.Screen name="Device Protection Check" component={DeviceSafetyCheckScreen} />
   <Stack.Screen name="Contact Us" component={ContactUsScreen} />
@@ -215,6 +243,9 @@ export default function AppNavigator() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   blank: { flex: 1, backgroundColor: "#eaf1ff" },
+  bellItem: { padding: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(79,142,247,0.35)', backgroundColor: 'rgba(79,142,247,0.10)', gap: 3 },
+  bellMsg: { color: colors.text, lineHeight: 20 }, bellTime: { color: colors.textDim, fontSize: 11 },
+  bellEmpty: { color: colors.textDim, paddingVertical: 12 },
   brandTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   brandLogo: { width: 34, height: 22 },
   brandText: { color: colors.text, fontWeight: '900', fontSize: 19, letterSpacing: -0.4 },

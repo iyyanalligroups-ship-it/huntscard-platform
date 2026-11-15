@@ -20,7 +20,7 @@ export const MEMBER_MENU = [
   { id: 'orders', label: 'Shop & orders', items: [
     { name: 'Shop', icon: 'bag' }, { name: 'Magic Poster', icon: 'image' }, { name: 'Track Orders', icon: 'truck' }] },
   { id: 'support', label: 'Help & settings', items: [
-    { name: 'Chat Support', icon: 'chat' }, { name: 'Settings', icon: 'settings' }, { name: 'Notifications', icon: 'bell' },
+    { name: 'Chat Support', icon: 'chat' }, { name: 'Raise a Ticket', icon: 'mail' }, { name: 'Settings', icon: 'settings' }, { name: 'Notifications', icon: 'bell' },
     { name: 'Device Protection Check', icon: 'shield' }] },
   { id: 'explore', label: 'Explore HuntsTAG', items: [
     { name: 'Home', icon: 'home' }, { name: 'Catalog', icon: 'card' }, { name: 'Contact Us', icon: 'mail' },

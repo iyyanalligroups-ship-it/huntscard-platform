@@ -6,11 +6,12 @@ import { recordTap } from '../lib/activityTracker.js';
 import { colors, radius } from '../theme/colors.js';
 
 // onEndReached fires when the user scrolls within ~300px of the bottom (infinite scroll).
-export function Screen({ children, refreshing, onRefresh, onEndReached, contentStyle, scroll = true, scrollEnabled = true }) {
+export function Screen({ children, refreshing, onRefresh, onEndReached, contentStyle, scroll = true, scrollEnabled = true, scrollRef }) {
   if (!scroll) return <SafeAreaView style={styles.safe} edges={[]}>{children}</SafeAreaView>;
   return (
     <SafeAreaView style={styles.safe} edges={[]}>
       <ScrollView
+        ref={scrollRef}
         style={styles.safe}
         contentContainerStyle={[styles.screen, contentStyle]}
         keyboardShouldPersistTaps="handled"
@@ -27,8 +28,8 @@ export function Screen({ children, refreshing, onRefresh, onEndReached, contentS
   );
 }
 
-export function Card({ children, style }) {
-  return <View style={[styles.card, style]}>{children}</View>;
+export function Card({ children, style, ...rest }) {
+  return <View style={[styles.card, style]} {...rest}>{children}</View>;
 }
 
 export function Title({ children, subtitle, eyebrow }) {

@@ -9,7 +9,7 @@ import { Button, Field, Loading, Message, SelectField } from './ui.js';
 const COUNTRY_ISO = 'IN';
 const COUNTRY_NAME = 'India';
 
-const emptyForm = { label: '', name: '', phone: '', line1: '', line2: '', stateIso: '', stateName: '', cityName: '', pincode: '' };
+const emptyForm = { label: '', name: '', phone: '', line1: '', line2: '', stateIso: '', stateName: '', districtName: '', cityName: '', pincode: '' };
 
 // Saved delivery addresses + "add new address" form -- shared by the card
 // checkout (Shop) and the Magic Poster cart, like the website's two inline
@@ -17,6 +17,7 @@ const emptyForm = { label: '', name: '', phone: '', line1: '', line2: '', stateI
 export default function AddressPicker({ profile, selectedId, onSelect, onAddressesChange }) {
   const [addresses, setAddresses] = useState(null);
   const [states, setStates] = useState([]);
+  const [districts, setDistricts] = useState(null); // null = nothing chosen yet, [] = this state has no district list
   const [cities, setCities] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -48,9 +49,24 @@ export default function AddressPicker({ profile, selectedId, onSelect, onAddress
   const set = (key) => (value) => setForm((current) => ({ ...current, [key]: value }));
 
   function pickState(iso, option) {
-    setForm((current) => ({ ...current, stateIso: iso, stateName: option.label, cityName: '' }));
+    setForm((current) => ({ ...current, stateIso: iso, stateName: option.label, districtName: '', cityName: '' }));
     setCities([]);
-    api.getCities(COUNTRY_ISO, iso).then(setCities).catch(() => {});
+    setDistricts(null);
+    api.getDistricts(iso)
+      .then((list) => {
+        const names = Array.isArray(list) ? list : [];
+        setDistricts(names);
+        // A state without a district list: load its cities straight away.
+        if (names.length === 0) api.getCities(COUNTRY_ISO, iso).then(setCities).catch(() => {});
+      })
+      .catch(() => { setDistricts([]); api.getCities(COUNTRY_ISO, iso).then(setCities).catch(() => {}); });
+  }
+
+  // Cities/areas of the chosen district.
+  function pickDistrict(name) {
+    setForm((current) => ({ ...current, districtName: name, cityName: '' }));
+    setCities([]);
+    api.getCities(COUNTRY_ISO, form.stateIso, name).then(setCities).catch(() => {});
   }
 
   async function save() {
@@ -58,12 +74,13 @@ export default function AddressPicker({ profile, selectedId, onSelect, onAddress
     if (!form.name.trim() || !form.line1.trim()) return setError('Enter the delivery name and street address.');
     if (form.phone.length !== 10) return setError('Enter a valid 10-digit phone number.');
     if (form.pincode.length !== 6) return setError('Enter a valid 6-digit pincode.');
-    if (!form.stateName || !form.cityName) return setError('Choose a state and city.');
+    if (!form.stateName || !form.cityName) return setError('Choose a state, district and city.');
+    if (districts && districts.length > 0 && !form.districtName) return setError('Choose the district.');
     setSaving(true);
     try {
       const created = await api.createAddress({
         label: form.label, name: form.name, phone: form.phone, line1: form.line1, line2: form.line2,
-        country: COUNTRY_NAME, state: form.stateName, city: form.cityName, pincode: form.pincode,
+        country: COUNTRY_NAME, state: form.stateName, district: form.districtName, city: form.cityName, pincode: form.pincode,
         isDefault: (addresses?.length || 0) === 0,
       });
       const next = [created, ...(addresses || [])];
@@ -86,7 +103,7 @@ export default function AddressPicker({ profile, selectedId, onSelect, onAddress
             <View style={[styles.radio, selected && styles.radioOn]}>{selected ? <Glyph name="check" size={12} color="#ffffff" strokeWidth={3} /> : null}</View>
             <View style={{ flex: 1, gap: 3 }}>
               <Text style={styles.addressName}>{address.label ? `${address.label} — ` : ''}{address.name} · {address.phone}</Text>
-              <Text style={styles.addressLine}>{address.line1}{address.line2 ? `, ${address.line2}` : ''}, {address.city}, {address.state}, {address.country} - {address.pincode}</Text>
+              <Text style={styles.addressLine}>{address.line1}{address.line2 ? `, ${address.line2}` : ''}, {address.city}, {address.district ? `${address.district}, ` : ''}{address.state}, {address.country} - {address.pincode}</Text>
             </View>
           </Pressable>
         );
@@ -102,7 +119,8 @@ export default function AddressPicker({ profile, selectedId, onSelect, onAddress
           <Field label="Address line 2 (optional)" value={form.line2} onChangeText={set('line2')} />
           <SelectField label="Country" value={COUNTRY_ISO} options={[{ value: COUNTRY_ISO, label: COUNTRY_NAME }]} onChange={() => {}} disabled />
           <SelectField label="State" value={form.stateIso} options={states.map((state) => ({ value: state.isoCode, label: state.name }))} onChange={pickState} placeholder="Select state" searchable />
-          <SelectField label="City" value={form.cityName} options={cities.map((city) => ({ value: city, label: city }))} onChange={(value) => set('cityName')(value)} placeholder="Select city" searchable disabled={!form.stateIso} />
+          {districts && districts.length > 0 ? <SelectField label="District" value={form.districtName} options={districts.map((d) => ({ value: d, label: d }))} onChange={pickDistrict} placeholder="Select district" searchable /> : <Field label="District" value={form.districtName} onChangeText={set('districtName')} placeholder={form.stateIso ? (districts === null ? 'Loading districts…' : 'District') : 'Choose a state first'} editable={Boolean(form.stateIso) && districts !== null} />}
+          <SelectField label="City" value={form.cityName} options={cities.map((city) => ({ value: city, label: city }))} onChange={(value) => set('cityName')(value)} placeholder="Select city" searchable disabled={!form.stateIso || (districts && districts.length > 0 && !form.districtName)} />
           <Field label="Pincode" value={form.pincode} onChangeText={(v) => set('pincode')(onlyDigits(v, 6))} keyboardType="number-pad" maxLength={6} />
           <Button icon="badgeCheck" title={saving ? 'Saving…' : 'Save address'} disabled={saving} onPress={save} />
         </View>

@@ -14,7 +14,7 @@ export function MagicArtGallery({ navigation, embedded = false }) {
   const [qty, setQty] = useState({});
   const [addedId, setAddedId] = useState('');
 
-  useEffect(() => { api.getPublicMagicArt().then(setPieces).catch((err) => setError(err.message)); }, []);
+  useEffect(() => { api.getPublicMagicArt().then((list) => setPieces((Array.isArray(list) ? list : []).filter((p) => p.active))).catch((err) => setError(err.message)); }, []);
 
   const getQty = (id) => qty[id] || 1;
   function add(piece) {

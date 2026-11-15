@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Contacts from 'expo-contacts/legacy';
@@ -10,7 +10,7 @@ import { Glyph } from '../components/Glyph.js';
 import { pickMedia } from '../components/MediaUploader.js';
 import { Avatar, Button, Card, Empty, Field, Loading, Message, Pill, Screen, Sheet, Title } from '../components/ui.js';
 import { downloadAndShare, readFileBase64, writeAndShare } from '../lib/files.js';
-import { formatDateTime, roundUpToNext5Min, splitName, waNumber } from '../lib/format.js';
+import { formatDateTime, onlyDigits, roundUpToNext5Min, splitName, waNumber } from '../lib/format.js';
 import { colors } from '../theme/colors.js';
 
 const EMPTY_FORM = { firstName: '', lastName: '', phone: '', email: '', org: '', address: '', notes: '' };
@@ -42,6 +42,9 @@ const sheetToXlsxBase64 = (rows) => {
 export default function ContactsScreen({ navigation }) {
   const [contacts, setContacts] = useState([]); // only the pages loaded so far (10 at a time)
   const [total, setTotal] = useState(0);
+  const [searchText, setSearchText] = useState('');
+  const [activeQuery, setActiveQuery] = useState(''); // the search text after a short typing pause
+  const [notice, setNotice] = useState('');
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -65,20 +68,25 @@ export default function ContactsScreen({ navigation }) {
 
   const load = useCallback(async () => {
     try {
-      const page = await api.listContactsPage(0);
+      const page = await api.listContactsPage(0, 10, activeQuery);
       setContacts(page.contacts); setTotal(page.total); setHasMore(page.hasMore);
     } catch (err) { setError(err.message); } finally { setLoading(false); }
-  }, []);
+  }, [activeQuery]);
+  // One search box for name and phone: applied 300ms after the last keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setActiveQuery(searchText.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchText]);
   // Infinite scroll: the next 10, appended below what is already shown.
   const loadMore = useCallback(async () => {
     if (loading || loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
-      const page = await api.listContactsPage(contacts.length);
+      const page = await api.listContactsPage(contacts.length, 10, activeQuery);
       setContacts((list) => { const seen = new Set(list.map((c) => c._id)); return [...list, ...page.contacts.filter((c) => !seen.has(c._id))]; });
       setTotal(page.total); setHasMore(page.hasMore);
     } catch (err) { setError(err.message); } finally { setLoadingMore(false); }
-  }, [loading, loadingMore, hasMore, contacts.length]);
+  }, [loading, loadingMore, hasMore, contacts.length, activeQuery]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const run = (key, fn) => async () => {
@@ -129,7 +137,7 @@ export default function ContactsScreen({ navigation }) {
 
   function openForm(contact = null) {
     setFormMode(contact ? 'edit' : 'add'); setEditing(contact); setFormError(''); setPhoto(null);
-    setForm(contact ? Object.fromEntries(Object.keys(EMPTY_FORM).map((key) => [key, contact[key] || ''])) : EMPTY_FORM);
+    setForm(contact ? { ...Object.fromEntries(Object.keys(EMPTY_FORM).map((key) => [key, contact[key] || ''])), phone: onlyDigits(contact.phone).slice(-10) } : EMPTY_FORM);
   }
   const closeForm = () => { setFormMode(null); setEditing(null); setPhoto(null); setFormError(''); };
 
@@ -139,19 +147,19 @@ export default function ContactsScreen({ navigation }) {
   }
 
   async function saveContact() {
-    if (!form.phone.trim()) return setFormError('Phone number is required');
+    if (form.phone.length !== 10) return setFormError('Phone number must be exactly 10 digits.');
     setFormError(''); setSaving(true);
     try {
       const contact = formMode === 'edit' ? await api.updateContact(editing._id, form) : await api.createContact(form);
       if (photo) await api.uploadContactPhoto(contact._id, photo);
-      await load(); closeForm();
+      await load(); closeForm(); setNotice(formMode === 'edit' ? 'Contact updated.' : 'Contact saved.');
     } catch (err) { setFormError(err.message); } finally { setSaving(false); }
   }
 
   function removeContact(contact) {
     Alert.alert('Remove contact?', 'Remove this contact from your HuntsTAG backup?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => { try { await api.deleteContact(contact._id); setContacts((list) => list.filter((c) => c._id !== contact._id)); setTotal((n) => Math.max(0, n - 1)); } catch (err) { setError(err.message); } } },
+      { text: 'Delete', style: 'destructive', onPress: async () => { try { await api.deleteContact(contact._id); setContacts((list) => list.filter((c) => c._id !== contact._id)); setTotal((n) => Math.max(0, n - 1)); setNotice('Contact deleted.'); } catch (err) { setError(err.message); } } },
     ]);
   }
 
@@ -178,6 +186,7 @@ export default function ContactsScreen({ navigation }) {
   return <Screen refreshing={false} onRefresh={load} onEndReached={loadMore}>
     <Title subtitle="Back up your phone's contacts to your HuntsTAG account. If you switch phones, log in here and export to restore them.">Contacts</Title>
     <Message>{error}</Message>
+    <Message tone="success">{notice}</Message>
     {importResult ? <Message tone="success">Imported {importResult.imported}, skipped {importResult.skipped} already saved.</Message> : null}
 
     <Card style={{ gap: 12 }}>
@@ -200,7 +209,8 @@ export default function ContactsScreen({ navigation }) {
       <Text style={styles.hint}>For anything import can't carry -- a photo, a company, a note about where you met.</Text>
     </Card>
 
-    {loading ? <Loading /> : !contacts.length ? <Empty>No contacts saved yet — use Import to add some from this phone.</Empty> : contacts.map((c) => (
+    <Field label="Search contacts" placeholder="Search by name or phone number" value={searchText} onChangeText={setSearchText} autoCapitalize="none" autoCorrect={false} returnKeyType="search" />
+    {loading ? <Loading /> : !contacts.length ? <Empty>{activeQuery ? 'No contacts match this search.' : 'No contacts saved yet — use Import to add some from this phone.'}</Empty> : contacts.map((c) => (
       <Card key={c._id} style={styles.contact}>
         <Avatar uri={resolveAssetUrl(c.photoUrl)} name={c.name} size={46} />
         <View style={{ flex: 1, gap: 2 }}>
@@ -228,7 +238,7 @@ export default function ContactsScreen({ navigation }) {
       </View>
       <Field label="First name" value={form.firstName} onChangeText={set('firstName')} />
       <Field label="Last name" value={form.lastName} onChangeText={set('lastName')} />
-      <Field label="Phone number" keyboardType="phone-pad" value={form.phone} onChangeText={set('phone')} />
+      <Field label="Phone number" keyboardType="number-pad" maxLength={10} value={form.phone} onChangeText={(v) => set('phone')(onlyDigits(v, 10))} hint="Exactly 10 digits." />
       <Field label="Email" keyboardType="email-address" autoCapitalize="none" value={form.email} onChangeText={set('email')} />
       <Field label="Company" value={form.org} onChangeText={set('org')} />
       <Field label="Address" value={form.address} onChangeText={set('address')} />

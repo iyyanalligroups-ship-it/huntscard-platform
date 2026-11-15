@@ -81,7 +81,7 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => {
     api.listPlans().then((list) => setPlans(Array.isArray(list) ? list.slice(0, 8) : [])).catch(() => setPlans([]));
     api.getPublicFaq().then((list) => setFaqs(Array.isArray(list) ? list.slice(0, 5) : [])).catch(() => setFaqs([]));
-    api.getPublicMagicArt().then((list) => setPosters(Array.isArray(list) ? list.filter((p) => p.imageUrl).slice(0, 6) : [])).catch(() => setPosters([]));
+    api.getPublicMagicArt().then((list) => setPosters(Array.isArray(list) ? list.filter((p) => p.active && p.imageUrl).slice(0, 6) : [])).catch(() => setPosters([]));
   }, []);
 
   useFocusEffect(useCallback(() => {

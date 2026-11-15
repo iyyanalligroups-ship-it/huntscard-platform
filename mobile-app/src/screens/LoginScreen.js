@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext.js';
 import { api } from '../api/client.js';
 import { Button, Card, Field, Message, PasswordField, Screen, Title, ui } from '../components/ui.js';
 import { colors } from '../theme/colors.js';
+import { onlyDigits } from '../lib/format.js';
 
 export default function LoginScreen({ navigation }) {
   const { signIn, signInWithOtp } = useAuth();
@@ -43,17 +44,17 @@ export default function LoginScreen({ navigation }) {
         <Card style={styles.form}>
           <Title subtitle="Use the same account as the HuntsTAG client website.">Welcome back</Title>
           <View style={styles.tabs}>
-            <Button compact title="Password" kind={mode === 'password' ? 'primary' : 'secondary'} onPress={() => setMode('password')} style={styles.tab} />
-            <Button compact title="Phone OTP" kind={mode === 'otp' ? 'primary' : 'secondary'} onPress={() => setMode('otp')} style={styles.tab} />
+            <Button compact title="Password" kind={mode === 'password' ? 'primary' : 'secondary'} onPress={() => { setMode('password'); setError(''); }} style={styles.tab} />
+            <Button compact title="Phone OTP" kind={mode === 'otp' ? 'primary' : 'secondary'} onPress={() => { setMode('otp'); setPhone((p) => p || onlyDigits(identifier, 10)); setError(''); }} style={styles.tab} />
           </View>
           {mode === 'password' ? <>
             <Field label="Email or phone" placeholder="Email or 10-digit phone number" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" keyboardType="email-address" />
             <PasswordField label="Password" placeholder="Your password" value={password} onChangeText={setPassword} />
             <Button title={busy ? 'Signing in…' : 'Sign in'} disabled={busy || !identifier.trim() || !password} onPress={submitPassword} />
           </> : <>
-            <Field label="Phone number" placeholder="e.g. 9876543210" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+            <Field label="Phone number" placeholder="10-digit phone number" value={phone} onChangeText={(v) => setPhone(onlyDigits(v, 10))} keyboardType="number-pad" maxLength={10} hint="OTP login works with the phone number only." />
             {otpSent && <Field label="6-digit OTP" placeholder="Enter the code you received" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} />}
-            <Button title={busy ? 'Please wait…' : otpSent ? 'Verify OTP' : 'Send OTP'} disabled={busy || !phone.trim() || (otpSent && otp.length < 4)} onPress={otpSent ? verifyOtp : requestOtp} />
+            <Button title={busy ? 'Please wait…' : otpSent ? 'Verify OTP' : 'Send OTP'} disabled={busy || phone.length !== 10 || (otpSent && otp.length < 4)} onPress={otpSent ? verifyOtp : requestOtp} />
           </>}
           <Message>{error}</Message><Message tone="success">{message}</Message>
           <Button title="Create an account" kind="secondary" onPress={() => navigation.navigate('Register')} />

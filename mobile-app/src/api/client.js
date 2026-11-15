@@ -189,6 +189,10 @@ export const api = {
   resetPassword: (token, newPassword) => request('/api/auth/reset-password', { method: 'POST', body: { token, newPassword }, auth: false }),
   changePassword: (currentPassword, newPassword) => request('/api/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } }),
   getProfile: () => request('/api/profile/me'),
+  listMyTickets: () => request('/api/profile/tickets'),
+  createTicket: (payload) => request('/api/profile/tickets', { method: 'POST', body: payload }),
+  getMyTicket: (id) => request(`/api/profile/tickets/${id}`),
+  replyToTicket: (id, text) => request(`/api/profile/tickets/${id}/reply`, { method: 'POST', body: { text } }),
   updateProfile: (updates) => request('/api/profile/me', { method: 'PUT', body: updates }),
   uploadPhoto: (asset) => upload('/api/profile/photo', asset),
   getMyCards: () => request('/api/profile/cards'),
@@ -200,7 +204,7 @@ export const api = {
   listMyRequests: () => request('/api/profile/requests'),
   listMyMagicPosterOrders: () => request('/api/profile/magic-poster/orders?limit=50'),
   listContacts: () => request('/api/profile/contacts'),
-  listContactsPage: (skip, limit = 10) => request(`/api/profile/contacts${qs({ skip, limit })}`),
+  listContactsPage: (skip, limit = 10, q = '') => request(`/api/profile/contacts${qs({ skip, limit, q: q || undefined, field: q ? 'all' : undefined })}`),
   createContact: (payload) => request('/api/profile/contacts', { method: 'POST', body: payload }),
   updateContact: (id, payload) => request(`/api/profile/contacts/${id}`, { method: 'PUT', body: payload }),
   deleteContact: (id) => request(`/api/profile/contacts/${id}`, { method: 'DELETE' }),
@@ -224,7 +228,8 @@ export const api = {
   submitCardTicket: (clientId, payload, cardNumber) => request(`/api/public/card-tickets/${clientId}${qs({ card: cardNumber })}`, { method: 'POST', body: payload, auth: false }),
   getCountries: () => request('/api/public/geo/countries', { auth: false }),
   getStates: (country) => request(`/api/public/geo/states${qs({ country })}`, { auth: false }),
-  getCities: (country, state) => request(`/api/public/geo/cities${qs({ country, state })}`, { auth: false }),
+  getDistricts: (state) => request(`/api/public/geo/districts${qs({ state })}`, { auth: false }),
+  getCities: (country, state, district) => request(`/api/public/geo/cities${qs({ country, state, district })}`, { auth: false }),
   uploadDesign: (asset) => upload('/api/public/design-upload', asset, 'design', {}, false),
 
   // ---- profile media ----
@@ -238,7 +243,10 @@ export const api = {
   removeArModel: () => request('/api/profile/ar-model', { method: 'DELETE' }),
 
   // ---- notifications ----
-  getNotifications: () => request('/api/profile/notifications'),
+  getNotifications: ({ limit, skip } = {}) => request(`/api/profile/notifications${limit ? `?limit=${limit}&skip=${skip || 0}` : ''}`),
+  markAllNotificationsRead: () => request('/api/profile/notifications/read-all', { method: 'POST' }),
+  deleteNotification: (id) => request(`/api/profile/notifications/${id}`, { method: 'DELETE' }),
+  clearNotifications: (scope) => request(`/api/profile/notifications?scope=${scope}`, { method: 'DELETE' }),
   markNotificationRead: (id) => request(`/api/profile/notifications/${id}/read`, { method: 'POST' }),
   // "My activity": this person's own logins and steps, 7 days per page (see backend/routes/activity.js)
   myActivity: ({ from, to, page } = {}) => request(`/api/profile/activity${qs({ from, to, page: page > 1 ? page : undefined })}`),

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api, resolveAssetUrl } from '../api/client.js';
@@ -23,6 +23,22 @@ const SECTION_FIELDS = {
 };
 const BASE_TABS = [{ key: 'bio', label: 'My Bio' }, { key: 'contact', label: 'Contact' }, { key: 'portfolio', label: 'Portfolio' }, { key: 'social', label: 'Social' }, { key: 'huntsworld', label: 'Huntsworld' }];
 
+// Fields that count toward the profile score -- the same list as the website, each with the tab it lives on.
+const SCORE_FIELDS = [
+  { key: 'fullName', label: 'Full name', tab: null, anchor: 'identity' },
+  { key: 'jobTitle', label: 'Company name', tab: null, anchor: 'identity' },
+  { key: 'bio', label: 'About (short bio)', tab: 'bio', anchor: 'identity' },
+  { key: 'photoUrl', label: 'Profile photo', tab: null, anchor: 'photo' },
+  { key: 'phone', label: 'Phone number', tab: 'contact', anchor: 'identity' },
+  { key: 'whatsapp', label: 'WhatsApp number', tab: 'contact', anchor: 'identity' },
+  { key: 'publicEmail', label: 'Verified public email', tab: 'contact', anchor: 'identity' },
+  { key: 'instagramUrl', label: 'Instagram link', tab: 'social', anchor: 'identity' },
+  { key: 'twitterUrl', label: 'Twitter / X link', tab: 'social', anchor: 'identity' },
+  { key: 'portfolioUrl', label: 'Portfolio link', tab: 'portfolio', anchor: 'identity' },
+  { key: 'huntsworldUrl', label: 'Huntsworld profile link', tab: 'huntsworld', anchor: 'identity' },
+];
+const incompleteStyle = { borderLeftWidth: 3, borderLeftColor: colors.warning, paddingLeft: 8, borderRadius: 4 };
+
 const keyboardFor = (type) => (type === 'phone' ? 'phone-pad' : type === 'email' ? 'email-address' : type === 'url' ? 'url' : 'default');
 
 export default function ProfileSettingsScreen({ navigation }) {
@@ -36,6 +52,8 @@ export default function ProfileSettingsScreen({ navigation }) {
   const [photoBusy, setPhotoBusy] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const scrollRef = useRef(null);
+  const anchors = useRef({}); // y of the photo card and of the identity/tabs card, for the score chips' jump
 
   const load = useCallback(async () => {
     try {
@@ -86,12 +104,44 @@ export default function ProfileSettingsScreen({ navigation }) {
   if (loading) return <Screen><Loading label="Loading profile…" /></Screen>;
   if (!profile) return <Screen><Message>{error}</Message></Screen>;
 
+  // Profile score: live from the form, so it moves as the person types.
+  const publicEmailVerified = Boolean(profile.publicEmailVerified && String(form.publicEmail || '').trim().toLowerCase() === String(profile.publicEmail || '').trim().toLowerCase());
+  const scoreItems = SCORE_FIELDS.map((f) => {
+    let done;
+    if (f.key === 'photoUrl') done = Boolean(profile.photoUrl);
+    else if (f.key === 'publicEmail') done = publicEmailVerified && Boolean(String(form.publicEmail || '').trim());
+    else done = Boolean(String(form[f.key] || '').trim());
+    return { ...f, done };
+  });
+  const scoreDone = scoreItems.filter((i) => i.done).length;
+  const scorePct = Math.round((scoreDone / scoreItems.length) * 100);
+  const missing = scoreItems.filter((i) => !i.done);
+  const incomplete = new Set(missing.map((i) => i.key));
+  const missingByTab = {};
+  missing.forEach((i) => { if (i.tab) missingByTab[i.tab] = (missingByTab[i.tab] || 0) + 1; });
+  const tabsWithBadges = tabs.map((t) => (missingByTab[t.key] ? { ...t, label: `${t.label} (${missingByTab[t.key]})` } : t));
+
+  // Tapping an incomplete item opens its tab and scrolls to the section it lives in.
+  function jumpTo(item) {
+    if (item.tab) setActiveTab(item.tab);
+    const y = anchors.current[item.anchor];
+    if (y != null) setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true }), item.tab ? 60 : 0);
+  }
+
   const dob = form.dateOfBirth ? new Date(String(form.dateOfBirth).slice(0, 10) + 'T00:00:00') : null;
   const arBannerUrl = profile.arBannerUrl || profile.arVideoUrl;
   const arBannerType = profile.arBannerUrl ? profile.arBannerType : profile.arVideoUrl ? 'video' : null;
 
-  return <Screen>
+  return <Screen scrollRef={scrollRef}>
     <Title subtitle="Everything here — photo, identity, and contact details — is what's shown when someone taps or scans your card. Changes go live immediately after saving.">Profile Settings</Title>
+    <Card style={{ gap: 8 }}>
+      <View style={styles.scoreHead}><Text style={styles.cardTitle}>Profile score</Text><Text style={styles.scorePct}>{scorePct}%</Text></View>
+      <View style={styles.scoreBar}><View style={[styles.scoreFill, { width: `${scorePct}%` }]} /></View>
+      <Text style={styles.hint}>{missing.length === 0 ? 'Your profile is complete.' : `${scoreDone} of ${scoreItems.length} done. Tap an item below to jump to it, and remember to Save changes.`}</Text>
+      {missing.length > 0 ? <View style={styles.tags}>
+        {missing.map((item) => <Pressable key={item.key} style={styles.chip} onPress={() => jumpTo(item)}><Text style={styles.chipText}>{item.label}</Text></Pressable>)}
+      </View> : null}
+    </Card>
     <Message>{error}</Message>
     {saved && !error ? <Message tone="success">Saved — your card reflects this the next time someone taps it.</Message> : null}
 
@@ -122,7 +172,7 @@ export default function ProfileSettingsScreen({ navigation }) {
       {arComponents.map((c) => <Field key={c.key} label={c.label} placeholder="https://…" autoCapitalize="none" keyboardType="url" value={form.customAttributes?.[c.key] || ''} onChangeText={updateCustom(c.key)} />)}
     </Card> : null}
 
-    <Card style={styles.photoRow}>
+    <Card style={[styles.photoRow, incomplete.has('photoUrl') && { borderColor: colors.warning }]} onLayout={(e) => { anchors.current.photo = e.nativeEvent.layout.y; }}>
       <Avatar uri={resolveAssetUrl(profile.photoUrl)} name={profile.fullName} size={84} style={{ opacity: photoBusy ? 0.5 : 1 }} />
       <View style={{ flex: 1, gap: 6 }}>
         <Button compact kind="secondary" icon="camera" title={photoBusy ? 'Uploading…' : 'Choose photo'} disabled={photoBusy} onPress={changePhoto} style={{ alignSelf: 'flex-start' }} />
@@ -130,16 +180,16 @@ export default function ProfileSettingsScreen({ navigation }) {
       </View>
     </Card>
 
-    <Card style={{ gap: 14 }}>
-      {IDENTITY_FIELDS.map(({ key, label }) => <Field key={key} label={label} value={form[key] || ''} onChangeText={update(key)} />)}
+    <Card style={{ gap: 14 }} onLayout={(e) => { anchors.current.identity = e.nativeEvent.layout.y; }}>
+      {IDENTITY_FIELDS.map(({ key, label }) => <Field key={key} label={label} style={incomplete.has(key) ? incompleteStyle : undefined} value={form[key] || ''} onChangeText={update(key)} />)}
 
       <Text style={styles.private}>Private details (for our records only — never shown on your public card)</Text>
       <SelectField label="Gender" value={form.gender || ''} onChange={update('gender')} options={[{ value: '', label: 'Prefer not to say' }, { value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }, { value: 'other', label: 'Other' }]} />
       <DateTimeField label="Date of birth" value={dob} maximumDate={new Date()} placeholder="Select date" clearable onChange={(date) => update('dateOfBirth')(date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : '')} />
 
-      <Tabs tabs={tabs} value={activeTab} onChange={setActiveTab} />
+      <Tabs tabs={tabsWithBadges} value={activeTab} onChange={setActiveTab} />
       {activeTab === 'bio' ? <>
-        <Field label="About (short bio)" multiline maxLength={280} value={form.bio || ''} onChangeText={update('bio')} hint={`${(form.bio || '').length}/280`} />
+        <Field label="About (short bio)" style={incomplete.has('bio') ? incompleteStyle : undefined} multiline maxLength={280} value={form.bio || ''} onChangeText={update('bio')} hint={`${(form.bio || '').length}/280`} />
         <View style={{ gap: 8 }}>
           <Text style={styles.cardTitle}>Expertise & highlights</Text>
           <Text style={styles.hint}>Shown as #tags under your bio on your public card. Add up to {MAX_HIGHLIGHTS}.</Text>
@@ -151,7 +201,7 @@ export default function ProfileSettingsScreen({ navigation }) {
           <Field placeholder={(form.highlights || []).length >= MAX_HIGHLIGHTS ? `Max ${MAX_HIGHLIGHTS} reached` : 'Add a highlight…'} editable={(form.highlights || []).length < MAX_HIGHLIGHTS} value={highlightInput} onChangeText={setHighlightInput} onSubmitEditing={addHighlight} returnKeyType="done" right={<Pressable hitSlop={8} onPress={addHighlight}><Glyph name="plus" size={18} color={colors.holoCyan} /></Pressable>} />
         </View>
       </> : <>
-        {(SECTION_FIELDS[activeTab] || []).map(({ key, label, type }) => <Field key={key} label={label} value={form[key] || ''} onChangeText={update(key)} keyboardType={keyboardFor(type)} autoCapitalize="none" />)}
+        {(SECTION_FIELDS[activeTab] || []).map(({ key, label, type }) => <Field key={key} label={label} style={incomplete.has(key) ? incompleteStyle : undefined} value={form[key] || ''} onChangeText={update(key)} keyboardType={keyboardFor(type)} autoCapitalize="none" />)}
         {attributes.filter((attr) => attr.section === activeTab).map((attr) => <Field key={attr.key} label={attr.label} value={form.customAttributes?.[attr.key] || ''} onChangeText={updateCustom(attr.key)} keyboardType={keyboardFor(attr.fieldType === 'text' ? 'text' : attr.fieldType)} autoCapitalize={attr.fieldType === 'text' ? 'sentences' : 'none'} />)}
       </>}
 
@@ -167,5 +217,8 @@ const styles = StyleSheet.create({
   text: { color: colors.text, fontSize: 14 }, hint: { color: colors.textDim, fontSize: 12, lineHeight: 17 }, cardTitle: { color: colors.text, fontWeight: '800', fontSize: 15 },
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: 16 }, private: { color: colors.textDim, fontWeight: '700', fontSize: 12, marginTop: 4 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, tag: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: 'rgba(21,101,255,0.12)' }, tagText: { color: colors.holoCyan, fontWeight: '700', fontSize: 12 },
+  scoreHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, scorePct: { color: colors.holoCyan, fontWeight: '900', fontSize: 18 },
+  scoreBar: { height: 8, borderRadius: 4, backgroundColor: colors.panelBorder, overflow: 'hidden' }, scoreFill: { height: 8, borderRadius: 4, backgroundColor: colors.holoCyan },
+  chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: colors.warning, backgroundColor: 'rgba(245,158,11,0.12)' }, chipText: { color: colors.warning, fontWeight: '700', fontSize: 12 },
   modelBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 },
 });

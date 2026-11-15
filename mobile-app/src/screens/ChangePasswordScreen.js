@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { api } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.js';
-import { Button, Card, Field, Message, Screen, Title } from '../components/ui.js';
+import { Button, Card, Message, PasswordField, Screen, Title } from '../components/ui.js';
+import { MIN_PASSWORD_LENGTH, newPasswordError, confirmError } from '../lib/passwordRules.js';
 
 export default function ChangePasswordScreen() {
   const { completePasswordChange, signOut } = useAuth();
@@ -22,11 +23,11 @@ export default function ChangePasswordScreen() {
 
   return <Screen><Card style={styles.form}>
     <Title subtitle="Your temporary password must be replaced before continuing.">Choose a new password</Title>
-    <Field label="Current password" secureTextEntry value={currentPassword} onChangeText={setCurrentPassword} />
-    <Field label="New password" secureTextEntry value={newPassword} onChangeText={setNewPassword} />
-    <Field label="Confirm new password" secureTextEntry value={confirm} onChangeText={setConfirm} />
+    <PasswordField label="Temporary password" placeholder="Enter your temporary password" value={currentPassword} onChangeText={setCurrentPassword} />
+    <PasswordField label="New password" placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`} value={newPassword} onChangeText={setNewPassword} error={newPasswordError(newPassword, currentPassword)} />
+    <PasswordField label="Confirm new password" placeholder="Re-enter the new password" value={confirm} onChangeText={setConfirm} error={confirmError(newPassword, confirm)} />
     <Message>{error}</Message>
-    <Button title={busy ? 'Saving…' : 'Save password'} disabled={busy || newPassword.length < 8} onPress={submit} />
+    <Button title={busy ? 'Saving…' : 'Save password'} disabled={busy || !currentPassword || newPassword.length < MIN_PASSWORD_LENGTH || newPassword === currentPassword || newPassword !== confirm} onPress={submit} />
     <Button title="Sign out" kind="secondary" onPress={signOut} />
   </Card></Screen>;
 }

@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext.js';
 import DateTimeField from '../components/DateTimeField.js';
 import { Button, Card, Field, Message, PasswordField, Screen, SelectField, Title } from '../components/ui.js';
 import { onlyDigits } from '../lib/format.js';
+import { MIN_PASSWORD_LENGTH, newPasswordError } from '../lib/passwordRules.js';
 import { colors } from '../theme/colors.js';
 
 export default function RegisterScreen({ navigation }) {
@@ -31,9 +32,9 @@ export default function RegisterScreen({ navigation }) {
       <DateTimeField label="Date of birth (optional)" value={dob} onChange={setDob} maximumDate={new Date()} clearable placeholder="Select date" />
       <Field label="Email" placeholder="e.g. priya@example.com" value={form.loginEmail} onChangeText={set('loginEmail', (v) => v.toLowerCase())} keyboardType="email-address" autoCapitalize="none" />
       <Field label="Designation (optional)" placeholder="e.g. Software Engineer, Manager" value={form.designation} onChangeText={set('designation')} />
-      <PasswordField label="Password" placeholder="Create a password" value={form.password} onChangeText={set('password')} hint="At least 8 characters." />
+      <PasswordField label="Password" placeholder="Create a password" value={form.password} onChangeText={set('password')} hint={`At least ${MIN_PASSWORD_LENGTH} characters.`} error={newPasswordError(form.password)} />
       <Message>{error}</Message>
-      <Button title={busy ? 'Creating account…' : 'Create account'} disabled={busy || !form.fullName || form.phone.length !== 10 || !form.loginEmail || form.password.length < 8} onPress={submit} />
+      <Button title={busy ? 'Creating account…' : 'Create account'} disabled={busy || !form.fullName || form.phone.length !== 10 || !form.loginEmail || form.password.length < MIN_PASSWORD_LENGTH} onPress={submit} />
       <Text style={{ color: colors.textDim, fontSize: 12, textAlign: 'center' }}>By creating an account you agree to our <Text style={{ fontWeight: '700' }} onPress={() => navigation.navigate('Terms & Conditions')}>Terms</Text> and <Text style={{ fontWeight: '700' }} onPress={() => navigation.navigate('Privacy Policy')}>Privacy Policy</Text>.</Text>
       <Button kind="ghost" title="Already have an account? Log in" onPress={() => navigation.navigate('Login')} />
     </Card></Screen>
