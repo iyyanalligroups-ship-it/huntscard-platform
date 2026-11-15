@@ -1024,3 +1024,6 @@ html body .password-input-wrap > .password-eye-btn {
 }
 html body .password-input-wrap > .password-eye-btn:hover { color: #1565c0 !important; -webkit-text-fill-color: #1565c0 !important; }
 html body .password-input-wrap > .password-eye-btn svg { display: block !important; width: 18px; height: 18px; stroke: currentColor; }
+
+/* Inline validation text under the login-style password fields */
+.login-field-error { margin: 6px 0 0; font-size: 12.5px; font-weight: 600; color: #c62828; }
