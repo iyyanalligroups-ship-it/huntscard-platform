@@ -363,4 +363,23 @@ router.get('/contacts/export', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/profile/contacts/:id/export -- one contact as a vCard. Opening the
+// downloaded file on a phone hands it to the phone's native "Add to Contacts"
+// flow, which is the reliable browser-to-address-book handoff.
+router.get('/contacts/:id/export', requireAuth, async (req, res) => {
+  try {
+    const contact = await Contact.findOne({ _id: req.params.id, clientId: req.user.clientId });
+    if (!contact) return res.status(404).json({ error: 'Contact not found' });
+    const safeName = (contact.name || 'contact').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 60) || 'contact';
+    res.set({
+      'Content-Type': 'text/vcard; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${safeName}.vcf"`,
+    });
+    return res.send(contactToVCard(contact));
+  } catch (err) {
+    console.error('[single contact export GET]', err);
+    return res.status(500).json({ error: 'Failed to export contact' });
+  }
+});
+
 module.exports = router;

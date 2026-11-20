@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as XLSX from 'xlsx';
 import { api } from '../api.js';
 
@@ -165,6 +166,8 @@ export default function Contacts() {
   const [formError, setFormError] = useState('');
   const [formSaving, setFormSaving] = useState(false);
   const formPhotoInputRef = useRef(null);
+  const formCardRef = useRef(null);
+  const [savingToPhoneId, setSavingToPhoneId] = useState(null);
 
   // Appointment-request modal -- opened by the arrow icon on a contact
   // row (see routes/appointments.js). `appointmentTarget` is the contact
@@ -291,6 +294,19 @@ export default function Contacts() {
       setError(err.message);
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleExportContact(contact) {
+    setError('');
+    setSavingToPhoneId(contact._id);
+    try {
+      await api.exportContact(contact._id, contact.name);
+      showToast('Contact file ready — open it on your phone to save it to Contacts.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingToPhoneId(null);
     }
   }
 
@@ -460,6 +476,22 @@ export default function Contacts() {
     setFormError('');
   }
 
+  useEffect(() => {
+    if (!formMode || !formCardRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      formCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (formMode === 'edit') document.getElementById('cFirstName')?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [formMode, editingContact?._id]);
+
+  useEffect(() => {
+    if (!deleteTarget) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [deleteTarget]);
+
   function closeForm() {
     setFormMode(null);
     setEditingContact(null);
@@ -604,7 +636,7 @@ export default function Contacts() {
         </p>
       </div>
 
-      <div className="card" style={{ marginBottom: 16 }}>
+      <div ref={formCardRef} className="card contact-form-card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <label style={{ margin: 0 }}>Add a contact by hand</label>
           {formMode !== 'add' && (
@@ -808,6 +840,16 @@ export default function Contacts() {
                   </button>
                   <button
                     type="button"
+                    className="secondary contact-save-phone"
+                    style={{ width: 'auto' }}
+                    onClick={() => handleExportContact(c)}
+                    disabled={savingToPhoneId === c._id}
+                    title="Save this contact to your phone"
+                  >
+                    {savingToPhoneId === c._id ? 'Preparing…' : 'Save to phone'}
+                  </button>
+                  <button
+                    type="button"
                     className="secondary"
                     style={{ width: 'auto' }}
                     onClick={() => setDeleteTarget(c)}
@@ -830,12 +872,12 @@ export default function Contacts() {
         )}
       </div>
 
-      {deleteTarget && (
+      {deleteTarget && createPortal(
         <div
-          className="auth-modal-backdrop"
+          className="auth-modal-backdrop contact-delete-backdrop"
           onClick={(e) => e.target === e.currentTarget && deletingId !== deleteTarget._id && setDeleteTarget(null)}
         >
-          <div className="auth-modal-card" role="dialog" aria-modal="true" aria-labelledby="deleteContactTitle">
+          <div className="auth-modal-card contact-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteContactTitle">
             <button
               type="button"
               className="auth-modal-close"
@@ -868,7 +910,8 @@ export default function Contacts() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {appointmentTarget && (

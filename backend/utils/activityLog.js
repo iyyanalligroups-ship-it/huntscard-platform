@@ -69,6 +69,7 @@ const ROUTES = [
   ['POST', /^\/api\/profile\/contacts\/([^/]+)\/photo$/, 'Changed a contact photo'],
   ['DELETE', /^\/api\/profile\/contacts\/([^/]+)\/photo$/, 'Removed a contact photo'],
   ['GET', /^\/api\/profile\/contacts\/export$/, 'Exported contacts'],
+  ['GET', /^\/api\/profile\/contacts\/[^/]+\/export$/, 'Exported a contact'],
   // appointments
   ['POST', /^\/api\/profile\/appointments$/, 'Sent an appointment request'],
   ['PATCH', /^\/api\/profile\/appointments\/([^/]+)$/, 'Updated an appointment request'],

@@ -7586,12 +7586,29 @@ html body .mbc-save-btn:disabled { opacity: 0.55; cursor: not-allowed; box-shado
 .mbc-ctrl-section .mbc-ctrl-title { grid-column: 1 / -1; margin-bottom: 0; }
 
 /* Contacts -- delete confirmation popup */
+.contact-delete-backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  padding: 16px;
+}
+.auth-modal-card.contact-delete-dialog {
+  width: min(400px, calc(100vw - 32px));
+  max-height: none;
+  overflow: visible;
+  margin: auto;
+}
 .contact-confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
 .contact-confirm-actions button { width: auto; min-width: 96px; }
 html body .contact-confirm-actions .contact-confirm-danger {
   background: #e5484d !important; color: #fff !important; border: 0; box-shadow: 0 6px 16px rgba(229,72,77,0.3);
 }
 html body .contact-confirm-actions .contact-confirm-danger:hover:not(:disabled) { filter: brightness(1.08); }
+.contact-save-phone { white-space: nowrap; }
+
+@media (max-width: 560px) {
+  .contact-save-phone { flex: 1 1 100%; }
+  .contact-delete-dialog { padding: 24px 20px; }
+}
 
 /* Date picker -- clickable month/year title and the month / year pickers.
    The picker grids reuse .theme-date-grid so every site theme's day-button colors apply to them too. */

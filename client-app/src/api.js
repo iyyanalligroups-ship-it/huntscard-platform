@@ -680,6 +680,25 @@ export const api = {
     a.remove();
     URL.revokeObjectURL(url);
   },
+  exportContact: async (id, name = 'contact') => {
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/profile/contacts/${encodeURIComponent(id)}/export`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Export failed (${res.status})`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${String(name || 'contact').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 60) || 'contact'}.vcf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
 
   // Appointment requests -- sent from a contact's own saved phone number
   // (see pages/Contacts.jsx), in-app if they're already a huntsTAG
